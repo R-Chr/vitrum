@@ -4,6 +4,7 @@ from ase import Atoms
 import dionysus
 import diode
 from scipy.signal import argrelextrema
+import itertools
 
 
 class glass_Atoms(Atoms):
@@ -177,6 +178,32 @@ class glass_Atoms(Atoms):
             elif neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 0:
                 bond_order[3] += 1
         return coordination_number
+
+    def get_total_rdf(self, nbin=100, rrange=10):
+        scattering_lengths = pd.read_csv("scattering_lengths.csv", sep=";", decimal=",")
+        chemical_symbols = self.get_chemical_symbols()
+        species = np.unique(chemical_symbols)
+        b = np.array(
+            [
+                scattering_lengths[scattering_lengths["Isotope"] == i]["b"]
+                for i in species
+            ]
+        ).flatten()
+        c = [chemical_symbols.count(i) / len(chemical_symbols) for i in species]
+        cb = [i * j for i, j in zip(c, b)]
+        timesby = []
+        for pair in itertools.product(cb, repeat=2):
+            timesby.append(pair[0] * pair[1])
+        dividetot = sum(timesby)
+        cb_sum = (sum([i * j for i, j in zip(c, b)]) ** 2) / 100
+
+        gr_tot = np.zeros([nbin])
+        for ind, pair in enumerate(itertools.product(species, repeat=2)):
+            pdf = self.get_pdf(
+                target_atoms=[pair[0], pair[1]], rrange=rrange, nbin=nbin
+            )
+            gr_tot = gr_tot + (timesby[ind] * pdf[1]) / dividetot
+        return pdf[0], gr_tot
 
 
 def get_LAMMPS_dump_timesteps(filename):

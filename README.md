@@ -6,14 +6,35 @@ Package is built as an extension to the ASE python package
 
 
 ## 🎯 Scope and functionality
-Working implementations of following analysis methods
 
+### Working implementations
 | Analysis method | Class method |
 | ----------- | ----------- |
-| Radial distribution function | .get_rdf() |
+| Partial Radial distribution functions | .get_rdf() |
+| Total radial distribution function | get_total_rdf() | 
 | Angle distribution function | .get_angular_dist() |
+| Coordination number | .get_coordination_number() |
+| Qn analysis | .get_qn() |
 | Persistence diagram | .get_persistence_diagram() |
 | Local persistence | .get_local_persistence() |
+
+#### Additional utility functions:
+
+| Utility | Function |
+| ----------- | ----------- |
+| Get sampled timesteps in a LAMMPS dump file | get_LAMMPS_dump_timesteps() |
+
+### Possible future methods:
+#### Structure
+
+Structure factor
+Ring analysis
+
+#### Dynamics methods:
+Mean square displacement
+Van hove correlation functions
+Velocity Auto Correlation function
+
 
 ## 📖 Author
 Author: Rasmus Christensen (rasmusc@bio.aau.dk)
