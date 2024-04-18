@@ -5,6 +5,7 @@ import dionysus
 import diode
 from scipy.signal import argrelextrema
 import itertools
+import math
 
 
 class glass_Atoms(Atoms):
@@ -24,7 +25,11 @@ class glass_Atoms(Atoms):
         return i_i
 
     def get_pdf(self, target_atoms, rrange=10, nbin=100):
-        types = self.get_atomic_numbers()
+        if isinstance(target_atoms[0], str):
+            types = self.get_chemical_symbols()
+        if isinstance(target_atoms[0], int):
+            types = self.get_atomic_numbers()
+        types = np.array(types)
         distances = self.get_dist()
         atom_1 = np.where(types == target_atoms[0])[0]
         atom_2 = np.where(types == target_atoms[1])[0]
@@ -94,7 +99,7 @@ class glass_Atoms(Atoms):
     def get_angular_dist(self, center_type, neigh_type, cutoff="Auto"):
         distances = self.get_dist()
 
-        types = self.get_atomic_numbers()
+        types = self.get_chemical_symbols()
         center_index = np.where(types == center_type)[0]
         neigh_index = np.where(types == neigh_type)[0]
 
@@ -124,7 +129,7 @@ class glass_Atoms(Atoms):
 
     def get_coordination_number(self, center_type, neigh_type, cutoff="Auto"):
         distances = self.get_dist()
-        types = self.get_atomic_numbers()
+        types = self.get_chemical_symbols()
         atom_1 = np.where(types == center_type)[0]
         atom_2 = np.where(types == neigh_type)[0]
         dist_list = distances[np.ix_(atom_1, atom_2)]
@@ -204,6 +209,50 @@ class glass_Atoms(Atoms):
             )
             gr_tot = gr_tot + (timesby[ind] * pdf[1]) / dividetot
         return pdf[0], gr_tot
+
+    def get_partial_structure_factor(
+        self, target_atoms, qrange=30, nbin=100, rrange=10
+    ):
+        chemical_symbols = self.get_chemical_symbols()
+        species = np.unique(chemical_symbols)
+        aveden = np.mean(
+            [chemical_symbols.count(i) / self.get_volume() for i in species]
+        )
+        qval = np.linspace(0.5, qrange, nbin)
+        xval, pdf = self.get_pdf(target_atoms=target_atoms, rrange=rrange, nbin=nbin)
+        q_r = np.outer(qval, xval).T
+        q_r = np.sin(q_r) / q_r
+        A_q = (
+            4 * math.pi * xval**2 * (pdf - 1) * q_r
+        )  # *(np.sin(math.pi*xval/rrange)/(math.pi*xval/rrange))
+        A_q = 1 + aveden * np.trapz(A_q, xval)
+        return qval, A_q
+
+    def get_strucutre_factor(self, nbin=100):
+        scattering_lengths = pd.read_csv("scattering_lengths.csv", sep=";", decimal=",")
+        chemical_symbols = self.get_chemical_symbols()
+        species = np.unique(chemical_symbols)
+        b = np.array(
+            [
+                scattering_lengths[scattering_lengths["Isotope"] == i]["b"]
+                for i in species
+            ]
+        ).flatten()
+        c = [chemical_symbols.count(i) / len(chemical_symbols) for i in species]
+        cb = [i * j for i, j in zip(c, b)]
+        timesby = []
+        for pair in itertools.product(cb, repeat=2):
+            timesby.append(pair[0] * pair[1])
+        dividetot = sum(timesby)
+        cb_sum = (sum([i * j for i, j in zip(c, b)]) ** 2) / 100
+
+        S_q_tot = np.zeros(nbin)
+        for ind, pair in enumerate(itertools.product(species, repeat=2)):
+            qval, partial_sq = self.get_partial_structure_factor(
+                target_atoms=[pair[0], pair[1]], nbin=nbin
+            )
+            S_q_tot = S_q_tot + (timesby[ind] * partial_sq) / dividetot
+        return qval, S_q_tot
 
 
 def get_LAMMPS_dump_timesteps(filename):
