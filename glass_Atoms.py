@@ -4,8 +4,6 @@ from ase import Atoms
 import dionysus
 import diode
 from scipy.signal import argrelextrema
-import itertools
-import math
 
 
 class glass_Atoms(Atoms):
@@ -13,6 +11,13 @@ class glass_Atoms(Atoms):
     #    super().__init__()
 
     def get_dist(self):
+        """
+        Calculate the distances between all pairs of atoms in the Atoms object.
+
+        Returns:
+            i_i (ndarray): An array of shape (n_atoms, n_atoms) containing the distances
+                between each pair of atoms.
+        """
         dim = np.diagonal(self.get_cell())
         positions = self.get_positions()
         x_dif = np.abs(positions[:, 0][np.newaxis, :] - positions[:, 0][:, np.newaxis])
@@ -24,7 +29,35 @@ class glass_Atoms(Atoms):
         i_i = np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
         return i_i
 
+    def set_new_chemical_symbols(self, dict):
+        """
+        Set new chemical symbols for the atoms in the object.
+
+        Parameters:
+            dict (dict): A dictionary mapping atomic numbers to new chemical symbols.
+
+        Returns:
+            None
+        """
+        corr_symbols = [dict[i] for i in self.get_atomic_numbers()]
+        self.set_chemical_symbols(corr_symbols)
+
     def get_pdf(self, target_atoms, rrange=10, nbin=100):
+        """
+        Calculate the probability density function (PDF) of a given pair of target atoms within a specified range.
+
+        Parameters:
+            target_atoms (list): A list of two elements representing the target atoms. Each element can be either a string (chemical symbol) or an integer (atomic number).
+            rrange (float, optional): The range within which to calculate the PDF. Defaults to 10.
+            nbin (int, optional): The number of bins to use for the histogram. Defaults to 100.
+
+        Returns:
+            xval (ndarray): An array of shape (nbin,) containing the distance values.
+            pdf (ndarray): An array of shape (nbin,) containing the PDF values.
+
+        Raises:
+            None
+        """
         if isinstance(target_atoms[0], str):
             types = self.get_chemical_symbols()
         if isinstance(target_atoms[0], int):
@@ -38,19 +71,25 @@ class glass_Atoms(Atoms):
         xval = edges[1:] - 0.5 * (rrange / nbin)
         volbin = []
         for i in range(nbin):
-            vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - (
-                (4 / 3) * np.pi * (edges[i]) ** 3
-            )
+            vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
             volbin.append(vol)
 
         h, bin_edges = np.histogram(dist_list, bins=nbin, range=(0, rrange))
         h[0] = 0
-        pdf = (h / volbin) / (
-            dist_list.shape[0] * dist_list.shape[1] / self.get_volume()
-        )
+        pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / self.get_volume())
         return xval, pdf
 
     def get_persistence_diagram(self, dimension=1, weights=None):
+        """
+        Calculate the persistence diagram of the given data points.
+
+        Parameters:
+            dimension (int, optional): The dimension of the persistence diagram to calculate. Defaults to 1.
+            weights (dict or list, optional): The weights to assign to each data point. Can be a dictionary mapping chemical symbols to weights or a list of weights. Defaults to None.
+
+        Returns:
+            pandas.DataFrame: The persistence diagram as a DataFrame with columns "Birth" and "Death".
+        """
         coord = self.get_positions()
         data = np.column_stack([self.get_chemical_symbols(), coord])
         dfpoints = pd.DataFrame(data, columns=["Atom", "x", "y", "z"])
@@ -74,7 +113,7 @@ class glass_Atoms(Atoms):
         points = dfpoints[["x", "y", "z", "w"]].to_numpy()
         simplices = diode.fill_weighted_alpha_shapes(points)
         f = dionysus.Filtration(simplices)
-        m = dionysus.homology_persistence(f, progress=True)
+        m = dionysus.homology_persistence(f)
         dgms = dionysus.init_diagrams(m, f)
 
         # Gather the PD of loop in a dataframe
@@ -88,7 +127,11 @@ class glass_Atoms(Atoms):
 
     def get_local_persistence(self, center_id, cutoff):
         persistence_diagrams = []
-        centers = np.where(self.get_atomic_numbers() == center_id)[0]
+        if isinstance(center_id, str):
+            types = self.get_chemical_symbols()
+        if isinstance(center_id, int):
+            types = self.get_atomic_numbers()
+        centers = np.where(types == center_id)[0]
         for i in centers:
             neighbors = np.where(self.get_dist()[i, :] < cutoff)[0]
             neighborhood = self[neighbors]
@@ -112,18 +155,13 @@ class glass_Atoms(Atoms):
         angles = []
 
         for center in center_index:
-            neighbors = np.where(
-                (distances[neigh_index, center] < cutoff)
-                & (distances[neigh_index, center] > 0)
-            )[0]
+            neighbors = np.where((distances[neigh_index, center] < cutoff) & (distances[neigh_index, center] > 0))[0]
             if neighbors.shape[0] < 2:
                 continue
             upper_index = np.triu_indices(neighbors.shape[0], k=1)
             comb_1 = np.meshgrid(neighbors, neighbors)[0][upper_index]
             comb_2 = np.meshgrid(neighbors, neighbors)[1][upper_index]
-            indicies = np.vstack(
-                (neigh_index[comb_1], np.full(len(comb_1), center), neigh_index[comb_2])
-            ).T
+            indicies = np.vstack((neigh_index[comb_1], np.full(len(comb_1), center), neigh_index[comb_2])).T
             angles.append(self.get_angles(indicies, mic=True))
         return angles
 
@@ -142,9 +180,7 @@ class glass_Atoms(Atoms):
         print(cutoff)
         coordination_numbers = []
         for center in range(len(atom_1)):
-            neighbors = np.where(
-                (dist_list[center, :] < cutoff) & (dist_list[center, :] > 0)
-            )[0]
+            neighbors = np.where((dist_list[center, :] < cutoff) & (dist_list[center, :] > 0))[0]
             coordination_numbers.append(neighbors.shape[0])
         return coordination_numbers
 
@@ -157,8 +193,7 @@ class glass_Atoms(Atoms):
         P_neigh_unique = []
         for center in center_index:
             neighbors = np.where(
-                (distances[neigh_index, center] < cutoff[0])
-                & (distances[neigh_index, center] > 0)
+                (distances[neigh_index_1, center] < cutoff[0]) & (distances[neigh_index_1, center] > 0)
             )[0]
             P_neigh_unique.append([O_ind[neigh] for neigh in neighbors])
         P_neigh_unique = np.unique(np.hstack(P_neigh_unique))
@@ -166,12 +201,10 @@ class glass_Atoms(Atoms):
         bond_order = [0, 0, 0, 0]
         for neigh in P_neigh_unique:
             neighbor_list_1 = np.where(
-                (distances[neigh_index_1, neigh] < cutoff[0])
-                & (distances[neigh_index_1, neigh] > 0)
+                (distances[neigh_index_1, neigh] < cutoff[0]) & (distances[neigh_index_1, neigh] > 0)
             )[0]
             neighbor_list_2 = np.where(
-                (distances[neigh_index_2, neigh] < cutoff[1])
-                & (distances[neigh_index_2, neigh] > 0)
+                (distances[neigh_index_2, neigh] < cutoff[1]) & (distances[neigh_index_2, neigh] > 0)
             )[0]
 
             if neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 1:
@@ -183,87 +216,3 @@ class glass_Atoms(Atoms):
             elif neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 0:
                 bond_order[3] += 1
         return coordination_number
-
-    def get_total_rdf(self, nbin=100, rrange=10):
-        scattering_lengths = pd.read_csv("scattering_lengths.csv", sep=";", decimal=",")
-        chemical_symbols = self.get_chemical_symbols()
-        species = np.unique(chemical_symbols)
-        b = np.array(
-            [
-                scattering_lengths[scattering_lengths["Isotope"] == i]["b"]
-                for i in species
-            ]
-        ).flatten()
-        c = [chemical_symbols.count(i) / len(chemical_symbols) for i in species]
-        cb = [i * j for i, j in zip(c, b)]
-        timesby = []
-        for pair in itertools.product(cb, repeat=2):
-            timesby.append(pair[0] * pair[1])
-        dividetot = sum(timesby)
-        cb_sum = (sum([i * j for i, j in zip(c, b)]) ** 2) / 100
-
-        gr_tot = np.zeros([nbin])
-        for ind, pair in enumerate(itertools.product(species, repeat=2)):
-            pdf = self.get_pdf(
-                target_atoms=[pair[0], pair[1]], rrange=rrange, nbin=nbin
-            )
-            gr_tot = gr_tot + (timesby[ind] * pdf[1]) / dividetot
-        return pdf[0], gr_tot
-
-    def get_partial_structure_factor(
-        self, target_atoms, qrange=30, nbin=100, rrange=10
-    ):
-        chemical_symbols = self.get_chemical_symbols()
-        species = np.unique(chemical_symbols)
-        aveden = np.mean(
-            [chemical_symbols.count(i) / self.get_volume() for i in species]
-        )
-        qval = np.linspace(0.5, qrange, nbin)
-        xval, pdf = self.get_pdf(target_atoms=target_atoms, rrange=rrange, nbin=nbin)
-        q_r = np.outer(qval, xval).T
-        q_r = np.sin(q_r) / q_r
-        A_q = (
-            4 * math.pi * xval**2 * (pdf - 1) * q_r
-        )  # *(np.sin(math.pi*xval/rrange)/(math.pi*xval/rrange))
-        A_q = 1 + aveden * np.trapz(A_q, xval)
-        return qval, A_q
-
-    def get_strucutre_factor(self, nbin=100):
-        scattering_lengths = pd.read_csv("scattering_lengths.csv", sep=";", decimal=",")
-        chemical_symbols = self.get_chemical_symbols()
-        species = np.unique(chemical_symbols)
-        b = np.array(
-            [
-                scattering_lengths[scattering_lengths["Isotope"] == i]["b"]
-                for i in species
-            ]
-        ).flatten()
-        c = [chemical_symbols.count(i) / len(chemical_symbols) for i in species]
-        cb = [i * j for i, j in zip(c, b)]
-        timesby = []
-        for pair in itertools.product(cb, repeat=2):
-            timesby.append(pair[0] * pair[1])
-        dividetot = sum(timesby)
-        cb_sum = (sum([i * j for i, j in zip(c, b)]) ** 2) / 100
-
-        S_q_tot = np.zeros(nbin)
-        for ind, pair in enumerate(itertools.product(species, repeat=2)):
-            qval, partial_sq = self.get_partial_structure_factor(
-                target_atoms=[pair[0], pair[1]], nbin=nbin
-            )
-            S_q_tot = S_q_tot + (timesby[ind] * partial_sq) / dividetot
-        return qval, S_q_tot
-
-
-def get_LAMMPS_dump_timesteps(filename):
-    with open(filename, encoding="utf-8") as f:
-        timesteps = []
-        lines = deque(f.readlines())
-        line = lines.popleft()
-        while len(lines) > 0:
-            if "ITEM: TIMESTEP" in line:
-                line = lines.popleft()
-                timesteps.append(int(line))
-            else:
-                line = lines.popleft()
-    return timesteps
