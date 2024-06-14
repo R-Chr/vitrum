@@ -58,20 +58,44 @@ Package is built as an extension to the ASE python package
 Van hove correlation functions
 Velocity Auto Correlation function
 
+## ⚙️ Installation
+
+### (optional) Creating a conda environment
+It is common practice creating a separate conda environment to avoid dependencies mixing. You can create the new environment named vitrum with minimal amount of required packages with the following command:
+```
+conda create -n vitrum
+conda activate vitrum
+```
+### Installation of vitrum
+To install vitrum:
+
+pip install directly  from this repository.
+```
+pip install git+https://github.com/R-Chr/vitrum.git
+```
+
+### Dionysus and Diode
+For persistent homology analsysis these packages are required. They are however currently required installs to avoid errors, may change in the future.
+```
+pip install dionysus
+pip install git+https://github.com/mrzv/diode.git
+```
+### (optional) CGAL for Diode
+DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology).
+
 
 ## 📖 Author
 Author: Rasmus Christensen (rasmusc@bio.aau.dk)
 
 ## ⭐ Acknowledgements
 
-`vitrum` has been built with the help of several open-source packages.
-All of these are listed in setup.py.
+`vitrum` has been built with the help of several open-source packages. All of these are listed in setup.py.
 
 These packages include:
-`ASE`
-`NumPy`
-`sklearn`
-`scipy`
-`pandas`
-`Dionysus`
-`Diode`
+[`ASE`](https://wiki.fysik.dtu.dk/ase/index.html)
+[`NumPy`](https://numpy.org/)
+[`scikit-learn`](https://scikit-learn.org/stable/)
+[`scipy`](https://scipy.org/)
+[`pandas`](https://pandas.pydata.org/)
+[`Dionysus`](https://mrzv.org/software/dionysus2/)
+[`DioDe`](https://github.com/mrzv/diode)
