@@ -8,7 +8,10 @@ setup(
     author_email="rasmusc@bio.aau.dk",
     url="https://github.com/R-Chr/vitrum",
     license="MIT",
-    packages=find_packages(exclude=["tests"]),
+    packages=find_packages("src"),
+    # tell setuptools that all packages will be under the 'src' directory
+    # and nowhere else
+    package_dir={"": "src"},
     install_requires=[
         "numpy",
         "ase",
