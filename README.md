@@ -49,7 +49,7 @@ Package is built as an extension to the ASE python package
 
 | Utility | Function |
 | ----------- | ----------- |
-| Change chemical symbols of glass_Atoms object | .set_new_chemical_symbols( )| 
+| Generate random structure of a given compositon| get_random_packed()| 
 | Get sampled timesteps in a LAMMPS dump file | get_LAMMPS_dump_timesteps( ) |
 
 ### Possible future methods:
@@ -99,3 +99,4 @@ These packages include:
 [`pandas`](https://pandas.pydata.org/)
 [`Dionysus`](https://mrzv.org/software/dionysus2/)
 [`DioDe`](https://github.com/mrzv/diode)
+[`pymatgen`](https://pymatgen.org/)

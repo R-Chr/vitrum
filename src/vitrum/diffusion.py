@@ -1,5 +1,4 @@
 import numpy as np
-from collections import deque
 
 
 class diffusion:
@@ -50,26 +49,3 @@ class diffusion:
 
     def calculate_van_hove_self_correlation(self):
         pass
-
-
-def get_LAMMPS_dump_timesteps(filename: str):
-    """
-    Retrieves the timesteps from a LAMMPS dump file.
-
-    Parameters:
-        filename (str): The path to the LAMMPS dump file.
-
-    Returns:
-        List[int]: A list of timesteps extracted from the file.
-    """
-    with open(filename, encoding="utf-8") as f:
-        timesteps = []
-        lines = deque(f.readlines())
-        line = lines.popleft()
-        while len(lines) > 0:
-            if "ITEM: TIMESTEP" in line:
-                line = lines.popleft()
-                timesteps.append(int(line))
-            else:
-                line = lines.popleft()
-    return timesteps

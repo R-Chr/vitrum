@@ -3,3 +3,4 @@ ase
 pandas
 scikit-learn
 scipy
+pymatgen

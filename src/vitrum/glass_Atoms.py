@@ -4,6 +4,8 @@ from ase import Atoms
 import dionysus
 import diode
 from scipy.signal import argrelextrema
+from collections import Counter
+from typing import List, Union, Optional
 
 
 class glass_Atoms(Atoms):
@@ -189,30 +191,56 @@ class glass_Atoms(Atoms):
         second_min = [i for ind, i in enumerate(mins) if i != ind][0]
         return second_min
 
-    def NBO_analysis(distances, center_index, neigh_index_1, neigh_index_2, cutoffs):
-        P_neigh_unique = []
-        for center in center_index:
-            neighbors = np.where(
-                (distances[neigh_index_1, center] < cutoff[0]) & (distances[neigh_index_1, center] > 0)
-            )[0]
-            P_neigh_unique.append([O_ind[neigh] for neigh in neighbors])
-        P_neigh_unique = np.unique(np.hstack(P_neigh_unique))
+    def NBO_analysis(
+        self,
+        center_type: str,
+        bridge_type: str,
+        former_types: Optional[List[str]] = None,
+        cutoff: Union[float, int] = "Auto",
+    ) -> List[int]:
+        """
+        Calculate the number of bridges for each center atom of a given type.
 
-        bond_order = [0, 0, 0, 0]
-        for neigh in P_neigh_unique:
-            neighbor_list_1 = np.where(
-                (distances[neigh_index_1, neigh] < cutoff[0]) & (distances[neigh_index_1, neigh] > 0)
-            )[0]
-            neighbor_list_2 = np.where(
-                (distances[neigh_index_2, neigh] < cutoff[1]) & (distances[neigh_index_2, neigh] > 0)
-            )[0]
+        Parameters:
+            center_type (str): The type of the center atoms.
+            bridge_type (str): The type of the bridge atoms.
+            former_types (Optional[List[str]], optional): A list of types of the former atoms. Defaults to None.
+            cutoff (Union[str, float, int], optional): The cutoff distance for considering a bridge.
+                If "Auto", the cutoff is determined by finding the minimum value after the peak in the
+                radial distribution function. If a float or int, the cutoff is set to the specified value.
+                Defaults to "Auto".
 
-            if neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 1:
-                bond_order[0] += 1
-            elif neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 2:
-                bond_order[1] += 1
-            elif neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 3:
-                bond_order[2] += 1
-            elif neighbor_list_P.shape[0] + neighbor_list_Fe.shape[0] == 0:
-                bond_order[3] += 1
-        return coordination_number
+        Returns:
+            List[int]: A list of the number of bridges for each center atom.
+        """
+        distances = self.get_dist()
+        types = np.array(self.get_chemical_symbols())
+        centers = np.where(types == center_type)[0]
+        bridges = np.where(types == bridge_type)[0]
+        dist_list = distances[np.ix_(centers, bridges)]
+
+        if former_types is None:
+            formers = centers
+        elif isinstance(former_types, list):
+            formers = np.hstack([np.where(types == type)[0] for type in former_types])
+        else:
+            raise TypeError("former_types must be either None or a List of atom types")
+
+        if cutoff == "Auto":
+            pdf = self.get_pdf(target_atoms=[center_type, bridge_type])
+            cutoff = pdf[0][self.find_min_after_peak(pdf[1])]
+        elif isinstance(cutoff, (float, int)):
+            cutoff = cutoff
+
+        num_of_bridges = []
+        for center in centers:
+            neighbors = np.where((dist_list[center, :] < cutoff) & (dist_list[center, :] > 0))[0]
+            neighbors = [bridges[neighbor] for neighbor in neighbors]
+            q_species = 0
+            for neigh in neighbors:
+                num_bridges = np.where((distances[formers, neigh] < cutoff) & (distances[formers, neigh] > 0))[0]
+                if num_bridges.shape[0] >= 2:
+                    q_species += 1
+            num_of_bridges.append(q_species)
+
+        return num_of_bridges

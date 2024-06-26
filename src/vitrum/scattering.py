@@ -23,15 +23,18 @@ class scattering:
         self.chemical_symbols = atom_list[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
         self.pairs = itertools.product(self.species, repeat=2)
+        self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
+        self.aveden = len(atom_list[0]) / atom_list[0].get_volume()
 
+        # Neutron
         self.b = np.array(
             [self.scattering_lengths[self.scattering_lengths["Isotope"] == i]["b"] for i in self.species]
         ).flatten()
-        self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
         self.cb = [i * j for i, j in zip(self.c, self.b)]
         self.timesby = [pair[0] * pair[1] for pair in itertools.product(self.cb, repeat=2)]
 
-        self.aveden = len(atom_list[0]) / atom_list[0].get_volume()
+        # X-ray
+        # self.electrons = np.unique(atom_list[0].get_atomic_numbers())
 
     def get_partial_pdf(self, pair, rrange=15, nbin=100):
         """
@@ -100,7 +103,7 @@ class scattering:
         A_q = 1 + self.aveden * np.trapz(A_q[0].T, xval)
         return qval, A_q
 
-    def get_structure_factor(self, nbin=100, rrange=15, qrange=30):
+    def get_structure_factor(self, nbin=100, rrange=15, qrange=30, type="neutron"):
         """
         Calculate the total structure factor for a given number of bins and range.
 
@@ -116,9 +119,16 @@ class scattering:
                 - S_q_tot (ndarray): An array of shape (nbin,) containing the total structure factor.
         """
         S_q_tot = np.zeros(nbin)
+
         for ind, pair in enumerate(self.pairs):
             qval, partial_sq = self.get_partial_structure_factor(
                 target_atoms=[pair[0], pair[1]], nbin=nbin, rrange=rrange, qrange=qrange
             )
-            S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
+            if type == "neutron":
+                S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
+            elif type == "fake_xray":
+                pass
+            elif type == "xray":
+                pass
+
         return qval, S_q_tot

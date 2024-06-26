@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="vitrum",
     version="0.1.0",
-    description="A brief description of your package",
+    description="vitrum is a package for generating input data and analyzing simulation data of glass structures"
     author="Rasmus Christensen",
     author_email="rasmusc@bio.aau.dk",
     url="https://github.com/R-Chr/vitrum",
@@ -20,6 +20,7 @@ setup(
         "pandas",
         "scikit-learn",
         "scipy",
+        "pymatgen",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
