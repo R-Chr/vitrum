@@ -12,11 +12,11 @@ def get_random_packed(
     Generate a random packed structure based on the given composition.
 
     Args:
-        composition (str or pymatgen.core.Composition): The composition of the structure.
-        density (float, optional): The target density of the structure. If not provided, the volume per atom
+        composition (str, dict or pymatgen.core.Composition): The composition of the structure.
+        density (float, optional): The target density of the structure (in g/cm^3). If not provided, the volume per atom
                                    is estimated using the Materials Project API.
         target_atoms (int, optional): The target number of atoms in the structure. Defaults to 100.
-        minAllowDis (float, optional): The minimum allowed distance between atoms. Defaults to 1.7.
+        minAllowDis (float, optional): The minimum allowed distance between atoms (in angstroms). Defaults to 1.7.
         mp_api_key (str, optional): The API key for the Materials Project. Required if density is not provided.
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
@@ -29,9 +29,12 @@ def get_random_packed(
         ValueError: If density is not provided and mp_api_key is not provided.
 
     """
-
-    composition = Composition(composition) if isinstance(composition, str) else composition
-
+    if isinstance(composition, str):
+        composition = Composition(composition)
+    elif isinstance(composition, dict):
+        comp_string = "".join(mol * (int(composition[mol] * 10)) for mol in composition)
+        print(len(comp_string))
+        composition = Composition(comp_string)
     formula, factor = composition.get_integer_formula_and_factor()
     integer_composition = Composition(formula)
     full_cell_composition = integer_composition * np.ceil(target_atoms / integer_composition.num_atoms)
@@ -116,3 +119,10 @@ def get_LAMMPS_dump_timesteps(filename: str):
             else:
                 line = lines.popleft()
     return timesteps
+
+
+composition = {"SiO2": 71.258, "Na2O": 28.874}
+atoms = get_random_packed(
+    composition, density=2.4, target_atoms=3000, minAllowDis=1.7, mp_api_key=None, datatype="ase", seed=None
+)
+print(atoms)

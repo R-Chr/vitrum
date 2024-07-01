@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="vitrum",
     version="0.1.0",
-    description="vitrum is a package for generating input data and analyzing simulation data of glass structures"
+    description="vitrum is a package for generating input data and analyzing simulation data of glass structures",
     author="Rasmus Christensen",
     author_email="rasmusc@bio.aau.dk",
     url="https://github.com/R-Chr/vitrum",
