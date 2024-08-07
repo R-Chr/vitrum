@@ -126,7 +126,7 @@ def strained_flows(structure, name=False, max_strain=0.2, num_strains=3, metadat
     strain_matrices = [np.eye(3) * (1.0 + eps) for eps in linear_strain]
     strained_structures = apply_strain_to_structure(structure, strain_matrices)
     flow_jobs = [
-        md_flow(strain_struc, name=strain) for strain, strain_struc in zip(linear_strain, strained_structures)
+        md_flow(strain_struc, name=f"{strain}") for strain, strain_struc in zip(linear_strain, strained_structures)
     ]
     flow = Flow(flow_jobs, name=name)
     if not metadata:
