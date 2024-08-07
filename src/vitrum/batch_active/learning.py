@@ -32,11 +32,11 @@ class balace:
         return structures
 
     def high_temp_run(self):
-        run_id = uuid.uuid4()
+        run_id = str(uuid.uuid4())
         even_spaced_structures = self.gen_even_structures()
         for structure in even_spaced_structures:
-            flow = strained_flows(structure, metadata=str(run_id))
-            wf = flow_to_workflow(flow)
+            flow = strained_flows(structure, metadata=run_id)
+            wf = flow_to_workflow(flow, metadata={"uuid": run_id})
             self.lp.add_wf(wf)
         self.runs.update({"high_temp_run": str(run_id)})
 
