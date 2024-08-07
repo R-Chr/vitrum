@@ -33,7 +33,7 @@ class balace:
 
     def high_temp_run(self):
         run_id = uuid.uuid4()
-        structures = self.gen_even_structures(units=self.units)
+        structures = self.gen_even_structures()
         for i in structures:
             flow = strained_flows(structures, self.mp_api_key, metadata=run_id)
             wf = flow_to_workflow(flow)
