@@ -23,7 +23,7 @@ class balace:
         valid_combinations = [combo for combo in all_combinations if sum(combo) == 100]
         structures = []
         for comb in valid_combinations:
-            atoms_dict = {str(self.units[0]): comb[0], str(self.units[1]): comb[1], str(self.units[2]): comb[2]}
+            atoms_dict = {str(self.units[i]): comb[i] for i in range(len(self.units))}
             structures.append(
                 get_random_packed(
                     atoms_dict, target_atoms=100, minAllowDis=1.7, mp_api_key=self.mp_api_key, datatype="pymatgen"
