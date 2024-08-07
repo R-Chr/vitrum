@@ -129,6 +129,6 @@ def strained_flows(structure, name=False, max_strain=0.2, num_strains=3, metadat
         md_flow(strain_struc, name=f"{strain}") for strain, strain_struc in zip(linear_strain, strained_structures)
     ]
     flow = Flow(flow_jobs, name=name)
-    if not metadata:
-        flow.update_metadata({"metadata": f"{metadata}"})
+    if metadata:
+        flow.update_metadata({"uuid": f"{metadata}"})
     return flow
