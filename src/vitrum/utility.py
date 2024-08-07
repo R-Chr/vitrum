@@ -5,6 +5,7 @@ from pymatgen.core import Composition, Structure
 from collections import deque
 from pymatgen.alchemy.materials import TransformedStructure
 from pymatgen.transformations.standard_transformations import DeformStructureTransformation
+import warnings
 
 
 def get_random_packed(
@@ -45,7 +46,8 @@ def get_random_packed(
 
     if density is None:
         if mp_api_key is None:
-            raise ValueError("Please provide an API key for the Materials Project")
+            density = 2.5
+            warnings.warn("No density or MP API key provided, setting density to 2.5 g/cm3")
         mpr = MPRester(mp_api_key)
         _entries = mpr.get_entries_in_chemsys([str(el) for el in composition.elements], inc_structure=True)
         entries = []
