@@ -3,6 +3,8 @@ from pymatgen.ext.matproj import MPRester
 import numpy as np
 from pymatgen.core import Composition, Structure
 from collections import deque
+from pymatgen.alchemy.materials import TransformedStructure
+from pymatgen.transformations.standard_transformations import DeformStructureTransformation
 
 
 def get_random_packed(
@@ -33,7 +35,6 @@ def get_random_packed(
         composition = Composition(composition)
     elif isinstance(composition, dict):
         comp_string = "".join(mol * (int(composition[mol] * 10)) for mol in composition)
-        print(len(comp_string))
         composition = Composition(comp_string)
     formula, factor = composition.get_integer_formula_and_factor()
     integer_composition = Composition(formula)
@@ -121,8 +122,37 @@ def get_LAMMPS_dump_timesteps(filename: str):
     return timesteps
 
 
-composition = {"SiO2": 71.258, "Na2O": 28.874}
-atoms = get_random_packed(
-    composition, density=2.4, target_atoms=3000, minAllowDis=1.7, mp_api_key=None, datatype="ase", seed=None
-)
-print(atoms)
+def apply_strain_to_structure(structure, deformations: list) -> list:
+    """
+    Apply strain(s) to input structure and return transformation(s) as list.
+
+    Parameters
+    ----------
+    structure: .Structure
+        Input structure to apply strain to
+    deformations: list[.Deformation]
+        A list of deformations to apply **independently** to the input
+        structure, in anticipation of performing an EOS fit.
+        Deformations should be of the form of a 3x3 matrix, e.g.,::
+
+        [[1.2, 0., 0.], [0., 1.2, 0.], [0., 0., 1.2]]
+
+        or::
+
+        ((1.2, 0., 0.), (0., 1.2, 0.), (0., 0., 1.2))
+
+    Returns
+    -------
+    list
+        A list of .TransformedStructure objects corresponding to the
+        list of input deformations.
+    """
+    transformations = []
+    for deformation in deformations:
+        # deform the structure
+        ts = TransformedStructure(
+            structure,
+            transformations=[DeformStructureTransformation(deformation=deformation)],
+        )
+        transformations += [ts]
+    return transformations
