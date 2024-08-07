@@ -44,23 +44,24 @@ def get_random_packed(
     for el in full_cell_composition:
         structure[str(el)] = int(full_cell_composition.element_composition.get(el))
 
-    if not density:
-        if not mp_api_key:
-            density = 2.5
-            warnings.warn("No density or MP API key provided, setting density to 2.5 g/cm3")
-        else:
-            mpr = MPRester(mp_api_key)
-            _entries = mpr.get_entries_in_chemsys([str(el) for el in composition.elements], inc_structure=True)
-            entries = []
-            for entry in _entries:
-                if set(entry.structure.composition.elements) == set(composition.elements):
-                    entries.append(entry)
-                if len(entry.structure.composition.elements) >= 2:
-                    entries.append(entry)
-            vols = [entry.structure.volume / entry.structure.num_sites for entry in entries]
-            vol_per_atom = np.mean(vols)
-            cell_len = (vol_per_atom * full_cell_composition.num_atoms) ** (1 / 3)
-    else:
+    if not mp_api_key and not density:
+        density = 2.5
+        warnings.warn("No MP API key provided, setting density to 2.5 g/cm3")
+
+    if mp_api_key:
+        mpr = MPRester(mp_api_key)
+        _entries = mpr.get_entries_in_chemsys([str(el) for el in composition.elements], inc_structure=True)
+        entries = []
+        for entry in _entries:
+            if set(entry.structure.composition.elements) == set(composition.elements):
+                entries.append(entry)
+            if len(entry.structure.composition.elements) >= 2:
+                entries.append(entry)
+        vols = [entry.structure.volume / entry.structure.num_sites for entry in entries]
+        vol_per_atom = np.mean(vols)
+        cell_len = (vol_per_atom * full_cell_composition.num_atoms) ** (1 / 3)
+
+    if density:
         mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
         cell_vol = (mass / (6.0221 * (10**23))) / density
         cell_len = cell_vol ** (1 / 3) * (10**8)
