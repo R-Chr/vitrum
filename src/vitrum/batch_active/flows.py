@@ -118,13 +118,12 @@ def md_flow(
     return aimd_maker.make(structure)
 
 
-def strained_flows(structures, name=False, max_strain=0.2, num_strains=3, metadata=None):
+def strained_flows(structures, max_strain=0.2, num_strains=3, metadata=None):
     linear_strain = np.linspace(-max_strain, max_strain, num_strains)
     strain_matrices = [np.eye(3) * (1.0 + eps) for eps in linear_strain]
     flow_jobs = []
     for structure in structures:
-        if not name:
-            name = structure.reduced_formula
+        name = structure.reduced_formula
         strained_structures = apply_strain_to_structure(structure, strain_matrices)
         for strain, strain_struc in zip(linear_strain, strained_structures):
             flow_jobs.append(md_flow(strain_struc, name=f"{name}_{strain}"))

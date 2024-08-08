@@ -8,6 +8,8 @@ from sklearn.model_selection import train_test_split
 import yaml
 from ase.io import read
 import pandas as pd
+import os
+from fireworks import Firework, FWorker, LaunchPad, ScriptTask, TemplateWriterTask, FileTransferTask
 
 
 class balace:
@@ -16,6 +18,7 @@ class balace:
         self.mp_api_key = mp_api_key
         self.lp = lp
         self.runs = {}
+        self.wd = os.getcwd()
 
     def gen_even_structures(
         self,
@@ -37,11 +40,10 @@ class balace:
 
     def high_temp_run(self):
         run_id = str(uuid.uuid4())
-        even_spaced_structures = self.gen_even_structures()
-        for structure in even_spaced_structures:
-            flow = strained_flows(structure, metadata=run_id)
-            wf = flow_to_workflow(flow, metadata={"uuid": run_id})
-            self.lp.add_wf(wf)
+        structures = self.gen_even_structures()
+        flow = strained_flows(structures, metadata=run_id)
+        wf = flow_to_workflow(flow, metadata={"uuid": run_id})
+        self.lp.add_wf(wf)
         self.runs.update({"high_temp_run": str(run_id)})
 
     def get_atoms_from_wf(self, run_uuid):
@@ -59,27 +61,31 @@ class balace:
                 atoms = atoms + atoms_fw
         return atoms
 
-    def make_ace_database(self, atoms, force_threshold=100):
+    def make_ace_database(self, atoms, iteration, force_threshold=100):
         energy = [i.get_total_energy() for i in atoms]
         force = [i.get_forces().tolist() for i in atoms]
-        data = {"energy": energy, "forces": force, "ase_atoms": atoms}
+        data = {"energy": energy, "forces": force, "ase_atoms": atoms, "iteration": iteration}
         # create a DataFrame
         df = pd.DataFrame(data)
         df = df[~df["forces"].apply(lambda x: np.max(x) > force_threshold)]
-        df_train, df_test = train_test_split(df, test_size=0.1, random_state=1)
-        df_train.to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
-        df_test.to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
+        return df
 
     def add_data_to_db(self, old_filename_db, new_filename_db, df_new_data: list):
         df_old = pd.read_pickle(old_filename_db, compression="gzip")
         df_new = pd.concat([df_old] + df_new_data)
         df_new.to_pickle(new_filename_db, compression="gzip", protocol=4)
 
-    def train_ace(self):
-        with open("/Users/rasmus/Documents/GitHub/vitrum/src/vitrum/batch_active/input.yaml") as f:
-            list_doc = yaml.safe_load(f)
-            list_doc["data"]["filename"] = "train"
-            list_doc["data"]["test_filename"] = "test"
+    def save_dataframe(self, df):
+        df_train, df_test = train_test_split(df, test_size=0.1, random_state=1)
+        df_train.to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
+        df_test.to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
 
-        with open("/Users/rasmus/Documents/GitHub/vitrum/src/vitrum/batch_active/data.yaml", "w") as f:
+    def train_ace(self, iteration):
+        with open("input.yaml") as f:
+            list_doc = yaml.safe_load(f)
+            list_doc["data"]["filename"] = f"{self.wd}/train_data.pckl.gzip"
+            list_doc["data"]["test_filename"] = f"{self.wd}/test_data.pckl.gzip"
+
+        os.makedirs(f"{self.wd}/ace/{iteration}")
+        with open(f"{self.wd}/ace/{iteration}/input.yaml", "w") as f:
             yaml.dump(list_doc, f)
