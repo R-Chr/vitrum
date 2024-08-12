@@ -4,7 +4,6 @@ from ase import Atoms
 import dionysus
 import diode
 from scipy.signal import argrelextrema
-from collections import Counter
 from typing import List, Union, Optional
 
 

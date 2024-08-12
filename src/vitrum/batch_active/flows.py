@@ -1,11 +1,8 @@
 from atomate2.vasp.jobs.core import StaticMaker
 from atomate2.vasp.jobs.md import MDMaker
 from pymatgen.io.vasp import Kpoints
-from jobflow import Flow
 from atomate2.vasp.sets.core import StaticSetGenerator
 from atomate2.vasp.sets.core import MDSetGenerator
-import numpy as np
-from vitrum.utility import apply_strain_to_structure
 
 
 def static_flow(structure, name=False, incar_settings=False, kpoint=False, potcar_functional="PBE_64"):
@@ -116,19 +113,3 @@ def md_flow(
     )
 
     return aimd_maker.make(structure)
-
-
-def strained_flows(structures, max_strain=0.2, num_strains=3, metadata=None):
-    linear_strain = np.linspace(-max_strain, max_strain, num_strains)
-    strain_matrices = [np.eye(3) * (1.0 + eps) for eps in linear_strain]
-    flow_jobs = []
-    for structure in structures:
-        name = structure.reduced_formula
-        strained_structures = apply_strain_to_structure(structure, strain_matrices)
-        for strain, strain_struc in zip(linear_strain, strained_structures):
-            flow_jobs.append(md_flow(strain_struc, name=f"{name}_{strain}"))
-
-    flow = Flow(flow_jobs, name=name)
-    if metadata:
-        flow.update_metadata({"uuid": f"{metadata}"})
-    return flow
