@@ -102,7 +102,7 @@ def get_random_packed(
     return data
 
 
-def get_LAMMPS_dump_timesteps(filename: str):
+def get_LAMMPS_dump_timesteps(filename: str, spacing=None):
     """
     Retrieves the timesteps from a LAMMPS dump file.
 
@@ -122,7 +122,18 @@ def get_LAMMPS_dump_timesteps(filename: str):
                 timesteps.append(int(line))
             else:
                 line = lines.popleft()
-    return timesteps
+    if len(timesteps) == 0:
+        return []
+    if spacing:
+        latest_sample = timesteps[0]
+        spaced_timesteps = [latest_sample]
+        for ind, time in enumerate(timesteps):
+            if time > latest_sample + spacing:
+                spaced_timesteps.append(ind)
+                latest_sample = time
+        return spaced_timesteps
+    else:
+        return timesteps
 
 
 def apply_strain_to_structure(structure, deformations: list) -> list:

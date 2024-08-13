@@ -1,5 +1,5 @@
 def lammps_input_writer(
-    wd, atoms, max_temp=5000, min_temp=300, cooling_rate=10, sample_rate=10000, seed=1, c_min=3, c_max=20
+    pot_dir, atoms, max_temp=5000, min_temp=300, cooling_rate=10, sample_rate=10000, seed=1, c_min=3, c_max=20
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
     input = f"""
@@ -13,7 +13,7 @@ def lammps_input_writer(
 
     ## in.lammps
     pair_style  pace/extrapolation
-    pair_coeff  * * {wd}/output_potential.yaml {wd}/output_potential.asi {atom_string}
+    pair_coeff  * * {pot_dir}/output_potential.yaml {pot_dir}/output_potential.asi {atom_string}
     fix pace_gamma all pair 1 pace/extrapolation gamma 1
     compute max_pace_gamma all reduce max f_pace_gamma
 
@@ -49,4 +49,72 @@ def lammps_input_writer(
     """
 
     with open("in.ace", "w") as f:
+        f.writelines(input)
+
+
+def ace_yaml_writer(
+    wd,
+    train_database,
+    test_database,
+    elements,
+    cutoff=8.0,
+    number_of_functions_per_element=250,
+    embeddings={
+        "npot": "FinnisSinclairShiftedScaled",
+        "fs_parameters": [1, 1, 1, 0.5, 1, 0.75, 1, 0.25, 1, 0.125, 1, 0.375, 1, 0.875, 1, 2],
+        "ndensity": 8,
+    },
+    bonds={
+        "radbase": "SBessel",
+        "radparameters": [5.25],
+        "rcut": 8.0,
+        "dcut": 0.01,
+        "NameOfCutoffFunction": "cos",
+    },
+    deltaSplineBins=0.001,
+    nradmax_by_orders=[15, 3, 2, 1],
+    lmax_by_orders=[0, 4, 2, 0],
+    maxiter=2000,
+    ladder_steps=5,
+    ladder_type="power_order",
+    early_stopping_patience=150,
+    batch_size=100,
+):
+    input = f"""
+    cutoff: {cutoff} # cutoff for neighbour list construction
+    seed: 42  # random seed
+    metadata:
+    origin: "Automatically generated input"
+    potential:
+    deltaSplineBins: {deltaSplineBins}
+    elements: {elements}
+    embeddings:
+        ALL: {embeddings}
+    bonds:
+        ALL: {bonds}
+    functions:
+        number_of_functions_per_element: {number_of_functions_per_element}
+        UNARY:   {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
+        BINARY:  {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
+        TERNARY: {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
+        QUATERNARY: {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
+    data:
+    filename: {train_database}
+    test_filename: {test_database}
+    fit:
+    loss: {{kappa: 0.01, L1_coeffs: 1e-8,  L2_coeffs: 1e-8}}
+    optimizer: BFGS
+    maxiter: {maxiter}
+    repulsion: auto
+    ladder_step: {ladder_steps}
+    ladder_type: {ladder_type}
+    min_relative_train_loss_per_iter: 5e-5
+    min_relative_test_loss_per_iter: 1e-5
+    early_stopping_patience: {early_stopping_patience}
+    backend:
+    evaluator: tensorpot
+    batch_size: {batch_size}
+    display_step: 50
+    """
+    with open(f"{wd}/input.yaml", "w") as f:
         f.writelines(input)

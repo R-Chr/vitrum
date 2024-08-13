@@ -74,6 +74,11 @@ pip install directly  from this repository.
 pip install git+https://github.com/R-Chr/vitrum.git
 ```
 
+To update package to the most current version
+```
+pip install --force-reinstall --no-deps git+https://github.com/R-Chr/vitrum.git
+```
+
 ### Dionysus and Diode
 For persistent homology analsysis these packages are required. They are however currently required installs to avoid errors, may change in the future.
 ```

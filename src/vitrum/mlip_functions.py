@@ -39,9 +39,7 @@ def eval_plot(reference_data, predicted_data, ax=None):
     min_max = min_max_val(reference_data, predicted_data)
     reference_data = np.array(reference_data)
     predicted_data = np.array(predicted_data)
-    data, x_e, y_e = np.histogram2d(
-        reference_data, predicted_data, bins=20, density=True
-    )
+    data, x_e, y_e = np.histogram2d(reference_data, predicted_data, bins=20, density=True)
     z = interpn(
         (0.5 * (x_e[1:] + x_e[:-1]), 0.5 * (y_e[1:] + y_e[:-1])),
         data,
@@ -58,27 +56,5 @@ def eval_plot(reference_data, predicted_data, ax=None):
     ax.set_xlim(min_max[0], min_max[1])
     ax.set_ylim(min_max[0], min_max[1])
     rmse = root_mean_squared_error(reference_data, predicted_data)
-    ax.set_title(
-        f"RMSE: {rmse*1000:.2f} meV/atom", loc="left", x=0.05, y=0.90, fontsize=9
-    )
+    ax.set_title(f"RMSE: {rmse*1000:.2f} meV/atom", loc="left", x=0.05, y=0.90, fontsize=9)
     return ep
-
-
-def make_ace_dataframe(atoms, force_threshold=100):
-    energy = [i.get_total_energy() for i in atoms]
-    force = [i.get_forces().tolist() for i in atoms]
-    data = {
-        "energy": energy,
-        "forces": force,
-        "ase_atoms": atoms,
-        "energy_corrected": energy,
-    }
-    # create a DataFrame
-    df = pd.DataFrame(data)
-    return df[~df["forces"].apply(lambda x: np.max(x) > force_threshold)]
-
-
-def add_data_to_db(old_filename_db, new_filename_db, df_new_data: list):
-    df_old = pd.read_pickle(old_filename_db, compression="gzip")
-    df_new = pd.concat([df_old] + df_new_data)
-    df_new.to_pickle(new_filename_db, compression="gzip", protocol=4)
