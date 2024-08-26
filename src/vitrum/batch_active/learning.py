@@ -12,30 +12,49 @@ from ase.io import read
 from ase.io.lammpsdata import write_lammps_data
 import pandas as pd
 import os
-from fireworks import Firework, ScriptTask
+from fireworks import Firework, ScriptTask, LaunchPad
 from fireworks.core.firework import Workflow
 from pymatgen.core import Composition
 from pymatgen.io.ase import AseAtomsAdaptor
+import yaml
+import pickle
 
 
 class balace:
-    def __init__(self, lp, units, mp_api_key, lammps_exe, database=None, state="high_temp_run"):
-        self.state = state
-        self.units = units
-        self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in units]))]
-        self.mp_api_key = mp_api_key
-        self.lp = lp
+    def __init__(self, config_file="balace.yaml", filename="balace.pickle", units=["SiO2"]):
+        self.state = "high_temp_run"
+        self.mp_api_key = None
+        self.filename = filename
         self.runs = {}
         self.wd = os.getcwd()
-        self.lammps_exe = lammps_exe
-        if not database:
+        self.units = units
+
+        if os.path.isfile(config_file) is False:
+            raise FileNotFoundError(f"Config file {config_file} not found.")
+
+        with open(config_file, "r") as file:
+            config = yaml.safe_load(file)
+
+        for key, value in config.items():
+            setattr(self, key, value)
+
+        self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
+        self.lp = LaunchPad.from_file(self.launchpad)
+
+        if hasattr(self, "database"):
+            if os.path.isfile(self.database) is False:
+                raise FileNotFoundError("train_data.pckl.gzip not found")
+            elif os.path.isfile(self.database) is False:
+                raise FileNotFoundError("test_data.pckl.gzip not found")
+        else:
             df_train = pd.DataFrame({"energy": [], "forces": [], "ase_atoms": [], "iteration": 0})
             df_test = pd.DataFrame({"energy": [], "forces": [], "ase_atoms": [], "iteration": 0})
-        else:
-            df_train, df_test = train_test_split(database, test_size=0.1, random_state=1)
+            df_train.to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
+            df_test.to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
 
-        df_train.to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
-        df_test.to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
+    def save(self):
+        with open(self.filename, "wb") as f:
+            pickle.dump(self, f)
 
     def gen_even_structures(
         self,
@@ -101,7 +120,7 @@ class balace:
                 if sampling == ":":
                     atoms = atoms + atoms_fw
                 elif isinstance(sampling, int):
-                    sample_index = np.linspace(0, num_samples-1, sampling, dtype=int)
+                    sample_index = np.linspace(0, num_samples - 1, sampling, dtype=int)
                     atoms = atoms + [atoms_fw[i] for i in sample_index]
                 elif isinstance(sampling, list):
                     atoms = atoms + [atoms_fw[i] for i in sampling]
@@ -193,7 +212,7 @@ class balace:
             self.runs["run_lammps"].append(run_id)
 
     def correct_chem_symbols(atom_types, atoms):
-        symbol_change_map = {i+1: x for i, x in enumerate(atom_types)}
+        symbol_change_map = {i + 1: x for i, x in enumerate(atom_types)}
         print(symbol_change_map)
         for atom in atoms:
             chem_symbols = [symbol_change_map.get(x, x) for x in atom.get_atomic_numbers()]
@@ -201,7 +220,7 @@ class balace:
             atom.set_chemical_symbols(chem_symbols)
 
     def get_structures_from_lammps(self):
-        folder = f"{self.wd}/gen_structures/{self.runs["run_lammps"][-1]}"
+        folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
         atoms_all = []
         for dirpath, dirnames, filenames in os.walk(folder):
             for file in ["glass.dump", "gamma.dump"]:
@@ -259,3 +278,5 @@ class balace:
             self.static_run(structures)
             self.state = "train_ace"
             print("Evaluating new structures with VASP")
+
+        self.save()

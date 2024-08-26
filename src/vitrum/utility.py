@@ -50,14 +50,19 @@ def get_random_packed(
 
     if mp_api_key:
         mpr = MPRester(mp_api_key)
-        _entries = mpr.get_entries_in_chemsys([str(el) for el in composition.elements], inc_structure=True)
-        entries = []
-        for entry in _entries:
-            if set(entry.structure.composition.elements) == set(composition.elements):
-                entries.append(entry)
-            if len(entry.structure.composition.elements) >= 2:
-                entries.append(entry)
-        vols = [entry.structure.volume / entry.structure.num_sites for entry in entries]
+        comp_entries = mpr.get_entries(composition.reduced_formula, inc_structure=True)
+        if len(comp_entries) > 0:
+            vols = np.min([entry.structure.volume / entry.structure.num_sites for entry in comp_entries])
+        else:
+            _entries = mpr.get_entries_in_chemsys([str(el) for el in composition.elements], inc_structure=True)
+            entries = []
+            for entry in _entries:
+                if set(entry.structure.composition.elements) == set(composition.elements):
+                    entries.append(entry)
+                if len(entry.structure.composition.elements) >= 2:
+                    entries.append(entry)
+            vols = [entry.structure.volume / entry.structure.num_sites for entry in entries]
+
         vol_per_atom = np.mean(vols)
         cell_len = (vol_per_atom * full_cell_composition.num_atoms) ** (1 / 3)
 
