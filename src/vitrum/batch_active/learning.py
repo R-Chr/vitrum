@@ -168,9 +168,7 @@ class balace:
         run_id = str(uuid.uuid4())
         directory = f"{self.wd}/ace_fitting/{run_id}"
         os.makedirs(f"{directory}")
-        ace_yaml_writer(
-            f"{directory}", f"{self.wd}/train_data.pckl.gzip", f"{self.wd}/test_data.pckl.gzip", self.atom_types
-        )
+        ace_yaml_writer(f"{directory}", self.database["train"], self.database["test"], self.atom_types)
         firetask1 = ScriptTask.from_str(f"cd {directory}")
         firetask2 = ScriptTask.from_str("pacemaker input.yaml")
         fw = Firework([firetask1, firetask2], name="train_ace", metadata={"uuid": run_id})
@@ -287,7 +285,7 @@ class balace:
                 atoms = self.get_atoms_from_wf(wf_id, sampling=5)
 
             self.update_ace_database(atoms, self.iteration)
-            self.train_ace(self.iteration)
+            self.train_ace()
             print(f"Training ace model, Iteration: {self.iteration}")
             self.iteration += 1
             self.state = "gen_lammps"
