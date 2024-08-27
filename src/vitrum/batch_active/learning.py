@@ -29,6 +29,7 @@ class balace:
         self.runs = {}
         self.wd = os.getcwd()
         self.units = units
+        self.iteration = 0
 
         if os.path.isfile(config_file) is False:
             raise FileNotFoundError(f"Config file {config_file} not found.")
@@ -86,7 +87,8 @@ class balace:
         linear_strain = np.linspace(-max_strain, max_strain, num_strains)
         strain_matrices = [np.eye(3) * (1.0 + eps) for eps in linear_strain]
         strained_structures = apply_strain_to_structure(structure, strain_matrices)
-        return strained_structures, linear_strain
+        struc = [strained_structures[index].final_structure for index in range(len(strain_matrices))]
+        return struc, linear_strain
 
     def high_temp_run(self, structures=None, max_strain=0.2, num_strains=3, metadata=None):
         run_id = str(uuid.uuid4())
@@ -105,13 +107,19 @@ class balace:
                             incar_settings=self.incar_settings,
                             temperature=self.high_temp_params["temperature"],
                             steps=self.high_temp_params["steps"],
-                            metadata=metadata,
                         )
                     )
 
             else:
-                flow_jobs.append(md_flow(structure, name=name))
-
+                flow_jobs.append(
+                    md_flow(
+                        strain_struc,
+                        name=f"{name}",
+                        incar_settings=self.incar_settings,
+                        temperature=self.high_temp_params["temperature"],
+                        steps=self.high_temp_params["steps"],
+                    )
+                )
         flow = Flow(flow_jobs, name="MD_flows")
         wf = flow_to_workflow(flow, metadata={"uuid": run_id})
         if "DFT" not in self.runs:
@@ -127,7 +135,7 @@ class balace:
             if self.lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid
         ]
         atoms = []
-        wf = self.lp.get_wf_summary_dict(wf_id)
+        wf = self.lp.get_wf_summary_dict(wf_id[0])
         for fw in wf["states"]:
             if wf["states"][fw] == "COMPLETED":
                 dirs = wf["launch_dirs"][fw][0]
@@ -273,7 +281,7 @@ class balace:
 
         elif self.state == "train_ace":
             wf_id = self.runs["DFT"][-1]
-            if self.iteration == 0:
+            if self.iteration > 0:
                 atoms = self.get_atoms_from_wf(wf_id, sampling=":")
             else:
                 atoms = self.get_atoms_from_wf(wf_id, sampling=5)

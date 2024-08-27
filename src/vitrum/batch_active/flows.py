@@ -33,12 +33,7 @@ def static_flow(structure, name=False, incar_settings=False, kpoint=False, potca
         }
 
     if not kpoint:
-        kpoint = Kpoints(
-            comment="Gamma only",
-            num_kpts=1,
-            kpts=[[0, 0, 0]],
-            kpts_weights=[1.0],
-        )
+        kpoint = Kpoints()  # Gamma centered, 1x1x1 KPOINTS with no shift
 
     run_vasp_kwargs = {"job_type": "direct"}
 
@@ -75,7 +70,7 @@ def md_flow(
             "ENCUT": 520,
             "ISMEAR": 0,
             "ISPIN": 1,  # Do not consider magnetism in AIMD simulations
-            "LREAL": "Auto",  # Peform calculation in real space for AIMD due to large unit cell size
+            "LREAL": "Auto",
             "LAECHG": False,  # Don't need AECCAR for AIMD
             "LCHARG": False,
             "GGA": None,  # Just let VASP decide based on POTCAR - the default PE
@@ -90,12 +85,7 @@ def md_flow(
         }
 
     if not kpoint:
-        kpoint = Kpoints(
-            comment="Gamma only",
-            num_kpts=1,
-            kpts=[[0, 0, 0]],
-            kpts_weights=[1.0],
-        )
+        kpoint = Kpoints()  # Gamma centered, 1x1x1 KPOINTS with no shift
 
     aimd_maker = MDMaker(
         name=name,
