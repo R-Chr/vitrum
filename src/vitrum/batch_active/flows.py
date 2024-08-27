@@ -87,6 +87,8 @@ def md_flow(
     if not kpoint:
         kpoint = Kpoints()  # Gamma centered, 1x1x1 KPOINTS with no shift
 
+    run_vasp_kwargs = {"job_type": "direct"}
+
     aimd_maker = MDMaker(
         name=name,
         input_set_generator=MDSetGenerator(
@@ -100,6 +102,7 @@ def md_flow(
             user_kpoints_settings=kpoint,
             user_potcar_functional=potcar_functional,
         ),
+        run_vasp_kwargs=run_vasp_kwargs,
     )
 
     return aimd_maker.make(structure)

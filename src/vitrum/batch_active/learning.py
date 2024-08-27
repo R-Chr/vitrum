@@ -50,15 +50,10 @@ class balace:
         self.lp = LaunchPad.from_file(self.launchpad)
 
         if hasattr(self, "database"):
-            if os.path.isfile(self.database) is False:
+            if os.path.isfile(self.database["train"]) is False:
                 raise FileNotFoundError("train_data.pckl.gzip not found")
-            elif os.path.isfile(self.database) is False:
+            elif os.path.isfile(self.database["test"]) is False:
                 raise FileNotFoundError("test_data.pckl.gzip not found")
-        else:
-            df_train = pd.DataFrame({"energy": [], "forces": [], "ase_atoms": [], "iteration": 0})
-            df_test = pd.DataFrame({"energy": [], "forces": [], "ase_atoms": [], "iteration": 0})
-            df_train.to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
-            df_test.to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
 
     def save(self):
         with open(self.filename, "wb") as f:
@@ -159,10 +154,15 @@ class balace:
         df = df[~df["forces"].apply(lambda x: np.max(x) > force_threshold)]
         df_new = train_test_split(df, test_size=0.1, random_state=1)
 
-        for ind, file in enumerate(["train_data.pckl.gzip", "test_data.pckl.gzip"]):
-            df_old = pd.read_pickle(file, compression="gzip")
-            df_new = pd.concat([df_old] + df_new[ind])
-            df_new.to_pickle(file, compression="gzip", protocol=4)
+        if hasattr(self, "database"):
+            for ind, file in enumerate([self.database["train"], self.database["test"]]):
+                df_old = pd.read_pickle(file, compression="gzip")
+                df_concat = pd.concat([df_old] + df_new[ind])
+                df_concat.to_pickle(file, compression="gzip", protocol=4)
+        else:
+            df_new[0].to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
+            df_new[1].to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
+            self.database = {"train": "train_data.pckl.gzip", "test": "test_data.pckl.gzip"}
 
     def train_ace(self):
         run_id = str(uuid.uuid4())
