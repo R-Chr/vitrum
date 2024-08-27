@@ -1,5 +1,5 @@
 from ase import Atoms
-from pymatgen.ext.matproj import MPRester
+from mp_api.client import MPRester
 import numpy as np
 from pymatgen.core import Composition, Structure
 from collections import deque
@@ -49,12 +49,14 @@ def get_random_packed(
         warnings.warn("No MP API key provided, setting density to 2.5 g/cm3")
 
     if mp_api_key:
-        mpr = MPRester(mp_api_key)
-        comp_entries = mpr.get_entries(composition.reduced_formula, inc_structure=True)
+        mpr = MPRester(mp_api_key, mute_progress_bars=True)
+        comp_entries = mpr.get_entries(composition.reduced_formula)
         if len(comp_entries) > 0:
             vols = np.min([entry.structure.volume / entry.structure.num_sites for entry in comp_entries])
         else:
-            _entries = mpr.get_entries_in_chemsys([str(el) for el in composition.elements], inc_structure=True)
+            _entries = mpr.get_entries_in_chemsys(
+                [str(el) for el in composition.elements], additional_criteria={"is_stable": True}
+            )
             entries = []
             for entry in _entries:
                 if set(entry.structure.composition.elements) == set(composition.elements):

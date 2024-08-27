@@ -18,6 +18,7 @@ from pymatgen.core import Composition
 from pymatgen.io.ase import AseAtomsAdaptor
 import yaml
 import pickle
+from tqdm import tqdm
 
 
 class balace:
@@ -37,6 +38,12 @@ class balace:
 
         for key, value in config.items():
             setattr(self, key, value)
+
+        if not hasattr(self, "incar_settings"):
+            self.incar_settings = False
+
+        if not hasattr(self, "high_temp_params"):
+            self.high_temp_params = {"temperature": 5000, "steps": 100}
 
         self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
         self.lp = LaunchPad.from_file(self.launchpad)
@@ -66,11 +73,11 @@ class balace:
         all_combinations = product(*lists)
         valid_combinations = [combo for combo in all_combinations if sum(combo) == 100]
         structures = []
-        for comb in valid_combinations:
+        for comb in tqdm(valid_combinations):
             atoms_dict = {str(self.units[i]): comb[i] for i in range(len(self.units))}
             structures.append(
                 get_random_packed(
-                    atoms_dict, target_atoms=100, minAllowDis=1.7, mp_api_key=self.mp_api_key, datatype=datatype
+                    atoms_dict, target_atoms=100, minAllowDis=1.5, mp_api_key=self.mp_api_key, datatype=datatype
                 )
             )
         return structures
@@ -91,7 +98,16 @@ class balace:
             if num_strains > 1:
                 strained_structures, linear_strain = self.gen_strained_structures(structure, max_strain, num_strains)
                 for strain, strain_struc in zip(linear_strain, strained_structures):
-                    flow_jobs.append(md_flow(strain_struc, name=f"{name}_{strain}"))
+                    flow_jobs.append(
+                        md_flow(
+                            strain_struc,
+                            name=f"{name}_{strain}",
+                            incar_settings=self.incar_settings,
+                            temperature=self.high_temp_params["temperature"],
+                            steps=self.high_temp_params["steps"],
+                            metadata=metadata,
+                        )
+                    )
 
             else:
                 flow_jobs.append(md_flow(structure, name=name))
@@ -238,7 +254,7 @@ class balace:
         flow_jobs = []
         for structure in structures:
             name = structure.reduced_formula
-            flow_jobs.append(static_flow(structure, name=name))
+            flow_jobs.append(static_flow(structure, name=name, incar_settings=self.incar_settings))
 
         flow = Flow(flow_jobs, name="Static_flows")
         wf = flow_to_workflow(flow, metadata={"uuid": run_id})
