@@ -1,3 +1,6 @@
+import yaml
+
+
 def lammps_input_writer(
     pot_dir, atoms, max_temp=5000, min_temp=300, cooling_rate=10, sample_rate=10000, seed=1, c_min=3, c_max=20
 ):
@@ -53,10 +56,10 @@ def lammps_input_writer(
 
 
 def ace_yaml_writer(
-    wd,
     train_database,
     test_database,
     elements,
+    reference_energy="Auto",
     cutoff=8.0,
     number_of_functions_per_element=250,
     embeddings={
@@ -80,41 +83,42 @@ def ace_yaml_writer(
     early_stopping_patience=150,
     batch_size=100,
 ):
-    input = f"""
-    cutoff: {cutoff} # cutoff for neighbour list construction
-    seed: 42  # random seed
-    metadata:
-    origin: "Automatically generated input"
-    potential:
-    deltaSplineBins: {deltaSplineBins}
-    elements: {elements}
-    embeddings:
-        ALL: {embeddings}
-    bonds:
-        ALL: {bonds}
-    functions:
-        number_of_functions_per_element: {number_of_functions_per_element}
-        UNARY:   {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
-        BINARY:  {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
-        TERNARY: {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
-        QUATERNARY: {{nradmax_by_orders: {nradmax_by_orders}, lmax_by_orders: {lmax_by_orders}}}
-    data:
-    filename: {train_database}
-    test_filename: {test_database}
-    fit:
-    loss: {{kappa: 0.01, L1_coeffs: 1e-8,  L2_coeffs: 1e-8}}
-    optimizer: BFGS
-    maxiter: {maxiter}
-    repulsion: auto
-    ladder_step: {ladder_steps}
-    ladder_type: {ladder_type}
-    min_relative_train_loss_per_iter: 5e-5
-    min_relative_test_loss_per_iter: 1e-5
-    early_stopping_patience: {early_stopping_patience}
-    backend:
-    evaluator: tensorpot
-    batch_size: {batch_size}
-    display_step: 50
-    """
-    with open(f"{wd}/input.yaml", "w") as f:
-        f.writelines(input)
+
+    ace_input = {
+        "cutoff": cutoff,
+        "seed": 42,
+        "potential": {
+            "deltaSplineBins": deltaSplineBins,
+            "elements": elements,
+            "embeddings": {"ALL": embeddings},
+            "bonds": {"ALL": bonds},
+            "functions": {
+                "number_of_functions_per_element": number_of_functions_per_element,
+                "UNARY": {"nradmax_by_orders": nradmax_by_orders, "lmax_by_orders": lmax_by_orders},
+                "BINARY": {"nradmax_by_orders": nradmax_by_orders, "lmax_by_orders": lmax_by_orders},
+                "TERNARY": {"nradmax_by_orders": nradmax_by_orders, "lmax_by_orders": lmax_by_orders},
+                "QUATERNARY": {"nradmax_by_orders": nradmax_by_orders, "lmax_by_orders": lmax_by_orders},
+            },
+        },
+        "data": {"filename": train_database, "test_filename": test_database, "reference_energy": reference_energy},
+        "fit": {
+            "loss": {"kappa": 0.01, "L1_coeffs": 1e-8, "L2_coeffs": 1e-8},
+            "optimizer": "BFGS",
+            "repulsion": "auto",
+            "maxiter": maxiter,
+            "ladder_steps": ladder_steps,
+            "ladder_type": ladder_type,
+            "min_relative_train_loss_per_iter": 5e-5,
+            "min_relative_test_loss_per_iter": 1e-5,
+            "early_stopping_patience": early_stopping_patience,
+        },
+        "backend": {
+            "evaluator": "tensorpot",
+            "batch_size": batch_size,
+            "display_step": 100,
+            "gpu_config": {"gpu_ind": -1, "mem_limit": 0},
+        },
+    }
+    yaml.Dumper.ignore_aliases = lambda *args: True
+    with open("input.yaml", "w") as f:
+        yaml.dump(ace_input, f)

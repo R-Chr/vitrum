@@ -160,9 +160,9 @@ class balace:
                 df_concat = pd.concat([df_old] + df_new[ind])
                 df_concat.to_pickle(file, compression="gzip", protocol=4)
         else:
-            df_new[0].to_pickle("train_data.pckl.gzip", compression="gzip", protocol=4)
-            df_new[1].to_pickle("test_data.pckl.gzip", compression="gzip", protocol=4)
-            self.database = {"train": "train_data.pckl.gzip", "test": "test_data.pckl.gzip"}
+            df_new[0].to_pickle(f"{self.wd}/train_data.pckl.gzip", compression="gzip", protocol=4)
+            df_new[1].to_pickle(f"{self.wd}/test_data.pckl.gzip", compression="gzip", protocol=4)
+            self.database = {"train": f"{self.wd}/train_data.pckl.gzip", "test": f"{self.wd}/test_data.pckl.gzip"}
 
     def train_ace(self):
         run_id = str(uuid.uuid4())
@@ -171,7 +171,7 @@ class balace:
         ace_yaml_writer(f"{directory}", self.database["train"], self.database["test"], self.atom_types)
         firetask1 = ScriptTask.from_str(f"cd {directory}")
         firetask2 = ScriptTask.from_str("pacemaker input.yaml")
-        fw = Firework([firetask1, firetask2], name="train_ace", metadata={"uuid": run_id})
+        fw = Firework([firetask1, firetask2], name="train_ace")
         self.lp.add_wf(fw)
         if "train_ace" not in self.runs:
             self.runs["train_ace"] = [directory]
