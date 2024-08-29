@@ -169,10 +169,9 @@ class balace:
         directory = f"{self.wd}/ace_fitting/{run_id}"
         os.makedirs(f"{directory}")
         ace_yaml_writer(f"{directory}", self.database["train"], self.database["test"], self.atom_types)
-        firetask1 = ScriptTask.from_str(f"cd {directory}")
-        firetask2 = ScriptTask.from_str("pacemaker input.yaml")
-        fw = Firework([firetask1, firetask2], name="train_ace")
-        self.lp.add_wf(fw)
+        firetask = ScriptTask.from_str([f"cd {directory}", "pacemaker input.yaml"])
+        wf = Workflow([Firework([firetask], name="train_ace")], metadata={"uuid": run_id})
+        self.lp.add_wf(wf)
         if "train_ace" not in self.runs:
             self.runs["train_ace"] = [directory]
         else:

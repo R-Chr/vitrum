@@ -56,6 +56,7 @@ def lammps_input_writer(
 
 
 def ace_yaml_writer(
+    wd,
     train_database,
     test_database,
     elements,
@@ -120,5 +121,5 @@ def ace_yaml_writer(
         },
     }
     yaml.Dumper.ignore_aliases = lambda *args: True
-    with open("input.yaml", "w") as f:
+    with open(f"{wd}/input.yaml", "w") as f:
         yaml.dump(ace_input, f)
