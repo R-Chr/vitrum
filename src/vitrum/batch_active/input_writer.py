@@ -60,7 +60,7 @@ def ace_yaml_writer(
     train_database,
     test_database,
     elements,
-    reference_energy="Auto",
+    reference_energy="auto",
     cutoff=8.0,
     number_of_functions_per_element=250,
     embeddings={

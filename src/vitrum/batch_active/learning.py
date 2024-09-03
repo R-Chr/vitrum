@@ -19,10 +19,14 @@ from pymatgen.io.ase import AseAtomsAdaptor
 import yaml
 import pickle
 from tqdm import tqdm
+from fireworks.utilities.fw_serializers import load_object_from_file
+from fireworks.queue.queue_launcher import rapidfire
+from fireworks.core.fworker import FWorker
 
 
 class balace:
-    def __init__(self, config_file="balace.yaml", filename="balace.pickle", units=["SiO2"]):
+    def __init__(self, config_file="balace.yaml", filename="balace.pickle", units=["SiO2"], auto_queue=False):
+        self.auto_queue = auto_queue
         self.state = "high_temp_run"
         self.mp_api_key = None
         self.filename = filename
@@ -47,7 +51,11 @@ class balace:
             self.high_temp_params = {"temperature": 5000, "steps": 100}
 
         self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
-        self.lp = LaunchPad.from_file(self.launchpad)
+
+        if hasattr(self, "launchpad"):
+            self.lp = LaunchPad.from_file(self.launchpad)
+        else:
+            raise RuntimeError("Launchpad yaml not specified in config file.")
 
         if hasattr(self, "database"):
             if os.path.isfile(self.database["train"]) is False:
@@ -55,9 +63,15 @@ class balace:
             elif os.path.isfile(self.database["test"]) is False:
                 raise FileNotFoundError("test_data.pckl.gzip not found")
 
+        if hasattr(self, "qadapter_file"):
+            self.qadapter = load_object_from_file(self.qadapter_file)
+
     def save(self):
         with open(self.filename, "wb") as f:
             pickle.dump(self, f)
+
+    def queue_rapidfire(self):
+        rapidfire(self.lp, FWorker(), self.qadapter)
 
     def gen_even_structures(
         self,
@@ -169,7 +183,9 @@ class balace:
         directory = f"{self.wd}/ace_fitting/{run_id}"
         os.makedirs(f"{directory}")
         ace_yaml_writer(f"{directory}", self.database["train"], self.database["test"], self.atom_types)
-        firetask = ScriptTask.from_str([f"cd {directory}", "pacemaker input.yaml"])
+        firetask = ScriptTask.from_str(
+            f"cd {directory} ; pacemaker input.yaml ; pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
+        )
         wf = Workflow([Firework([firetask], name="train_ace")], metadata={"uuid": run_id})
         self.lp.add_wf(wf)
         if "train_ace" not in self.runs:
@@ -200,7 +216,7 @@ class balace:
             if num_strains > 1:
                 strained_structures, linear_strain = self.gen_strained_structures(structure, max_strain, num_strains)
                 for strain, strain_struc in zip(linear_strain, strained_structures):
-                    strain_struc = AseAtomsAdaptor().get_atoms(strain_struc.structures[1])
+                    strain_struc = AseAtomsAdaptor().get_atoms(strain_struc)
                     os.makedirs(f"{self.wd}/gen_structures/{run_id}/{name}_{strain}")
                     write_lammps_data(
                         f"{self.wd}/gen_structures/{run_id}/{name}_{strain}/structure.dat",
@@ -208,9 +224,10 @@ class balace:
                         masses=True,
                         specorder=self.atom_types,
                     )
-                    firetask1 = ScriptTask.from_str(f"cd {self.wd}/gen_structures/{run_id}/{name}_{strain}/")
-                    firetask2 = ScriptTask.from_str(f"srun {self.lammps_exe} -in {self.wd}/in.ace")
-                    fws.append(Firework([firetask1, firetask2], name=f"{name}_{strain}"))
+                    firetask = ScriptTask.from_str(
+                        f"cd {self.wd}/gen_structures/{run_id}/{name}_{strain}/ ; srun {self.lammps_exe} -in {self.wd}/in.ace"
+                    )
+                    fws.append(Firework(firetask, name=f"{name}_{strain}"))
             else:
                 structure = AseAtomsAdaptor().get_atoms(structure)
                 os.makedirs(f"{self.wd}/gen_structures/{run_id}/{name}")
@@ -220,9 +237,10 @@ class balace:
                     masses=True,
                     specorder=self.atom_types,
                 )
-                firetask1 = ScriptTask.from_str(f"cd {self.wd}/gen_structures/{run_id}/{name}/")
-                firetask2 = ScriptTask.from_str(f"srun {self.lammps_exe} -in {self.wd}/in.ace")
-                fws.append(Firework([firetask1, firetask2], name=name))
+                firetask = ScriptTask.from_str(
+                    f"cd {self.wd}/gen_structures/{run_id}/{name}/ ; srun {self.lammps_exe} -in {self.wd}/in.ace"
+                )
+                fws.append(Firework(firetask, name=name))
 
         wf = Workflow(fws, name="lammps_runs", metadata={"uuid": run_id})
         self.lp.add_wf(wf)
@@ -301,3 +319,6 @@ class balace:
             print("Evaluating new structures with VASP")
 
         self.save()
+
+        if self.auto_queue is True:
+            self.queue_rapidfire() if hasattr(self, "qadapter") else print("No qadapter found, skipping auto queue")
