@@ -66,6 +66,9 @@ class balace:
         if hasattr(self, "qadapter_file"):
             self.qadapter = load_object_from_file(self.qadapter_file)
 
+        if not hasattr(self, "reference_energy"):
+            self.reference_energy = "auto"
+
     def save(self):
         with open(self.filename, "wb") as f:
             pickle.dump(self, f)
@@ -182,11 +185,17 @@ class balace:
         run_id = str(uuid.uuid4())
         directory = f"{self.wd}/ace_fitting/{run_id}"
         os.makedirs(f"{directory}")
-        ace_yaml_writer(f"{directory}", self.database["train"], self.database["test"], self.atom_types)
+        ace_yaml_writer(
+            f"{directory}",
+            self.database["train"],
+            self.database["test"],
+            self.atom_types,
+            reference_energy=self.reference_energy,
+        )
         firetask = ScriptTask.from_str(
             f"cd {directory} ; pacemaker input.yaml ; pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
         )
-        wf = Workflow([Firework([firetask], name="train_ace")], metadata={"uuid": run_id})
+        wf = Workflow([Firework([firetask], name="training")], metadata={"uuid": run_id}, name="train_ace")
         self.lp.add_wf(wf)
         if "train_ace" not in self.runs:
             self.runs["train_ace"] = [directory]
@@ -250,25 +259,29 @@ class balace:
         else:
             self.runs["run_lammps"].append(run_id)
 
-    def correct_chem_symbols(atom_types, atoms):
+    def correct_chem_symbols(self, atom_types, atoms):
         symbol_change_map = {i + 1: x for i, x in enumerate(atom_types)}
-        print(symbol_change_map)
         for atom in atoms:
             chem_symbols = [symbol_change_map.get(x, x) for x in atom.get_atomic_numbers()]
-            print(chem_symbols)
             atom.set_chemical_symbols(chem_symbols)
 
     def get_structures_from_lammps(self):
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
         atoms_all = []
-        for dirpath, dirnames, filenames in os.walk(folder):
+        for dirpath, _, filenames in os.walk(folder):
             for file in ["glass.dump", "gamma.dump"]:
                 if file in filenames:
                     file_path = os.path.join(dirpath, file)
                     atoms = read(file_path, format="lammps-dump-text", index=":")
+                    if len(atoms) == 0:
+                        continue
                     self.correct_chem_symbols(self.atom_types, atoms)
-                    spaced_timesteps = get_LAMMPS_dump_timesteps(file_path, 100)
-                atoms_all += [atoms[t] for t in spaced_timesteps]
+                    timesteps = get_LAMMPS_dump_timesteps(file_path)
+                    spaced_timesteps = [0]
+                    for ind, time in enumerate(timesteps):
+                        if time > timesteps[spaced_timesteps[-1]] + 100:
+                            spaced_timesteps.append(ind)
+                    atoms_all += [atoms[t] for t in spaced_timesteps]
         structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_all]
         return structures
 
