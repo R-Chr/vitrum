@@ -102,7 +102,7 @@ class balace:
         struc = [strained_structures[index].final_structure for index in range(len(strain_matrices))]
         return struc, linear_strain
 
-    def high_temp_run(self, structures=None, max_strain=0.2, num_strains=3, metadata=None):
+    def high_temp_run(self, structures=None, max_strain=0.2, num_strains=3):
         run_id = str(uuid.uuid4())
         if not structures:
             structures = self.gen_even_structures()
@@ -327,7 +327,8 @@ class balace:
 
         elif self.state == "evaluate":
             structures = self.get_structures_from_lammps()
-            self.static_run(structures)
+            wf = self.static_run(structures)
+            self.lp.add_wf(wf)
             self.state = "train_ace"
             print("Evaluating new structures with VASP")
 
