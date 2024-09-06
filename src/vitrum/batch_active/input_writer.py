@@ -78,6 +78,7 @@ def ace_yaml_writer(
     deltaSplineBins=0.001,
     nradmax_by_orders=[15, 3, 2, 1],
     lmax_by_orders=[0, 4, 2, 0],
+    loss={"kappa": 0.05, "L1_coeffs": 1e-8, "L2_coeffs": 1e-8}
     maxiter=2000,
     ladder_steps=5,
     ladder_type="power_order",
@@ -103,7 +104,7 @@ def ace_yaml_writer(
         },
         "data": {"filename": train_database, "test_filename": test_database, "reference_energy": reference_energy},
         "fit": {
-            "loss": {"kappa": 0.01, "L1_coeffs": 1e-8, "L2_coeffs": 1e-8},
+            "loss": loss,
             "optimizer": "BFGS",
             "repulsion": "auto",
             "maxiter": maxiter,

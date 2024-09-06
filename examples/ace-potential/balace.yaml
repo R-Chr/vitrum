@@ -1,0 +1,8 @@
+mp_api_key: "YOUR_API_KEY_HERE"
+units: ["YOUR_UNITS_HERE"] # e.g. "SiO2", "Fe2O3", "Al2O3"
+lammps_exe: "YOUR_LAMMPS_PATH_HERE"
+launchpad: "YOUR_LAUNCHPAD_PATH_HERE"
+
+high_temp_params:
+  temperature: 5000
+  steps: 50
