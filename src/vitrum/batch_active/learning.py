@@ -274,7 +274,9 @@ class balace:
             chem_symbols = [symbol_change_map.get(x, x) for x in atom.get_atomic_numbers()]
             atom.set_chemical_symbols(chem_symbols)
 
-    def get_structures_from_lammps(self, pace_select=True, force_glass_structures=True, use_spaced_timesteps=False, **kwargs):
+    def get_structures_from_lammps(
+        self, pace_select=True, force_glass_structures=True, use_spaced_timesteps=False, **kwargs
+    ):
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
 
         select_files = []
@@ -339,10 +341,12 @@ class balace:
     def select_structures(self, select_files, num_select_structures=500, **kwargs):
         atom_string = " ".join([str(atom) for atom in self.atom_types])
         file_string = " ".join(select_files)
+        latest_potential_folder = self.runs["train_ace"][-1]
         subprocess.run(
-            f'pace_select -p output_potential.yaml -a output_potential.asi -e "{atom_string}" -m {num_select_structures} {file_string}', ,shell=True
+            f'pace_select -p {latest_potential_folder}/output_potential.yaml -a {latest_potential_folder}/output_potential.asi -e "{atom_string}" -m {num_select_structures} {file_string}',
+            shell=True,
         )
-        atoms = pd.read_pickle(f"selected.pkl.gz", compression="gzip")
+        atoms = pd.read_pickle("selected.pkl.gz", compression="gzip")
         return [structure for structure in atoms["ase_atoms"]]
 
     def run(self):
