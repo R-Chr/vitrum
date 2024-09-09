@@ -80,7 +80,7 @@ class balace:
 
         if not hasattr(self, "lammps_params"):
             self.lammps_params = None
-        
+
         if not hasattr(self, "pace_params"):
             self.pace_params = None
 
@@ -276,7 +276,7 @@ class balace:
 
     def get_structures_from_lammps(self, pace_select=True, force_glass_structures=True, use_spaced_timesteps=False):
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
-        
+
         select_files = []
         forced_files = []
         for dirpath, _, filenames in os.walk(folder):
@@ -299,7 +299,7 @@ class balace:
 
         if pace_select is True:
             atoms_selected += self.select_structures(select_files, **self.pace_params)
-        
+
         for file_path in forced_files:
             atoms = read(file_path, format="lammps-dump-text", index=":")
             if len(atoms) == 0:
@@ -315,7 +315,9 @@ class balace:
             else:
                 atoms_forced += atoms
 
-        structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced] + [AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected]
+        structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced] + [
+            AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected
+        ]
 
         return structures
 
@@ -338,9 +340,9 @@ class balace:
         atom_string = " ".join([str(atom) for atom in self.atom_types])
         file_string = " ".join(select_files)
         subprocess.run(
-            f"pace_select -p output_potential.yaml -a output_potential.asi -e {atom_string} -m {num_select_structures} {file_string}}"
+            f"pace_select -p output_potential.yaml -a output_potential.asi -e {atom_string} -m {num_select_structures} {file_string}"
         )
-        atoms = pd.read_pickle(f'selected.pkl.gz', compression='gzip')
+        atoms = pd.read_pickle(f"selected.pkl.gz", compression="gzip")
         return [structure for structure in atoms["ase_atoms"]]
 
     def run(self):
