@@ -2,9 +2,10 @@ import yaml
 
 
 def lammps_input_writer(
-    pot_dir, atoms, max_temp=5000, min_temp=300, cooling_rate=10, sample_rate=10000, seed=1, c_min=3, c_max=20
+    pot_dir, atoms, max_temp=5000, min_temp=300, cooling_rate=10, sample_rate=10000, seed=1, c_min=1.5, c_max=30
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
+
     input = f"""
     #Initialization
     units           metal
@@ -78,7 +79,7 @@ def ace_yaml_writer(
     deltaSplineBins=0.001,
     nradmax_by_orders=[15, 3, 2, 1],
     lmax_by_orders=[0, 4, 2, 0],
-    loss={"kappa": 0.05, "L1_coeffs": 1e-8, "L2_coeffs": 1e-8}
+    loss={"kappa": 0.05, "L1_coeffs": 1e-8, "L2_coeffs": 1e-8},
     maxiter=2000,
     ladder_steps=5,
     ladder_type="power_order",

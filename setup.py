@@ -12,7 +12,7 @@ setup(
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
     package_dir={"": "src"},
-    package_data={"vitrum": ["./scattering_lengths.csv", "./batch_active/input.yaml"]},
+    package_data={"vitrum": ["./scattering_lengths.csv"]},
     include_package_data=True,
     install_requires=[
         "numpy",

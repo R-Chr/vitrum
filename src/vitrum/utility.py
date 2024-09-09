@@ -122,6 +122,8 @@ def get_LAMMPS_dump_timesteps(filename: str):
     with open(filename, encoding="utf-8") as f:
         timesteps = []
         lines = deque(f.readlines())
+        if len(lines) == 0:
+            return timesteps
         line = lines.popleft()
         while len(lines) > 0:
             if "ITEM: TIMESTEP" in line:
@@ -129,10 +131,7 @@ def get_LAMMPS_dump_timesteps(filename: str):
                 timesteps.append(int(line))
             else:
                 line = lines.popleft()
-    if len(timesteps) == 0:
-        return []
-    else:
-        return timesteps
+    return timesteps
 
 
 def apply_strain_to_structure(structure, deformations: list) -> list:

@@ -1,8 +1,42 @@
+# This is an example of the balace.yaml file. It is in YAML format and is only for reference.
+
+# Mandatory parameters
 mp_api_key: "YOUR_API_KEY_HERE"
 units: ["YOUR_UNITS_HERE"] # e.g. "SiO2", "Fe2O3", "Al2O3"
 lammps_exe: "YOUR_LAMMPS_PATH_HERE"
 launchpad: "YOUR_LAUNCHPAD_PATH_HERE"
 
-high_temp_params:
-  temperature: 5000
-  steps: 50
+
+# Optional parameters
+
+#database: # Include if you want to start from an initial database
+#  train: "train_data.pckl.gzip" 
+#  test: "test_data.pckl.gzip"  
+
+#reference_energy: # Include calculated reference energies for each type of atom in the system. If not included it will default to pacemaker automatic reference energies
+#  Al: -0.1
+
+#high_temp_params:
+#  temperature: 5000
+#  steps: 50
+
+#strain_params:
+#  num_strains: 3
+#  max_strain: 0.2
+
+#lammps_params:
+#  max_temp: 5000
+#  min_temp: 300 
+#  cooling_rate: 10
+#  sample_rate: 10000
+#  seed: 1
+#  c_min: 1.5
+#  c_max: 30
+
+#pace_params:
+#  num_select_structures: 500
+
+#incar_settings:    # Include if you want to change incar settings, be careful this is untested and many parameters need to be included
+#  PREC: 0.5
+
+#qadapter_file: "YOUR_QADAPTER_PATH_HERE" # Include if you want to automate queueing of jobs for the .run() method, This is currently has some issues and is not advised.

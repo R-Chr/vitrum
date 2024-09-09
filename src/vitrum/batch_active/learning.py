@@ -8,7 +8,7 @@ from jobflow import Flow
 import numpy as np
 import uuid
 from sklearn.model_selection import train_test_split
-from ase.io import read
+from ase.io import read, write
 from ase.io.lammpsdata import write_lammps_data
 import pandas as pd
 import os
@@ -22,6 +22,7 @@ from tqdm import tqdm
 from fireworks.utilities.fw_serializers import load_object_from_file
 from fireworks.queue.queue_launcher import rapidfire
 from fireworks.core.fworker import FWorker
+import subprocess
 
 
 class balace:
@@ -50,6 +51,14 @@ class balace:
         if not hasattr(self, "high_temp_params"):
             self.high_temp_params = {"temperature": 5000, "steps": 100}
 
+        if not hasattr(self, "strain_params"):
+            self.strain_params = {"num_strains": 3, "max_strain": 0.2}
+        else:
+            if "num_strains" not in self.strain_params:
+                raise RuntimeError("strain_params is specified in yaml file but no num_strains specified")
+            elif "max_strain" not in self.strain_params:
+                raise RuntimeError("strain_params is specified in yaml file but no max_strain specified")
+
         self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
 
         if hasattr(self, "launchpad"):
@@ -68,6 +77,12 @@ class balace:
 
         if not hasattr(self, "reference_energy"):
             self.reference_energy = "auto"
+
+        if not hasattr(self, "lammps_params"):
+            self.lammps_params = None
+        
+        if not hasattr(self, "pace_params"):
+            self.pace_params = None
 
     def save(self):
         with open(self.filename, "wb") as f:
@@ -102,15 +117,17 @@ class balace:
         struc = [strained_structures[index].final_structure for index in range(len(strain_matrices))]
         return struc, linear_strain
 
-    def high_temp_run(self, structures=None, max_strain=0.2, num_strains=3):
+    def high_temp_run(self, structures=None):
         run_id = str(uuid.uuid4())
         if not structures:
             structures = self.gen_even_structures()
         flow_jobs = []
         for structure in structures:
             name = structure.reduced_formula
-            if num_strains > 1:
-                strained_structures, linear_strain = self.gen_strained_structures(structure, max_strain, num_strains)
+            if self.strain_params["num_strains"] > 1:
+                strained_structures, linear_strain = self.gen_strained_structures(
+                    structure, self.strain_params["max_strain"], self.strain_params["num_strains"]
+                )
                 for strain, strain_struc in zip(linear_strain, strained_structures):
                     flow_jobs.append(
                         md_flow(
@@ -202,19 +219,9 @@ class balace:
         else:
             self.runs["train_ace"].append(directory)
 
-    def run_lammps(self, structures=None, max_strain=0.2, num_strains=3, metadata=None):
+    def run_lammps(self, structures=None, metadata=None):
         run_id = str(uuid.uuid4())
-        lammps_input_writer(
-            self.runs["train_ace"][-1],
-            self.atom_types,
-            max_temp=5000,
-            min_temp=300,
-            cooling_rate=10,
-            sample_rate=10000,
-            seed=1,
-            c_min=3,
-            c_max=20,
-        )
+        lammps_input_writer(self.runs["train_ace"][-1], self.atom_types, **self.lammps_params)
         os.makedirs(f"{self.wd}/gen_structures/{run_id}")
         if not structures:
             structures = self.gen_even_structures()
@@ -222,8 +229,10 @@ class balace:
         fws = []
         for structure in structures:
             name = structure.reduced_formula
-            if num_strains > 1:
-                strained_structures, linear_strain = self.gen_strained_structures(structure, max_strain, num_strains)
+            if self.strain_params["num_strains"] > 1:
+                strained_structures, linear_strain = self.gen_strained_structures(
+                    structure, self.strain_params["max_strain"], self.strain_params["num_strains"]
+                )
                 for strain, strain_struc in zip(linear_strain, strained_structures):
                     strain_struc = AseAtomsAdaptor().get_atoms(strain_struc)
                     os.makedirs(f"{self.wd}/gen_structures/{run_id}/{name}_{strain}")
@@ -265,24 +274,49 @@ class balace:
             chem_symbols = [symbol_change_map.get(x, x) for x in atom.get_atomic_numbers()]
             atom.set_chemical_symbols(chem_symbols)
 
-    def get_structures_from_lammps(self):
+    def get_structures_from_lammps(self, pace_select=True, force_glass_structures=True, use_spaced_timesteps=False):
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
-        atoms_all = []
+        
+        select_files = []
+        forced_files = []
         for dirpath, _, filenames in os.walk(folder):
             for file in ["glass.dump", "gamma.dump"]:
                 if file in filenames:
                     file_path = os.path.join(dirpath, file)
-                    atoms = read(file_path, format="lammps-dump-text", index=":")
-                    if len(atoms) == 0:
-                        continue
-                    self.correct_chem_symbols(self.atom_types, atoms)
-                    timesteps = get_LAMMPS_dump_timesteps(file_path)
-                    spaced_timesteps = [0]
-                    for ind, time in enumerate(timesteps):
-                        if time > timesteps[spaced_timesteps[-1]] + 100:
-                            spaced_timesteps.append(ind)
-                    atoms_all += [atoms[t] for t in spaced_timesteps]
-        structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_all]
+                    if pace_select is True:
+                        if force_glass_structures is True:
+                            if file == "glass.dump":
+                                forced_files.append(file_path)
+                            else:
+                                select_files.append(file_path)
+                        else:
+                            select_files.append(file_path)
+                    else:
+                        forced_files.append(file_path)
+
+        atoms_selected = []
+        atoms_forced = []
+
+        if pace_select is True:
+            atoms_selected += self.select_structures(select_files, **self.pace_params)
+        
+        for file_path in forced_files:
+            atoms = read(file_path, format="lammps-dump-text", index=":")
+            if len(atoms) == 0:
+                continue
+            self.correct_chem_symbols(self.atom_types, atoms)
+            if use_spaced_timesteps is True:
+                timesteps = get_LAMMPS_dump_timesteps(file_path)
+                spaced_timesteps = [0]
+                for ind, time in enumerate(timesteps):
+                    if time > timesteps[spaced_timesteps[-1]] + 100:
+                        spaced_timesteps.append(ind)
+                atoms_forced += [atoms[t] for t in spaced_timesteps]
+            else:
+                atoms_forced += atoms
+
+        structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced] + [AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected]
+
         return structures
 
     def static_run(self, structures, metadata=None):
@@ -299,6 +333,15 @@ class balace:
         else:
             self.runs["DFT"].append(str(run_id))
         return wf
+
+    def select_structures(self, select_files, num_select_structures=500):
+        atom_string = " ".join([str(atom) for atom in self.atom_types])
+        file_string = " ".join(select_files)
+        subprocess.run(
+            f"pace_select -p output_potential.yaml -a output_potential.asi -e {atom_string} -m {num_select_structures} {file_string}}"
+        )
+        atoms = pd.read_pickle(f'selected.pkl.gz', compression='gzip')
+        return [structure for structure in atoms["ase_atoms"]]
 
     def run(self):
         if self.state == "high_temp_run":
@@ -327,6 +370,7 @@ class balace:
 
         elif self.state == "evaluate":
             structures = self.get_structures_from_lammps()
+            selected_structures = self.select_structures(structures)
             wf = self.static_run(structures)
             self.lp.add_wf(wf)
             self.state = "train_ace"
