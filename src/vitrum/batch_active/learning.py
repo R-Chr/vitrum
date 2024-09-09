@@ -79,10 +79,10 @@ class balace:
             self.reference_energy = "auto"
 
         if not hasattr(self, "lammps_params"):
-            self.lammps_params = None
+            self.lammps_params = {}
 
-        if not hasattr(self, "pace_params"):
-            self.pace_params = None
+        if not hasattr(self, "selection_params"):
+            self.selection_params = {}
 
     def save(self):
         with open(self.filename, "wb") as f:
@@ -274,7 +274,7 @@ class balace:
             chem_symbols = [symbol_change_map.get(x, x) for x in atom.get_atomic_numbers()]
             atom.set_chemical_symbols(chem_symbols)
 
-    def get_structures_from_lammps(self, pace_select=True, force_glass_structures=True, use_spaced_timesteps=False):
+    def get_structures_from_lammps(self, pace_select=True, force_glass_structures=True, use_spaced_timesteps=False, **kwargs):
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
 
         select_files = []
@@ -298,7 +298,7 @@ class balace:
         atoms_forced = []
 
         if pace_select is True:
-            atoms_selected += self.select_structures(select_files, **self.pace_params)
+            atoms_selected += self.select_structures(select_files, **self.selection_params)
 
         for file_path in forced_files:
             atoms = read(file_path, format="lammps-dump-text", index=":")
@@ -336,11 +336,11 @@ class balace:
             self.runs["DFT"].append(str(run_id))
         return wf
 
-    def select_structures(self, select_files, num_select_structures=500):
+    def select_structures(self, select_files, num_select_structures=500, **kwargs):
         atom_string = " ".join([str(atom) for atom in self.atom_types])
         file_string = " ".join(select_files)
         subprocess.run(
-            f"pace_select -p output_potential.yaml -a output_potential.asi -e {atom_string} -m {num_select_structures} {file_string}"
+            f'pace_select -p output_potential.yaml -a output_potential.asi -e "{atom_string}" -m {num_select_structures} {file_string}', ,shell=True
         )
         atoms = pd.read_pickle(f"selected.pkl.gz", compression="gzip")
         return [structure for structure in atoms["ase_atoms"]]
@@ -371,8 +371,7 @@ class balace:
             self.state = "evaluate"
 
         elif self.state == "evaluate":
-            structures = self.get_structures_from_lammps()
-            selected_structures = self.select_structures(structures)
+            structures = self.get_structures_from_lammps(**self.selection_params)
             wf = self.static_run(structures)
             self.lp.add_wf(wf)
             self.state = "train_ace"

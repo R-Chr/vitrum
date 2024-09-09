@@ -35,6 +35,9 @@ launchpad: "YOUR_LAUNCHPAD_PATH_HERE"
 
 #pace_params:
 #  num_select_structures: 500
+#  pace_select: True
+#  force_glass_structures: True
+#  use_spaced_timesteps: False
 
 #incar_settings:    # Include if you want to change incar settings, be careful this is untested and many parameters need to be included
 #  PREC: 0.5
