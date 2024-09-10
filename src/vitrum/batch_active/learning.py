@@ -8,7 +8,7 @@ from jobflow import Flow
 import numpy as np
 import uuid
 from sklearn.model_selection import train_test_split
-from ase.io import read, write
+from ase.io import read
 from ase.io.lammpsdata import write_lammps_data
 import pandas as pd
 import os
@@ -210,7 +210,8 @@ class balace:
             reference_energy=self.reference_energy,
         )
         firetask = ScriptTask.from_str(
-            f"cd {directory} ; pacemaker input.yaml ; pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
+            f"cd {directory} ; pacemaker input.yaml ;"
+            "pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
         )
         wf = Workflow([Firework([firetask], name="training")], metadata={"uuid": run_id}, name="train_ace")
         self.lp.add_wf(wf)
@@ -243,7 +244,8 @@ class balace:
                         specorder=self.atom_types,
                     )
                     firetask = ScriptTask.from_str(
-                        f"cd {self.wd}/gen_structures/{run_id}/{name}_{strain}/ ; srun {self.lammps_exe} -in {self.wd}/in.ace"
+                        f"cd {self.wd}/gen_structures/{run_id}/{name}_{strain}/ ;"
+                        f"srun {self.lammps_exe} -in {self.wd}/in.ace"
                     )
                     fws.append(Firework(firetask, name=f"{name}_{strain}"))
             else:
@@ -343,7 +345,9 @@ class balace:
         file_string = " ".join(select_files)
         latest_potential_folder = self.runs["train_ace"][-1]
         subprocess.run(
-            f'pace_select -p {latest_potential_folder}/output_potential.yaml -a {latest_potential_folder}/output_potential.asi -e "{atom_string}" -m {num_select_structures} {file_string}',
+            f"pace_select -p {latest_potential_folder}/output_potential.yaml -a"
+            f"{latest_potential_folder}/output_potential.asi -e '{atom_string}'"
+            f"-m {num_select_structures} {file_string}",
             shell=True,
         )
         atoms = pd.read_pickle("selected.pkl.gz", compression="gzip")
