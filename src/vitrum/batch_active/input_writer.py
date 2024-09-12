@@ -2,7 +2,7 @@ import yaml
 
 
 def lammps_input_writer(
-    pot_dir, atoms, max_temp=5000, min_temp=300, cooling_rate=10, sample_rate=10000, seed=1, c_min=1.5, c_max=30
+    pot_dir, atoms, max_temp=5000, min_temp=0.01, cooling_rate=10, sample_rate=100000, seed=1, c_min=1.5, c_max=30
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
 
@@ -28,7 +28,7 @@ def lammps_input_writer(
 
     # dump extrapolative structures if c_max_pace_gamma > 3, skip otherwise, check every 10 steps
     variable dump_skip equal "c_max_pace_gamma < {c_min}"
-    dump pace_dump all custom 10 gamma.dump id type x y z f_pace_gamma
+    dump pace_dump all custom 1 gamma.dump id type x y z f_pace_gamma
     dump_modify pace_dump skip v_dump_skip
 
     # stop simulation if maximum extrapolation grade exceeds 20
@@ -46,7 +46,7 @@ def lammps_input_writer(
     dump_modify pace_dump append yes skip v_dump_skip
     dump glass_dump all custom {sample_rate} glass.dump id type x y z
 
-    fix 1 all nvt temp {max_temp} {300} 0.1
+    fix 1 all nvt temp {max_temp} {min_temp} 0.1
     run {int((max_temp-min_temp)*1000 / cooling_rate)}
 
     unfix 1
