@@ -26,7 +26,7 @@ Install it using the following commands:
 
 Install Tensorflow (newer version should be also compatible)
 ```
-pip install tensorflow==2.8.0
+pip install tensorflow
 ```
 
 Download the tensorpotential from this repository.

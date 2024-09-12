@@ -84,6 +84,9 @@ class balace:
         if not hasattr(self, "selection_params"):
             self.selection_params = {}
 
+        if not hasattr(self, "composition_params"):
+            self.composition_params = {}
+
     def save(self):
         with open(self.filename, "wb") as f:
             pickle.dump(self, f)
@@ -95,6 +98,7 @@ class balace:
         self,
         spacing: int = 10,
         datatype: str = "pymatgen",
+        **kwargs,
     ) -> list:
 
         lists = [np.int32(np.linspace(0, 100, int(100 / spacing + 1))) for i in range(len(self.units))]
@@ -120,7 +124,7 @@ class balace:
     def high_temp_run(self, structures=None):
         run_id = str(uuid.uuid4())
         if not structures:
-            structures = self.gen_even_structures()
+            structures = self.gen_even_structures(**self.composition_params)
         flow_jobs = []
         for structure in structures:
             name = structure.reduced_formula
@@ -225,7 +229,7 @@ class balace:
         lammps_input_writer(self.runs["train_ace"][-1], self.atom_types, **self.lammps_params)
         os.makedirs(f"{self.wd}/gen_structures/{run_id}")
         if not structures:
-            structures = self.gen_even_structures()
+            structures = self.gen_even_structures(**self.composition_params)
 
         fws = []
         for structure in structures:

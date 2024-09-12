@@ -63,7 +63,7 @@ Velocity Auto Correlation function
 ### (optional) Creating a conda environment
 It is common practice creating a separate conda environment to avoid dependencies mixing. You can create the new environment named vitrum with minimal amount of required packages with the following command:
 ```
-conda create -n vitrum
+conda create -n vitrum python=3.11
 conda activate vitrum
 ```
 ### Installation of vitrum
