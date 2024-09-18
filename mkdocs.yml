@@ -1,0 +1,18 @@
+site_name: vitrum
+
+theme:
+  name: "material"
+
+plugins:
+  - search
+
+
+#nav:
+#    - Installation: pacemaker/install.md
+#    - Quick start: pacemaker/quickstart.md
+#    - Pacemaker workflow: pacemaker/workflow.md
+#    - Extrapolation grade and active learning: pacemaker/active_learning.md
+#    - Input file: pacemaker/inputfile.md
+#    - CLI: pacemaker/cli.md
+#    - Utilities: pacemaker/utilities.md
+#    - FAQs: pacemaker/faq.md
