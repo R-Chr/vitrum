@@ -55,9 +55,6 @@ class glass_Atoms(Atoms):
         Returns:
             xval (ndarray): An array of shape (nbin,) containing the distance values.
             pdf (ndarray): An array of shape (nbin,) containing the PDF values.
-
-        Raises:
-            None
         """
         if isinstance(target_atoms[0], str):
             types = self.get_chemical_symbols()
@@ -127,6 +124,16 @@ class glass_Atoms(Atoms):
         return dfPD
 
     def get_local_persistence(self, center_id, cutoff):
+        """
+        Calculate the persistence diagram of the local environment of an atom.
+
+        Parameters:
+            center_id (int or str): The atomic number or symbol of the central atom.
+            cutoff (float): The cutoff distance for the local environment.
+
+        Returns:
+            list: A list of pandas.DataFrame containing the persistence diagram of the local environment.
+        """
         persistence_diagrams = []
         if isinstance(center_id, str):
             types = self.get_chemical_symbols()
@@ -141,6 +148,17 @@ class glass_Atoms(Atoms):
         return persistence_diagrams
 
     def get_angular_dist(self, center_type, neigh_type, cutoff="Auto"):
+        """
+        Calculate the angular distribution of a given pair of target atoms within a specified range.
+
+        Parameters:
+            center_type (str): The atomic symbol of the central atom.
+            neigh_type (str): The atomic symbol of the neighbor atoms.
+            cutoff (float, int, or "Auto", optional): The range within which to calculate the angular distribution. Defaults to "Auto".
+
+        Returns:
+            angles (list): A list of arrays containing the angular distribution values.
+        """
         distances = self.get_dist()
 
         types = self.get_chemical_symbols()
