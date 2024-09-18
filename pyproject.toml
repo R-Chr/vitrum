@@ -1,0 +1,7 @@
+[project]
+name = "vitrum"
+authors = [{name = "Rassus Christensen", email = "rasmusc@bio.aau.dk"}]
+dynamic = ["0.1.1", "description"]
+
+[tool.poetry.dependencies]
+vitrum = "*"
