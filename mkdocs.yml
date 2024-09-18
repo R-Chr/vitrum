@@ -7,12 +7,13 @@ plugins:
   - search
 
 
-#nav:
-#    - Installation: pacemaker/install.md
-#    - Quick start: pacemaker/quickstart.md
-#    - Pacemaker workflow: pacemaker/workflow.md
-#    - Extrapolation grade and active learning: pacemaker/active_learning.md
-#    - Input file: pacemaker/inputfile.md
-#    - CLI: pacemaker/cli.md
+nav:
+    - Installation: vitrum/install.md
+    - Quick start: vitrum/quickstart.md
+    - Workflow: vitrum/workflow.md
+    - Scattering: vitrum/scattering.md
+    - Dynamics analysis: vitrum/dynamics.md
+    - BALACE: vitrum/balace.md
+    - Utilities: vitrum/utilities.md
 #    - Utilities: pacemaker/utilities.md
 #    - FAQs: pacemaker/faq.md
