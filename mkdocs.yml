@@ -17,7 +17,7 @@ nav:
     - Workflow: vitrum/workflow.md
     - Extended ASE atoms: vitrum/glass_atoms.md
     - Scattering: vitrum/scattering.md
-    - Dynamics analysis: vitrum/dynamics.md
+    - Diffusion analysis: vitrum/dynamics.md
     - BALACE: vitrum/balace.md
     - Utilities: vitrum/utilities.md
 #    - Utilities: pacemaker/utilities.md

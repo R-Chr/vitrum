@@ -3,9 +3,11 @@ import pandas as pd
 from tqdm import tqdm
 from sklearn.cluster import Birch
 from sklearn.neighbors import KernelDensity
+import dionysus
+import diode
 
 
-class LocalPD:
+class LocalPD:  # Broken after moving persistence diagram functions out of glass_Atoms
     def __init__(
         self,
         glass_atoms_list,
@@ -101,3 +103,75 @@ class LocalPD:
             features.append(np.exp(kde.score_samples(centers)))
         features = np.array(features)
         return features
+
+
+def get_persistence_diagram(atoms, dimension=1, weights=None):
+    """
+    Calculate the persistence diagram of the given data points.
+
+    Parameters:
+        dimension (int, optional): The dimension of the persistence diagram to calculate. Defaults to 1.
+        weights (dict or list, optional): The weights to assign to each data point. Can be a dictionary mapping chemical symbols to weights or a list of weights. Defaults to None.
+
+    Returns:
+        pandas.DataFrame: The persistence diagram as a DataFrame with columns "Birth" and "Death".
+    """
+    coord = atoms.get_positions()
+    data = np.column_stack([atoms.get_chemical_symbols(), coord])
+    dfpoints = pd.DataFrame(data, columns=["Atom", "x", "y", "z"])
+    chem_species = np.unique(atoms.get_chemical_symbols())
+
+    if weights is None:
+        radii = [0 for i in chem_species]
+    elif isinstance(weights, dict):
+        radii = [weights[i] for i in chem_species]
+    elif isinstance(weights, list):
+        radii = weights
+
+    conditions = [(dfpoints["Atom"] == i) for i in chem_species]
+    choice_weight = [i**2 for i in radii]
+
+    dfpoints["w"] = np.select(conditions, choice_weight)
+    dfpoints["x"] = pd.to_numeric(dfpoints["x"])
+    dfpoints["y"] = pd.to_numeric(dfpoints["y"])
+    dfpoints["z"] = pd.to_numeric(dfpoints["z"])
+
+    points = dfpoints[["x", "y", "z", "w"]].to_numpy()
+    simplices = diode.fill_weighted_alpha_shapes(points)
+    f = dionysus.Filtration(simplices)
+    m = dionysus.homology_persistence(f)
+    dgms = dionysus.init_diagrams(m, f)
+
+    # Gather the PD of loop in a dataframe
+    dfPD = pd.DataFrame(
+        data={
+            "Birth": [p.birth for p in dgms[dimension]],
+            "Death": [p.death for p in dgms[dimension]],
+        }
+    )
+    return dfPD
+
+
+def get_local_persistence(atoms, center_id, cutoff):
+    """
+    Calculate the persistence diagram of the local environment of an atom.
+
+    Parameters:
+        center_id (int or str): The atomic number or symbol of the central atom.
+        cutoff (float): The cutoff distance for the local environment.
+
+    Returns:
+        list: A list of pandas.DataFrame containing the persistence diagram of the local environment.
+    """
+    persistence_diagrams = []
+    if isinstance(center_id, str):
+        types = atoms.get_chemical_symbols()
+    if isinstance(center_id, int):
+        types = atoms.get_atomic_numbers()
+    centers = np.where(types == center_id)[0]
+    for i in centers:
+        neighbors = np.where(atoms.get_dist()[i, :] < cutoff)[0]
+        neighborhood = atoms[neighbors]
+        neighborhood.center()
+        persistence_diagrams.append(neighborhood.get_persistence_diagram())
+    return persistence_diagrams

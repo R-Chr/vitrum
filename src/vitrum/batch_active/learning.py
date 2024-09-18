@@ -27,6 +27,36 @@ import subprocess
 
 class balace:
     def __init__(self, config_file="balace.yaml", filename="balace.pickle", units=["SiO2"], auto_queue=False):
+        """
+        Initialize the balace class.
+
+        Parameters:
+            config_file (str): yaml file containing configuration for the balace class. Defaults to "balace.yaml".
+            filename (str): filename to save the class to. Defaults to "balace.pickle".
+            units (list of str): list of composition units to use. Defaults to ["SiO2"].
+            auto_queue (bool): whether to automatically queue runs. Defaults to False.
+
+        Attributes:
+            auto_queue (bool): whether to automatically queue runs
+            state (str): current state of the balace run
+            mp_api_key (str): materials project API keys
+            filename (str): filename to save the class to
+            runs (dict): dictionary containing information about runs
+            wd (str): working directory
+            units (list of str): list of composition units to use
+            iteration (int): current iteration number
+            atom_types (list of str): list of atom types
+            incar_settings (dict): dictionary containing incar settings
+            high_temp_params (dict): dictionary containing high temperature parameters
+            strain_params (dict): dictionary containing strain parameters
+            launchpad (str): launchpad yaml file
+            database (dict): dictionary containing database information
+            qadapter_file (str): file containing qadapter
+            reference_energy (str): reference energy to use
+            lammps_params (dict): dictionary containing lammps parameters
+            selection_params (dict): dictionary containing selection parameters
+            composition_params (dict): dictionary containing composition parameters
+        """
         self.auto_queue = auto_queue
         self.state = "high_temp_run"
         self.mp_api_key = None
@@ -100,7 +130,22 @@ class balace:
         datatype: str = "pymatgen",
         **kwargs,
     ) -> list:
+        """
+        Generate a list of structures with compositions spaced evenly between 0 and 100
+        percent of each species in self.units.
 
+        Parameters:
+            spacing: int, optional
+                Spacing between each composition point, by default 10
+            datatype: str, optional
+                Type of structure to return, either "pymatgen" or "ase", by default "pymatgen"
+            **kwargs: dict, optional
+                Additional keyword arguments to pass to get_random_packed
+
+        Returns:
+            structures: list
+                List of structures with evenly spaced compositions
+        """
         lists = [np.int32(np.linspace(0, 100, int(100 / spacing + 1))) for i in range(len(self.units))]
         all_combinations = product(*lists)
         valid_combinations = [combo for combo in all_combinations if sum(combo) == 100]
@@ -115,6 +160,23 @@ class balace:
         return structures
 
     def gen_strained_structures(self, structure, max_strain=0.2, num_strains=3):
+        """
+        Generate a list of structures with linear strains applied to the given structure.
+
+        Parameters:
+            structure : pymatgen.Structure
+                The structure to apply the strain to
+            max_strain : float, optional
+                The maximum strain to apply, by default 0.2
+            num_strains : int, optional
+                The number of strains to apply, by default 3
+
+        Returns:
+            struc: list
+                List of structures with linear strains applied
+            linear_strain: list
+                List of the linear strain values applied
+        """
         linear_strain = np.linspace(-max_strain, max_strain, num_strains)
         strain_matrices = [np.eye(3) * (1.0 + eps) for eps in linear_strain]
         strained_structures = apply_strain_to_structure(structure, strain_matrices)
@@ -122,6 +184,17 @@ class balace:
         return struc, linear_strain
 
     def high_temp_run(self, structures=None):
+        """
+        Run a series of high temperature MD simulations on a list of structures.
+
+        Parameters:
+            structures: list, optional
+                List of structures to run the simulations on. If not given, will use the composition parameters to generate a list of structures.
+
+        Returns:
+        wf: Workflow
+            The workflow to run the simulations
+        """
         run_id = str(uuid.uuid4())
         if not structures:
             structures = self.gen_even_structures(**self.composition_params)
@@ -162,6 +235,22 @@ class balace:
         return wf
 
     def get_atoms_from_wf(self, run_uuid, sampling=":"):
+        """
+        Reads all atoms from a workflow given by uuid and returns them.
+
+        Parameters:
+            run_uuid : str
+                The uuid of the workflow to read from.
+            sampling : str or list or int, optional
+                If sampling is a string, it is interpreted as a slice string for numpy.
+                If it is an integer, it is interpreted as the number of samples to take.
+                If it is a list, it is interpreted as a list of indices to sample.
+                Defaults to ":".
+
+        Returns:
+            atoms: list
+                A list of ase atoms objects.
+        """
         wf_id = [
             i
             for i in self.lp.get_wf_ids()
@@ -203,6 +292,14 @@ class balace:
             self.database = {"train": f"{self.wd}/train_data.pckl.gzip", "test": f"{self.wd}/test_data.pckl.gzip"}
 
     def train_ace(self):
+        """
+        Run the ACE training using pacemaker.
+
+        This function will create a new folder in the ace_fitting directory with the UUID of the run.
+        It will then write the input file for pacemaker in this folder, and add a workflow
+        to the launchpad to run pacemaker. The trained model will be written to the same folder
+        as the input file.
+        """
         run_id = str(uuid.uuid4())
         directory = f"{self.wd}/ace_fitting/{run_id}"
         os.makedirs(f"{directory}")
@@ -358,6 +455,20 @@ class balace:
         return [structure for structure in atoms["ase_atoms"]]
 
     def run(self):
+        """
+        The main loop for the active learning workflow. It runs through the following states:
+
+        - high_temp_run: Runs a high temperature AIMD simulation using VASP.
+        - train_ace: Train the ACE model using the current database of structures.
+        - gen_lammps: Runs a LAMMPS simulation with the current ACE potential to generate new structures.
+        - evaluate: Evaluates the new structures with VASP.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         if self.state == "high_temp_run":
             wf = self.high_temp_run()
             self.state = "train_ace"

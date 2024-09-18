@@ -1,8 +1,5 @@
-import pandas as pd
 import numpy as np
 from ase import Atoms
-import dionysus
-import diode
 from scipy.signal import argrelextrema
 from typing import List, Union, Optional
 
@@ -77,76 +74,6 @@ class glass_Atoms(Atoms):
         pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / self.get_volume())
         return xval, pdf
 
-    def get_persistence_diagram(self, dimension=1, weights=None):
-        """
-        Calculate the persistence diagram of the given data points.
-
-        Parameters:
-            dimension (int, optional): The dimension of the persistence diagram to calculate. Defaults to 1.
-            weights (dict or list, optional): The weights to assign to each data point. Can be a dictionary mapping chemical symbols to weights or a list of weights. Defaults to None.
-
-        Returns:
-            pandas.DataFrame: The persistence diagram as a DataFrame with columns "Birth" and "Death".
-        """
-        coord = self.get_positions()
-        data = np.column_stack([self.get_chemical_symbols(), coord])
-        dfpoints = pd.DataFrame(data, columns=["Atom", "x", "y", "z"])
-        chem_species = np.unique(self.get_chemical_symbols())
-
-        if weights is None:
-            radii = [0 for i in chem_species]
-        elif isinstance(weights, dict):
-            radii = [weights[i] for i in chem_species]
-        elif isinstance(weights, list):
-            radii = weights
-
-        conditions = [(dfpoints["Atom"] == i) for i in chem_species]
-        choice_weight = [i**2 for i in radii]
-
-        dfpoints["w"] = np.select(conditions, choice_weight)
-        dfpoints["x"] = pd.to_numeric(dfpoints["x"])
-        dfpoints["y"] = pd.to_numeric(dfpoints["y"])
-        dfpoints["z"] = pd.to_numeric(dfpoints["z"])
-
-        points = dfpoints[["x", "y", "z", "w"]].to_numpy()
-        simplices = diode.fill_weighted_alpha_shapes(points)
-        f = dionysus.Filtration(simplices)
-        m = dionysus.homology_persistence(f)
-        dgms = dionysus.init_diagrams(m, f)
-
-        # Gather the PD of loop in a dataframe
-        dfPD = pd.DataFrame(
-            data={
-                "Birth": [p.birth for p in dgms[dimension]],
-                "Death": [p.death for p in dgms[dimension]],
-            }
-        )
-        return dfPD
-
-    def get_local_persistence(self, center_id, cutoff):
-        """
-        Calculate the persistence diagram of the local environment of an atom.
-
-        Parameters:
-            center_id (int or str): The atomic number or symbol of the central atom.
-            cutoff (float): The cutoff distance for the local environment.
-
-        Returns:
-            list: A list of pandas.DataFrame containing the persistence diagram of the local environment.
-        """
-        persistence_diagrams = []
-        if isinstance(center_id, str):
-            types = self.get_chemical_symbols()
-        if isinstance(center_id, int):
-            types = self.get_atomic_numbers()
-        centers = np.where(types == center_id)[0]
-        for i in centers:
-            neighbors = np.where(self.get_dist()[i, :] < cutoff)[0]
-            neighborhood = self[neighbors]
-            neighborhood.center()
-            persistence_diagrams.append(neighborhood.get_persistence_diagram())
-        return persistence_diagrams
-
     def get_angular_dist(self, center_type, neigh_type, cutoff="Auto"):
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
@@ -185,6 +112,18 @@ class glass_Atoms(Atoms):
         return angles
 
     def get_coordination_number(self, center_type, neigh_type, cutoff="Auto"):
+        """
+        Calculate the coordination number of a given pair of target atoms within a specified range.
+
+        Parameters:
+            center_type (str): The atomic symbol of the central atom.
+            neigh_type (str): The atomic symbol of the neighbor atoms.
+            cutoff (float, int, or "Auto", optional): The range within which to calculate the coordination number. Defaults to "Auto".
+
+        Returns:
+            coordination_numbers (list): A list containing the coordination numbers.
+        """
+
         distances = self.get_dist()
         types = self.get_chemical_symbols()
         atom_1 = np.where(types == center_type)[0]

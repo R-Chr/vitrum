@@ -19,11 +19,11 @@ To update package to the most current version
 pip install --force-reinstall --no-deps git+https://github.com/R-Chr/vitrum.git
 ```
 
-### Dionysus and Diode
-For persistent homology analsysis these packages are required. They are however currently required installs to avoid errors, may change in the future.
+### (optional) Dionysus and Diode
+For persistent homology analsysis these packages are required.
 ```
 pip install dionysus
 pip install git+https://github.com/mrzv/diode.git
 ```
-### (optional) CGAL for Diode
+
 DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology).
