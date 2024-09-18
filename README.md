@@ -4,6 +4,8 @@ Implementation of various analysis methods commonly used for disordered and glas
 
 Package is built as an extension to the ASE python package
 
+## Documentation
+Please see the docs folder for documentation or check the [online documentation](https://vitrum.readthedocs.io/en/latest/)
 
 ## 🎯 Scope and functionality
 
