@@ -59,21 +59,32 @@ class balace:
         """
         self.auto_queue = auto_queue
         self.state = "high_temp_run"
-        self.mp_api_key = None
         self.filename = filename
         self.runs = {}
         self.wd = os.getcwd()
         self.units = units
         self.iteration = 0
+        self.config_file = config_file
+        self.read_config()
+        self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
 
-        if os.path.isfile(config_file) is False:
-            raise FileNotFoundError(f"Config file {config_file} not found.")
+    def read_config(self):
+        if os.path.isfile(self.config_file) is False:
+            raise FileNotFoundError(f"Config file {self.config_file} not found.")
 
-        with open(config_file, "r") as file:
+        with open(self.config_file, "r") as file:
             config = yaml.safe_load(file)
 
         for key, value in config.items():
             setattr(self, key, value)
+
+        if not hasattr(self, "mp_api_key"):
+            raise RuntimeError("mp_api_key not specified in config file.")
+
+        if hasattr(self, "launchpad"):
+            self.lp = LaunchPad.from_file(self.launchpad)
+        else:
+            raise RuntimeError("Launchpad yaml not specified in config file.")
 
         if not hasattr(self, "incar_settings"):
             self.incar_settings = False
@@ -88,13 +99,6 @@ class balace:
                 raise RuntimeError("strain_params is specified in yaml file but no num_strains specified")
             elif "max_strain" not in self.strain_params:
                 raise RuntimeError("strain_params is specified in yaml file but no max_strain specified")
-
-        self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
-
-        if hasattr(self, "launchpad"):
-            self.lp = LaunchPad.from_file(self.launchpad)
-        else:
-            raise RuntimeError("Launchpad yaml not specified in config file.")
 
         if hasattr(self, "database"):
             if os.path.isfile(self.database["train"]) is False:
@@ -200,38 +204,27 @@ class balace:
             structures = self.gen_even_structures(**self.composition_params)
         flow_jobs = []
         for structure in structures:
-            name = structure.reduced_formula
-            if self.strain_params["num_strains"] > 1:
-                strained_structures, linear_strain = self.gen_strained_structures(
-                    structure, self.strain_params["max_strain"], self.strain_params["num_strains"]
+            composition = structure.reduced_formula
+            strained_structures, linear_strain = self.gen_strained_structures(
+                structure, self.strain_params["max_strain"], self.strain_params["num_strains"]
+            )
+            for strain, strain_struc in zip(linear_strain, strained_structures):
+                job = md_flow(
+                    strain_struc,
+                    name=f"{composition}_{strain}",
+                    incar_settings=self.incar_settings,
+                    temperature=self.high_temp_params["temperature"],
+                    steps=self.high_temp_params["steps"],
                 )
-                for strain, strain_struc in zip(linear_strain, strained_structures):
-                    flow_jobs.append(
-                        md_flow(
-                            strain_struc,
-                            name=f"{name}_{strain}",
-                            incar_settings=self.incar_settings,
-                            temperature=self.high_temp_params["temperature"],
-                            steps=self.high_temp_params["steps"],
-                        )
-                    )
+                job.update_metadata = {"strain": strain, "composition": composition}
+                flow_jobs.append(job)
 
-            else:
-                flow_jobs.append(
-                    md_flow(
-                        strain_struc,
-                        name=f"{name}",
-                        incar_settings=self.incar_settings,
-                        temperature=self.high_temp_params["temperature"],
-                        steps=self.high_temp_params["steps"],
-                    )
-                )
         flow = Flow(flow_jobs, name="MD_flows")
         wf = flow_to_workflow(flow, metadata={"uuid": run_id})
         if "DFT" not in self.runs:
-            self.runs["DFT"] = [str(run_id)]
+            self.runs["DFT"] = [[str(run_id)]]
         else:
-            self.runs["DFT"].append(str(run_id))
+            self.runs["DFT"].append([str(run_id)])
         return wf
 
     def get_atoms_from_wf(self, run_uuid, sampling=":"):
@@ -251,25 +244,20 @@ class balace:
             atoms: list
                 A list of ase atoms objects.
         """
-        wf_id = [
-            i
-            for i in self.lp.get_wf_ids()
-            if self.lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid
-        ]
+        wf_id = self.get_wflow_id_from_run_uuid(run_uuid)
         atoms = []
-        wf = self.lp.get_wf_summary_dict(wf_id[0])
+        wf = self.lp.get_wf_summary_dict(wf_id)
         for fw in wf["states"]:
-            if wf["states"][fw] == "COMPLETED":
-                dirs = wf["launch_dirs"][fw][0]
-                atoms_fw = read(f"{dirs}/OUTCAR.gz", format="vasp-out", index=":")
-                num_samples = len(atoms_fw)
-                if sampling == ":":
-                    atoms = atoms + atoms_fw
-                elif isinstance(sampling, int):
-                    sample_index = np.linspace(0, num_samples - 1, sampling, dtype=int)
-                    atoms = atoms + [atoms_fw[i] for i in sample_index]
-                elif isinstance(sampling, list):
-                    atoms = atoms + [atoms_fw[i] for i in sampling]
+            dirs = wf["launch_dirs"][fw][0]
+            atoms_fw = read(f"{dirs}/OUTCAR.gz", format="vasp-out", index=":")
+            num_samples = len(atoms_fw)
+            if sampling == ":":
+                atoms = atoms + atoms_fw
+            elif isinstance(sampling, int):
+                sample_index = np.linspace(0, num_samples - 1, sampling, dtype=int)
+                atoms = atoms + [atoms_fw[i] for i in sample_index]
+            elif isinstance(sampling, list):
+                atoms = atoms + [atoms_fw[i] for i in sampling]
         return atoms
 
     def update_ace_database(self, atoms, iteration, force_threshold=100):
@@ -436,9 +424,9 @@ class balace:
         flow = Flow(flow_jobs, name="Static_flows")
         wf = flow_to_workflow(flow, metadata={"uuid": run_id})
         if "DFT" not in self.runs:
-            self.runs["DFT"] = [str(run_id)]
+            self.runs["DFT"] = [[str(run_id)]]
         else:
-            self.runs["DFT"].append(str(run_id))
+            self.runs["DFT"].append([str(run_id)])
         return wf
 
     def select_structures(self, select_files, num_select_structures=500, **kwargs):
@@ -453,6 +441,49 @@ class balace:
         )
         atoms = pd.read_pickle("selected.pkl.gz", compression="gzip")
         return [structure for structure in atoms["ase_atoms"]]
+
+    def get_wflow_id_from_run_uuid(self, run_uuid):
+        return [
+            i
+            for i in self.lp.get_wf_ids()
+            if self.lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid
+        ][0]
+
+    def check_resubmit_high_temp(self, run_uuid):  ## TODO: figure out how to check for crashed jobs
+        run_id = str(uuid.uuid4())
+        wf_id = self.get_wflow_id_from_run_uuid(run_uuid)
+        wf = self.lp.get_wf_by_fw_id(wf_id)
+        if "READY" in wf.fw_states.values():
+            raise ValueError("READY jobs needs to be completed before proceeding")
+        if "RUNNING" in wf.fw_states.values():
+            raise ValueError("RUNNING jobs needs to be completed before proceeding")
+
+        crashed_jobs = []
+        fw_ids = [fw_id for fw_id, state in wf.fw_states.items() if state == "FIZZLED"]
+        for id in fw_ids:
+            dic = self.lp.get_fw_by_id(id)
+            crashed_jobs.append({"composition": dic.spec["composition"], "strain": dic.spec["strain"]})
+
+        flow_jobs = []
+        for info in crashed_jobs:
+            composition = info["composition"]
+            strain = info["strain"]
+            structure = get_random_packed(
+                composition, target_atoms=100, minAllowDis=1.5, mp_api_key=self.mp_api_key, datatype="pymatgen"
+            )
+            strain_struc = apply_strain_to_structure(structure, [np.eye(3) * (1.0 + strain)])[0].final_structure
+            job = md_flow(
+                strain_struc,
+                name=f"{composition}_{strain}",
+                incar_settings=self.incar_settings,
+                temperature=self.high_temp_params["temperature"],
+                steps=self.high_temp_params["steps"],
+            )
+            flow_jobs.append(md_flow())
+
+        flow = Flow(flow_jobs, name="MD_rerun_flows")
+        wf = flow_to_workflow(flow, metadata={"uuid": run_id})
+        self.runs["DFT"][-1].append(str(run_id))
 
     def run(self):
         """
@@ -476,7 +507,8 @@ class balace:
             print("High temperature run added to workflow queue")
 
         elif self.state == "train_ace":
-            wf_id = self.runs["DFT"][-1]
+            wf_id = self.runs["DFT"][-1][-1]
+            # self.check_high_temp_complete(wf_id)
             if self.iteration > 0:
                 atoms = self.get_atoms_from_wf(wf_id, sampling=":")
             else:
@@ -489,7 +521,13 @@ class balace:
             self.state = "gen_lammps"
 
         elif self.state == "gen_lammps":
-            self.run_lammps()
+            pot_dir = self.runs["train_ace"][-1]
+            if os.path.exists(f"{pot_dir}/output_potential.asi"):
+                self.run_lammps()
+            else:
+                raise FileNotFoundError(
+                    f"{pot_dir}/output_potential.asi not found. Make sure ACE potential has completed training"
+                )
             print("Generating structures with LAMMPS")
             self.state = "evaluate"
 
