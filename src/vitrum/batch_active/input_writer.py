@@ -1,8 +1,9 @@
 import yaml
+import math
 
 
 def lammps_input_writer(
-    pot_dir, atoms, max_temp=5000, min_temp=0.01, cooling_rate=10, sample_rate=100000, seed=1, c_min=1.5, c_max=30
+    pot_dir, atoms, max_temp=5000, min_temp=0.01, cooling_rate=10, sample_rate=100000, seed=1, c_min=2.5, c_max=30
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
 
@@ -22,16 +23,16 @@ def lammps_input_writer(
     compute max_pace_gamma all reduce max f_pace_gamma
 
     #output
-    thermo    100
+    thermo    1000
     thermo_style   custom step temp pe etotal press vol density c_max_pace_gamma
     velocity all create {max_temp} {seed} rot yes dist gaussian
 
-    # dump extrapolative structures if c_max_pace_gamma > 3, skip otherwise, check every 10 steps
+    # dump extrapolative structures if c_max_pace_gamma > {c_min}, skip otherwise, check every steps
     variable dump_skip equal "c_max_pace_gamma < {c_min}"
-    dump pace_dump all custom 1 gamma.dump id type x y z f_pace_gamma
+    dump pace_dump all custom 5 gamma.dump id type x y z f_pace_gamma
     dump_modify pace_dump skip v_dump_skip
 
-    # stop simulation if maximum extrapolation grade exceeds 20
+    # stop simulation if maximum extrapolation grade exceeds {c_max}
     variable max_pace_gamma equal c_max_pace_gamma
     fix extreme_extrapolation all halt 1 v_max_pace_gamma > {c_max}
 
@@ -42,12 +43,12 @@ def lammps_input_writer(
 
     reset_timestep 0
 
-    dump pace_dump all custom 10 gamma.dump id type x y z f_pace_gamma
+    dump pace_dump all custom 5 gamma.dump id type x y z f_pace_gamma
     dump_modify pace_dump append yes skip v_dump_skip
     dump glass_dump all custom {sample_rate} glass.dump id type x y z
 
     fix 1 all nvt temp {max_temp} {min_temp} 0.1
-    run {int((max_temp-min_temp)*1000 / cooling_rate)}
+    run {int(sample_rate * math.ceil(((max_temp-min_temp)*1000 / cooling_rate) / sample_rate))}
 
     unfix 1
     """

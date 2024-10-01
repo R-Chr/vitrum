@@ -21,6 +21,11 @@ setup(
         "scikit-learn",
         "scipy",
         "pymatgen",
+        "ruamel-yaml==0.17.9",
+        "mp_api",
+        "fireworks",
+        "jobflow",
+        "atomate2",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

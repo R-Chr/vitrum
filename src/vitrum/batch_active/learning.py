@@ -193,7 +193,8 @@ class balace:
 
         Parameters:
             structures: list, optional
-                List of structures to run the simulations on. If not given, will use the composition parameters to generate a list of structures.
+                List of structures to run the simulations on. If not given, will use the
+                composition parameters to generate a list of structures.
 
         Returns:
         wf: Workflow
@@ -227,13 +228,13 @@ class balace:
             self.runs["DFT"].append([str(run_id)])
         return wf
 
-    def get_atoms_from_wf(self, run_uuid, sampling=":"):
+    def get_atoms_from_wfs(self, run_uuids, sampling=":"):
         """
         Reads all atoms from a workflow given by uuid and returns them.
 
         Parameters:
-            run_uuid : str
-                The uuid of the workflow to read from.
+            run_uuids : list
+                list of uuids of the workflows to read from.
             sampling : str or list or int, optional
                 If sampling is a string, it is interpreted as a slice string for numpy.
                 If it is an integer, it is interpreted as the number of samples to take.
@@ -244,20 +245,23 @@ class balace:
             atoms: list
                 A list of ase atoms objects.
         """
-        wf_id = self.get_wflow_id_from_run_uuid(run_uuid)
+        wf_ids = [self.get_wflow_id_from_run_uuid(id) for id in run_uuids]
         atoms = []
-        wf = self.lp.get_wf_summary_dict(wf_id)
-        for fw in wf["states"]:
-            dirs = wf["launch_dirs"][fw][0]
-            atoms_fw = read(f"{dirs}/OUTCAR.gz", format="vasp-out", index=":")
-            num_samples = len(atoms_fw)
-            if sampling == ":":
-                atoms = atoms + atoms_fw
-            elif isinstance(sampling, int):
-                sample_index = np.linspace(0, num_samples - 1, sampling, dtype=int)
-                atoms = atoms + [atoms_fw[i] for i in sample_index]
-            elif isinstance(sampling, list):
-                atoms = atoms + [atoms_fw[i] for i in sampling]
+
+        for wf_id in wf_ids:
+            wf = self.lp.get_wf_summary_dict(wf_id)
+            for fw in wf["states"]:
+                if wf["states"][fw] == "COMPLETED":
+                    dirs = wf["launch_dirs"][fw][0]
+                    atoms_fw = read(f"{dirs}/OUTCAR.gz", format="vasp-out", index=":")
+                    num_samples = len(atoms_fw)
+                    if sampling == ":":
+                        atoms = atoms + atoms_fw
+                    elif isinstance(sampling, int):
+                        sample_index = np.linspace(0, num_samples - 1, sampling, dtype=int)
+                        atoms = atoms + [atoms_fw[i] for i in sample_index]
+                    elif isinstance(sampling, list):
+                        atoms = atoms + [atoms_fw[i] for i in sampling]
         return atoms
 
     def update_ace_database(self, atoms, iteration, force_threshold=100):
@@ -266,13 +270,16 @@ class balace:
         data = {"energy": energy, "forces": force, "ase_atoms": atoms, "iteration": iteration}
         # create a DataFrame
         df = pd.DataFrame(data)
+        print(f"Iteration {iteration} has {len(df)} structures")
         df = df[~df["forces"].apply(lambda x: np.max(x) > force_threshold)]
+        print(f"{len(df)} structures remain after force threshold filter")
         df_new = train_test_split(df, test_size=0.1, random_state=1)
+        print(f"{len(df_new[0])} structures added to train set and {len(df_new[1])} structures added to test set")
 
         if hasattr(self, "database"):
             for ind, file in enumerate([self.database["train"], self.database["test"]]):
                 df_old = pd.read_pickle(file, compression="gzip")
-                df_concat = pd.concat([df_old] + df_new[ind])
+                df_concat = pd.concat([df_old] + [df_new[ind]])
                 df_concat.to_pickle(file, compression="gzip", protocol=4)
         else:
             df_new[0].to_pickle(f"{self.wd}/train_data.pckl.gzip", compression="gzip", protocol=4)
@@ -291,6 +298,7 @@ class balace:
         run_id = str(uuid.uuid4())
         directory = f"{self.wd}/ace_fitting/{run_id}"
         os.makedirs(f"{directory}")
+        print(f"Training ACE in {directory}")
         ace_yaml_writer(
             f"{directory}",
             self.database["train"],
@@ -298,6 +306,7 @@ class balace:
             self.atom_types,
             reference_energy=self.reference_energy,
         )
+        print("Writing input.yaml")
         firetask = ScriptTask.from_str(
             f"cd {directory} ; pacemaker input.yaml ;"
             "pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
@@ -311,9 +320,11 @@ class balace:
 
     def run_lammps(self, structures=None, metadata=None):
         run_id = str(uuid.uuid4())
+        print(f"Setting up for LAMMPS runs in /gen_structures/{run_id}")
         lammps_input_writer(self.runs["train_ace"][-1], self.atom_types, **self.lammps_params)
         os.makedirs(f"{self.wd}/gen_structures/{run_id}")
         if not structures:
+            print("Generating structures")
             structures = self.gen_even_structures(**self.composition_params)
 
         fws = []
@@ -391,6 +402,7 @@ class balace:
         atoms_forced = []
 
         if pace_select is True:
+            print("Running PACE select")
             atoms_selected += self.select_structures(select_files, **self.selection_params)
 
         for file_path in forced_files:
@@ -407,6 +419,8 @@ class balace:
                 atoms_forced += [atoms[t] for t in spaced_timesteps]
             else:
                 atoms_forced += atoms
+
+        print(f"Included {len(atoms_selected)} selected structures and {len(atoms_forced)} forced structures.")
 
         structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced] + [
             AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected
@@ -434,9 +448,9 @@ class balace:
         file_string = " ".join(select_files)
         latest_potential_folder = self.runs["train_ace"][-1]
         subprocess.run(
-            f"pace_select -p {latest_potential_folder}/output_potential.yaml -a"
-            f"{latest_potential_folder}/output_potential.asi -e '{atom_string}'"
-            f"-m {num_select_structures} {file_string}",
+            f"pace_select -p {latest_potential_folder}/output_potential.yaml -a "
+            f'{latest_potential_folder}/output_potential.asi -e "{atom_string}"'
+            f" -m {num_select_structures} {file_string}",
             shell=True,
         )
         atoms = pd.read_pickle("selected.pkl.gz", compression="gzip")
@@ -449,20 +463,22 @@ class balace:
             if self.lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid
         ][0]
 
-    def check_resubmit_high_temp(self, run_uuid):  ## TODO: figure out how to check for crashed jobs
+    def check_resubmit_high_temp(self, run_uuid):
         run_id = str(uuid.uuid4())
-        wf_id = self.get_wflow_id_from_run_uuid(run_uuid)
+        wf_id = self.get_wflow_id_from_run_uuid(run_uuid[-1])
         wf = self.lp.get_wf_by_fw_id(wf_id)
         if "READY" in wf.fw_states.values():
-            raise ValueError("READY jobs needs to be completed before proceeding")
+            raise ValueError(f"READY jobs in wf: {wf_id} needs to be completed before proceeding")
         if "RUNNING" in wf.fw_states.values():
-            raise ValueError("RUNNING jobs needs to be completed before proceeding")
+            raise ValueError(f"RUNNING jobs in wf: {wf_id} needs to be completed before proceeding")
 
         crashed_jobs = []
         fw_ids = [fw_id for fw_id, state in wf.fw_states.items() if state == "FIZZLED"]
         for id in fw_ids:
             dic = self.lp.get_fw_by_id(id)
             crashed_jobs.append({"composition": dic.spec["composition"], "strain": dic.spec["strain"]})
+        print(f"Found {len(crashed_jobs)} crashed jobs in wf: {wf_id}")
+        print("Resubmitting crashed jobs...")
 
         flow_jobs = []
         for info in crashed_jobs:
@@ -479,7 +495,7 @@ class balace:
                 temperature=self.high_temp_params["temperature"],
                 steps=self.high_temp_params["steps"],
             )
-            flow_jobs.append(md_flow())
+            flow_jobs.append(job)
 
         flow = Flow(flow_jobs, name="MD_rerun_flows")
         wf = flow_to_workflow(flow, metadata={"uuid": run_id})
@@ -500,20 +516,21 @@ class balace:
         Returns:
             None
         """
+        print(f"Current state: {self.state}, Iteration: {self.iteration}")
+
         if self.state == "high_temp_run":
             wf = self.high_temp_run()
-            self.state = "train_ace"
+            self.state = "train_ace_high_temp"
             self.lp.add_wf(wf)
             print("High temperature run added to workflow queue")
 
-        elif self.state == "train_ace":
-            wf_id = self.runs["DFT"][-1][-1]
-            # self.check_high_temp_complete(wf_id)
-            if self.iteration > 0:
-                atoms = self.get_atoms_from_wf(wf_id, sampling=":")
+        elif self.state == "train_ace_high_temp" or self.state == "train_ace_lammps":
+            previous_run_ids = self.runs["DFT"][-1]
+            if self.state == "train_ace_high_temp":
+                self.check_resubmit_high_temp(previous_run_ids)
+                atoms = self.get_atoms_from_wfs(previous_run_ids, sampling=5)
             else:
-                atoms = self.get_atoms_from_wf(wf_id, sampling=5)
-
+                atoms = self.get_atoms_from_wfs(previous_run_ids, sampling=":")
             self.update_ace_database(atoms, self.iteration)
             self.train_ace()
             print(f"Training ace model, Iteration: {self.iteration}")
@@ -535,7 +552,7 @@ class balace:
             structures = self.get_structures_from_lammps(**self.selection_params)
             wf = self.static_run(structures)
             self.lp.add_wf(wf)
-            self.state = "train_ace"
+            self.state = "train_ace_lammps"
             print("Evaluating new structures with VASP")
 
         self.save()
