@@ -90,7 +90,7 @@ class balace:
             self.incar_settings = False
 
         if not hasattr(self, "high_temp_params"):
-            self.high_temp_params = {"temperature": 5000, "steps": 100}
+            self.high_temp_params = {"temperature": 5000, "steps": 100, "sampling": 5}
 
         if not hasattr(self, "strain_params"):
             self.strain_params = {"num_strains": 3, "max_strain": 0.2}
@@ -217,7 +217,7 @@ class balace:
                     temperature=self.high_temp_params["temperature"],
                     steps=self.high_temp_params["steps"],
                 )
-                job.update_metadata = {"strain": strain, "composition": composition}
+                job.update_metadata({"strain": strain, "composition": composition})
                 flow_jobs.append(job)
 
         flow = Flow(flow_jobs, name="MD_flows")
@@ -228,7 +228,7 @@ class balace:
             self.runs["DFT"].append([str(run_id)])
         return wf
 
-    def get_atoms_from_wfs(self, run_uuids, sampling=":"):
+    def get_atoms_from_wfs(self, run_uuids, sampling=":", state=None):
         """
         Reads all atoms from a workflow given by uuid and returns them.
 
@@ -247,6 +247,11 @@ class balace:
         """
         wf_ids = [self.get_wflow_id_from_run_uuid(id) for id in run_uuids]
         atoms = []
+
+        if state == "train_ace_high_temp":
+            sampling = self.high_temp_params["sampling"]
+        else:
+            sampling = sampling
 
         for wf_id in wf_ids:
             wf = self.lp.get_wf_summary_dict(wf_id)
@@ -457,15 +462,17 @@ class balace:
         return [structure for structure in atoms["ase_atoms"]]
 
     def get_wflow_id_from_run_uuid(self, run_uuid):
-        return [
+        wf_ids = [
             i
             for i in self.lp.get_wf_ids()
             if self.lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid
         ][0]
+        print(wf_ids)
+        return wf_ids
 
-    def check_resubmit_high_temp(self, run_uuid):
+    def check_resubmit_high_temp(self, run_uuids):
         run_id = str(uuid.uuid4())
-        wf_id = self.get_wflow_id_from_run_uuid(run_uuid[-1])
+        wf_id = self.get_wflow_id_from_run_uuid(run_uuids[-1])
         wf = self.lp.get_wf_by_fw_id(wf_id)
         if "READY" in wf.fw_states.values():
             raise ValueError(f"READY jobs in wf: {wf_id} needs to be completed before proceeding")
@@ -477,29 +484,38 @@ class balace:
         for id in fw_ids:
             dic = self.lp.get_fw_by_id(id)
             crashed_jobs.append({"composition": dic.spec["composition"], "strain": dic.spec["strain"]})
-        print(f"Found {len(crashed_jobs)} crashed jobs in wf: {wf_id}")
-        print("Resubmitting crashed jobs...")
 
-        flow_jobs = []
-        for info in crashed_jobs:
-            composition = info["composition"]
-            strain = info["strain"]
-            structure = get_random_packed(
-                composition, target_atoms=100, minAllowDis=1.5, mp_api_key=self.mp_api_key, datatype="pymatgen"
-            )
-            strain_struc = apply_strain_to_structure(structure, [np.eye(3) * (1.0 + strain)])[0].final_structure
-            job = md_flow(
-                strain_struc,
-                name=f"{composition}_{strain}",
-                incar_settings=self.incar_settings,
-                temperature=self.high_temp_params["temperature"],
-                steps=self.high_temp_params["steps"],
-            )
-            flow_jobs.append(job)
+        if len(crashed_jobs) == 0:
+            print(f"No crashed jobs in wf: {wf_id}")
+            print("All jobs completed successfully, no resubmission needed.")
+            return False
 
-        flow = Flow(flow_jobs, name="MD_rerun_flows")
-        wf = flow_to_workflow(flow, metadata={"uuid": run_id})
-        self.runs["DFT"][-1].append(str(run_id))
+        else:
+            print(f"Found {len(crashed_jobs)} crashed jobs in wf: {wf_id}")
+            print("Resubmitting crashed jobs...")
+
+            flow_jobs = []
+            for info in crashed_jobs:
+                composition = info["composition"]
+                strain = info["strain"]
+                structure = get_random_packed(
+                    composition, target_atoms=100, minAllowDis=1.5, mp_api_key=self.mp_api_key, datatype="pymatgen"
+                )
+                strain_struc = apply_strain_to_structure(structure, [np.eye(3) * (1.0 + strain)])[0].final_structure
+                job = md_flow(
+                    strain_struc,
+                    name=f"{composition}_{strain}",
+                    incar_settings=self.incar_settings,
+                    temperature=self.high_temp_params["temperature"],
+                    steps=self.high_temp_params["steps"],
+                )
+                flow_jobs.append(job)
+
+            flow = Flow(flow_jobs, name="MD_rerun_flows")
+            wf = flow_to_workflow(flow, metadata={"uuid": run_id})
+            self.runs["DFT"][-1].append(str(run_id))
+            self.lp.add_wf(wf)
+            return True
 
     def run(self):
         """
@@ -526,16 +542,17 @@ class balace:
 
         elif self.state == "train_ace_high_temp" or self.state == "train_ace_lammps":
             previous_run_ids = self.runs["DFT"][-1]
-            if self.state == "train_ace_high_temp":
-                self.check_resubmit_high_temp(previous_run_ids)
-                atoms = self.get_atoms_from_wfs(previous_run_ids, sampling=5)
+            print(previous_run_ids)
+            stop = self.check_resubmit_high_temp(previous_run_ids)
+            if stop:
+                pass
             else:
-                atoms = self.get_atoms_from_wfs(previous_run_ids, sampling=":")
-            self.update_ace_database(atoms, self.iteration)
-            self.train_ace()
-            print(f"Training ace model, Iteration: {self.iteration}")
-            self.iteration += 1
-            self.state = "gen_lammps"
+                atoms = self.get_atoms_from_wfs(previous_run_ids, self.state)
+                self.update_ace_database(atoms, self.iteration)
+                self.train_ace()
+                print(f"Training ace model, Iteration: {self.iteration}")
+                self.iteration += 1
+                self.state = "gen_lammps"
 
         elif self.state == "gen_lammps":
             pot_dir = self.runs["train_ace"][-1]

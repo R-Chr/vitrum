@@ -6,6 +6,9 @@ def lammps_input_writer(
     pot_dir, atoms, max_temp=5000, min_temp=0.01, cooling_rate=10, sample_rate=100000, seed=1, c_min=2.5, c_max=30
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
+    if min_temp == 0:
+        print("Using default min_temp = 0.01, LAMMPS cannot handle temperature = 0")
+        min_temp = 0.01
 
     input = f"""
     #Initialization
