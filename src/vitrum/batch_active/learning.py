@@ -158,7 +158,7 @@ class balace:
             atoms_dict = {str(self.units[i]): comb[i] for i in range(len(self.units))}
             structures.append(
                 get_random_packed(
-                    atoms_dict, target_atoms=100, minAllowDis=1.5, mp_api_key=self.mp_api_key, datatype=datatype
+                    atoms_dict, target_atoms=100, minAllowDis=1.7, mp_api_key=self.mp_api_key, datatype=datatype
                 )
             )
         return structures
@@ -467,7 +467,6 @@ class balace:
             for i in self.lp.get_wf_ids()
             if self.lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid
         ][0]
-        print(wf_ids)
         return wf_ids
 
     def check_resubmit_high_temp(self, run_uuids):
@@ -509,6 +508,7 @@ class balace:
                     temperature=self.high_temp_params["temperature"],
                     steps=self.high_temp_params["steps"],
                 )
+                job.update_metadata({"strain": strain, "composition": composition})
                 flow_jobs.append(job)
 
             flow = Flow(flow_jobs, name="MD_rerun_flows")
@@ -542,12 +542,15 @@ class balace:
 
         elif self.state == "train_ace_high_temp" or self.state == "train_ace_lammps":
             previous_run_ids = self.runs["DFT"][-1]
-            print(previous_run_ids)
-            stop = self.check_resubmit_high_temp(previous_run_ids)
+            if self.state == "train_ace_high_temp":
+                stop = self.check_resubmit_high_temp(previous_run_ids)
+            else:
+                stop = False
+
             if stop:
                 pass
             else:
-                atoms = self.get_atoms_from_wfs(previous_run_ids, self.state)
+                atoms = self.get_atoms_from_wfs(previous_run_ids, state=self.state)
                 self.update_ace_database(atoms, self.iteration)
                 self.train_ace()
                 print(f"Training ace model, Iteration: {self.iteration}")
