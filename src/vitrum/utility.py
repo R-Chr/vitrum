@@ -9,7 +9,14 @@ import warnings
 
 
 def get_random_packed(
-    composition, density=None, target_atoms=100, minAllowDis=1.7, mp_api_key=None, datatype="ase", seed=None
+    composition,
+    density=None,
+    target_atoms=100,
+    minAllowDis=1.7,
+    mp_api_key=None,
+    datatype="ase",
+    seed=None,
+    side_ratios=[1, 1, 1],
 ):
     """
     Generate a random packed structure based on the given composition.
@@ -66,23 +73,21 @@ def get_random_packed(
             vols = [entry.structure.volume / entry.structure.num_sites for entry in entries]
 
         vol_per_atom = np.mean(vols)
-        cell_len = (vol_per_atom * full_cell_composition.num_atoms) ** (1 / 3)
+        cell_vol = vol_per_atom * full_cell_composition.num_atoms
 
     if density:
         mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
-        cell_vol = (mass / (6.0221 * (10**23))) / density
-        cell_len = cell_vol ** (1 / 3) * (10**8)
+        cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
 
-    cell = np.array([cell_len, cell_len, cell_len])
+    k = (cell_vol / (side_ratios[0] * side_ratios[1] * side_ratios[2])) ** (1 / 3)
+    cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])
     pos = np.array([[0, 0, 0]])
-    if seed:
-        np.random.seed(seed)
 
     escape_counter = 0
     while len(pos) < full_cell_composition.num_atoms:
         xyz_pos = np.random.rand(1, 3) * cell
         delta = np.abs(xyz_pos - pos)
-        delta = np.where(delta > 0.5 * cell_len, np.abs(delta - cell_len), delta)
+        delta = np.where(delta > 0.5 * cell, np.abs(delta - cell), delta)
         if np.all(delta > minAllowDis):
             pos = np.append(pos, xyz_pos, axis=0)
             escape_counter = 0
@@ -95,7 +100,7 @@ def get_random_packed(
                 escape_counter += 1
                 if escape_counter > 1000:
                     raise ValueError(
-                        "Error: Cannot find suitable positions for atoms, lower minAllowDis or decreasing the density"
+                        "Error: Cannot find suitable positions for atoms, lower minAllowDis or decrease the density"
                     )
 
     formula = sum([[i] * structure[i] for i in structure], [])

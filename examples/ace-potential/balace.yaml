@@ -18,7 +18,8 @@ launchpad: "YOUR_LAUNCHPAD_PATH_HERE"
 
 #high_temp_params:
 #  temperature: 5000
-#  steps: 50
+#  steps: 100
+#  sampling: 5
 
 #strain_params:
 #  num_strains: 3
