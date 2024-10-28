@@ -9,7 +9,7 @@ conda activate vitrum
 ### Installation of vitrum
 To install vitrum:
 
-pip install directly  from this repository.
+pip install directly  from this repository. (Make sure you have git installed)
 ```
 pip install git+https://github.com/R-Chr/vitrum.git
 ```
