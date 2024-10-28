@@ -1,6 +1,8 @@
-# ⏳ vitrum⏳ 
-
+# ⏳ vitrum (WIP)⏳ 
 Implementation of various analysis methods and tools used for atomic structures of disordered and glassy materials.
+## 🔴 Vitrun is a work in progress 🔴
+ Nothing is sacred, and development is ongoing. APIs and functionality are subject to change at any time.
+
 
 
 ## Documentation

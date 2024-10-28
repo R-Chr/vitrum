@@ -21,7 +21,7 @@ def get_random_packed(
     """
     Generate a random packed structure based on the given composition.
 
-    Args:
+    Parameters:
         composition (str, dict or pymatgen.core.Composition): The composition of the structure.
         density (float, optional): The target density of the structure (in g/cm^3). If not provided, the volume per atom
                                    is estimated using the Materials Project API.
@@ -31,13 +31,10 @@ def get_random_packed(
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
         seed (int, optional): The seed for random number generation. Defaults to 0.
+        side_ratios (list, optional): The side ratios for the lattice. Defaults to [1, 1, 1].
 
     Returns:
-        ase.Atoms or pymatgen.core.Structure: The generated random packed structure.
-
-    Raises:
-        ValueError: If density is not provided and mp_api_key is not provided.
-
+        data (ase.Atoms or pymatgen.core.Structure): The generated random packed structure.
     """
     if isinstance(composition, str):
         composition = Composition(composition)
@@ -50,6 +47,7 @@ def get_random_packed(
     structure = {}
     for el in full_cell_composition:
         structure[str(el)] = int(full_cell_composition.element_composition.get(el))
+    np.random.seed(seed)
 
     if not mp_api_key and not density:
         density = 2.5

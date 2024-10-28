@@ -10,15 +10,16 @@ plugins:
         python:
           paths: [src]
 
+markdown_extensions:
+  - mdx_math
 
 nav:
     - Installation: vitrum/install.md
     - Quick start: vitrum/quickstart.md
-    - Workflow: vitrum/workflow.md
     - Extended ASE atoms: vitrum/glass_atoms.md
     - Scattering: vitrum/scattering.md
     - Diffusion analysis: vitrum/dynamics.md
     - BALACE: vitrum/balace.md
     - Utilities: vitrum/utilities.md
-#    - Utilities: pacemaker/utilities.md
+
 #    - FAQs: pacemaker/faq.md

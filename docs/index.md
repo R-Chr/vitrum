@@ -2,7 +2,9 @@
 
 Implementation of various analysis methods commonly used for disordered and glassy material structures.
 
-Package is built as an extension to the ASE python package
+## 🔴 Vitrun is a work in progress 🔴
+ Nothing is sacred, and development is ongoing. APIs and functionality are subject to change at any time.
+
 
 
 ## 🎯 Scope and functionality
