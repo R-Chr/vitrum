@@ -291,7 +291,7 @@ class balace:
             df_new[1].to_pickle(f"{self.wd}/test_data.pckl.gzip", compression="gzip", protocol=4)
             self.database = {"train": f"{self.wd}/train_data.pckl.gzip", "test": f"{self.wd}/test_data.pckl.gzip"}
 
-    def train_ace(self):
+    def train_ace(self, pace_kwargs=None):
         """
         Run the ACE training using pacemaker.
 
@@ -310,6 +310,7 @@ class balace:
             self.database["test"],
             self.atom_types,
             reference_energy=self.reference_energy,
+            **pace_kwargs,
         )
         print("Writing input.yaml")
         firetask = ScriptTask.from_str(
@@ -348,10 +349,9 @@ class balace:
                         masses=True,
                         specorder=self.atom_types,
                     )
-                    firetask = ScriptTask.from_str(
-                        f"cd {self.wd}/gen_structures/{run_id}/{name}_{strain}/ ;"
-                        f"srun {self.lammps_exe} -in {self.wd}/in.ace"
-                    )
+                    command_string = f"cd {self.wd}/gen_structures/{run_id}/{name}_{strain}/ ; srun {self.lammps_exe} -in {self.wd}/in.ace"
+                    bash_readable_string = command_string.replace(")", r"\)").replace("(", r"\(")
+                    firetask = ScriptTask.from_str(bash_readable_string)
                     fws.append(Firework(firetask, name=f"{name}_{strain}"))
             else:
                 structure = AseAtomsAdaptor().get_atoms(structure)
@@ -362,9 +362,13 @@ class balace:
                     masses=True,
                     specorder=self.atom_types,
                 )
-                firetask = ScriptTask.from_str(
+
+                command_string = (
                     f"cd {self.wd}/gen_structures/{run_id}/{name}/ ; srun {self.lammps_exe} -in {self.wd}/in.ace"
                 )
+
+                bash_readable_string = command_string.replace(")", r"\)").replace("(", r"\(")
+                firetask = ScriptTask.from_str(bash_readable_string)
                 fws.append(Firework(firetask, name=name))
 
         wf = Workflow(fws, name="lammps_runs", metadata={"uuid": run_id})
@@ -397,9 +401,9 @@ class balace:
                             if file == "glass.dump":
                                 forced_files.append(file_path)
                             else:
-                                select_files.append(file_path)
+                                select_files.append(file_path.replace(")", r"\)").replace("(", r"\("))
                         else:
-                            select_files.append(file_path)
+                            select_files.append(file_path.replace(")", r"\)").replace("(", r"\("))
                     else:
                         forced_files.append(file_path)
 

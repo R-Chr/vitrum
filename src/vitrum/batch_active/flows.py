@@ -15,6 +15,7 @@ def static_flow(structure, name=False, incar_settings=False, kpoint=False, potca
             "EDIFF": (10**-5) * num_atoms,
             "ENAUG": None,
             "EDIFFG": None,
+            "ALGO": "Normal",
             "ENCUT": 520,
             "ISMEAR": 0,
             "ISPIN": 1,  # Do not consider magnetism in AIMD simulations
@@ -67,6 +68,7 @@ def md_flow(
             "EDIFF": (10**-5) * num_atoms,
             "ENAUG": None,
             "EDIFFG": None,
+            "ALGO": "Normal",
             "ENCUT": 520,
             "ISMEAR": 0,
             "ISPIN": 1,  # Do not consider magnetism in AIMD simulations

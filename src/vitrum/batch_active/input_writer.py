@@ -89,6 +89,7 @@ def ace_yaml_writer(
     ladder_type="power_order",
     early_stopping_patience=150,
     batch_size=100,
+    **kwargs,
 ):
 
     ace_input = {

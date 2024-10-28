@@ -109,7 +109,7 @@ def get_random_packed(
     elif datatype == "pymatgen":
         lattice_vectors = [[0, 0, 0] for _ in range(3)]
         for i in range(3):
-            lattice_vectors[i][i] = cell_len
+            lattice_vectors[i][i] = cell[i]
         data = Structure(lattice_vectors, formula, pos, coords_are_cartesian=True)
     return data
 
