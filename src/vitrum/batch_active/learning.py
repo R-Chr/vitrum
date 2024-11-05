@@ -334,7 +334,7 @@ class balace:
             structures = self.gen_even_structures(**self.composition_params)
 
         fws = []
-        for index,structure in enumerate(structures):
+        for index, structure in enumerate(structures):
             name = structure.reduced_formula
             if self.strain_params["num_strains"] > 1:
                 strained_structures, linear_strain = self.gen_strained_structures(
@@ -520,9 +520,9 @@ class balace:
             self.runs["DFT"][-1].append(str(run_id))
             self.lp.add_wf(wf)
             return True
-        
-    def sample_crystals(self):
 
+    def sample_crystals(self):
+        pass
 
     def run(self):
         """
