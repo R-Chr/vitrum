@@ -66,7 +66,7 @@ def ace_yaml_writer(
     test_database,
     elements,
     reference_energy="auto",
-    cutoff=8.0,
+    cutoff=6.5,
     number_of_functions_per_element=250,
     embeddings={
         "npot": "FinnisSinclairShiftedScaled",
@@ -87,7 +87,7 @@ def ace_yaml_writer(
     maxiter=2000,
     ladder_steps=5,
     ladder_type="power_order",
-    early_stopping_patience=150,
+    early_stopping_patience=50,
     batch_size=100,
     **kwargs,
 ):
@@ -114,7 +114,7 @@ def ace_yaml_writer(
             "optimizer": "BFGS",
             "repulsion": "auto",
             "maxiter": maxiter,
-            "ladder_steps": ladder_steps,
+            "ladder_step": ladder_steps,
             "ladder_type": ladder_type,
             "min_relative_train_loss_per_iter": 5e-5,
             "min_relative_test_loss_per_iter": 1e-5,

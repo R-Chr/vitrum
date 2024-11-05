@@ -74,7 +74,7 @@ class glass_Atoms(Atoms):
         pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / self.get_volume())
         return xval, pdf
 
-    def get_angular_dist(self, center_type, neigh_type, cutoff="Auto"):
+    def get_all_angles(self, center_type, neigh_type, cutoff="Auto"):
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
 
@@ -88,14 +88,14 @@ class glass_Atoms(Atoms):
         """
         distances = self.get_dist()
 
-        types = self.get_chemical_symbols()
+        types = np.array(self.get_chemical_symbols())
         center_index = np.where(types == center_type)[0]
         neigh_index = np.where(types == neigh_type)[0]
 
         if cutoff == "Auto":
             pdf = self.get_pdf(target_atoms=[center_type, neigh_type])
             cutoff = pdf[0][self.find_min_after_peak(pdf[1])]
-        elif isinstance(cutoff, float | int):
+        elif isinstance(cutoff, float) or isinstance(cutoff, int):
             cutoff = cutoff
 
         angles = []
@@ -125,7 +125,7 @@ class glass_Atoms(Atoms):
         """
 
         distances = self.get_dist()
-        types = self.get_chemical_symbols()
+        types = np.array(self.get_chemical_symbols())
         atom_1 = np.where(types == center_type)[0]
         atom_2 = np.where(types == neigh_type)[0]
         dist_list = distances[np.ix_(atom_1, atom_2)]
@@ -133,7 +133,7 @@ class glass_Atoms(Atoms):
         if cutoff == "Auto":
             pdf = self.get_pdf(target_atoms=[center_type, neigh_type])
             cutoff = pdf[0][self.find_min_after_peak(pdf[1])]
-        elif isinstance(cutoff, float | int):
+        elif isinstance(cutoff, float) or isinstance(cutoff, int):
             cutoff = cutoff
         print(cutoff)
         coordination_numbers = []
@@ -185,7 +185,7 @@ class glass_Atoms(Atoms):
         if cutoff == "Auto":
             pdf = self.get_pdf(target_atoms=[center_type, bridge_type])
             cutoff = pdf[0][self.find_min_after_peak(pdf[1])]
-        elif isinstance(cutoff, (float, int)):
+        elif isinstance(cutoff, float) or isinstance(cutoff, int):
             cutoff = cutoff
 
         num_of_bridges = []
