@@ -334,7 +334,7 @@ class balace:
             structures = self.gen_even_structures(**self.composition_params)
 
         fws = []
-        for structure in structures:
+        for index,structure in enumerate(structures):
             name = structure.reduced_formula
             if self.strain_params["num_strains"] > 1:
                 strained_structures, linear_strain = self.gen_strained_structures(
@@ -342,9 +342,9 @@ class balace:
                 )
                 for strain, strain_struc in zip(linear_strain, strained_structures):
                     strain_struc = AseAtomsAdaptor().get_atoms(strain_struc)
-                    os.makedirs(f"{self.wd}/gen_structures/{run_id}/{name}_{strain}")
+                    os.makedirs(f"{self.wd}/gen_structures/{run_id}/{name}_{strain}_{index}")
                     write_lammps_data(
-                        f"{self.wd}/gen_structures/{run_id}/{name}_{strain}/structure.dat",
+                        f"{self.wd}/gen_structures/{run_id}/{name}_{strain}_{index}/structure.dat",
                         strain_struc,
                         masses=True,
                         specorder=self.atom_types,
@@ -520,6 +520,9 @@ class balace:
             self.runs["DFT"][-1].append(str(run_id))
             self.lp.add_wf(wf)
             return True
+        
+    def sample_crystals(self):
+
 
     def run(self):
         """
