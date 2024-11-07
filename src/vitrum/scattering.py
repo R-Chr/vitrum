@@ -3,6 +3,7 @@ import numpy as np
 import itertools
 import math
 from pathlib import Path
+from vitrum.glass_Atoms import glass_Atoms
 
 
 class scattering:
@@ -26,7 +27,7 @@ class scattering:
         Returns:
             None
         """
-        self.atom_list = atom_list
+        self.atom_list = [glass_Atoms(atom) for atom in atom_list]
         script_dir = Path(__file__).parent
 
         self.rrange = rrange

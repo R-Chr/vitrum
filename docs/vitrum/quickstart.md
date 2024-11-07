@@ -9,19 +9,13 @@ from ase.io import read
 atoms = read("md.lammpstrj", index=":" , format="lammps-dump-text")
 ```
 
-Several of the vitrum classes require extra utility not included in the ASE atoms object. These are implemented in the `glass_Atoms` class. To use the class, simply convert the atoms object to a glass_Atoms object using the following line:
-
-```
-from vitrum.glass_Atoms import glass_Atoms
-atoms = [glass_Atoms(atom) for atom in atoms]
-```
-
 Often the chemical symbols of the atoms in the atoms object are not the same as the chemical symbols used in the simulation. This can be corrected using the `set_new_chemical_symbols` method of the glass_Atoms class. For example, if the chemical symbols used in the simulation are ['Na', 'O', 'Si'], the following line can be used to correct the symbols:
 
 ```
 corr_atoms_dic = {1: 'Na', 2: 'O', 3:'Si'}
 for atom in atoms:
-    atom.set_new_chemical_symbols(corr_atoms_dic)
+    corr_symbols = [corr_atoms_dic[i] for i in atom.get_atomic_numbers()]
+    atom.set_chemical_symbols(corr_symbols)
 ```
 
 ### Generating random structures
@@ -30,7 +24,6 @@ The `get_random_packed` function can be used to generate random structures. For 
 ```
 from vitrum.utility import get_random_packed
 atoms = get_random_packed(composition='SiO2', density=2.2, target_atoms=1000)
-atoms = [glass_Atoms(atom) for atom in atoms]
 ```
 
 The `composition` parameter can be used to specify the chemical composition of the structure. The `get_random_packed` function includes several parameters to tailor random structure generation according to your given needs.

@@ -1,4 +1,5 @@
 import numpy as np
+from vitrum.glass_Atoms import glass_Atoms
 
 
 class diffusion:
@@ -14,7 +15,7 @@ class diffusion:
             None
         """
 
-        self.trajectory = trajectory
+        self.trajectory = [glass_Atoms(atom) for atom in trajectory]
         self.chemical_symbols = trajectory[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
         self.sample_times = sample_times

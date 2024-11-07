@@ -22,10 +22,11 @@ extra_javascript:
 nav:
     - Installation: vitrum/install.md
     - Quick start: vitrum/quickstart.md
-    - Extended ASE atoms: vitrum/glass_atoms.md
     - Scattering: vitrum/scattering.md
+    - Coordination: vitrum/coordination.md
     - Diffusion analysis: vitrum/dynamics.md
     - BALACE: vitrum/balace.md
     - Utilities: vitrum/utilities.md
+    - Extended ASE atoms: vitrum/glass_atoms.md
 
 #    - FAQs: pacemaker/faq.md

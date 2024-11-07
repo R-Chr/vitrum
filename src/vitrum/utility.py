@@ -6,6 +6,7 @@ from collections import deque
 from pymatgen.alchemy.materials import TransformedStructure
 from pymatgen.transformations.standard_transformations import DeformStructureTransformation
 import warnings
+from scipy.signal import argrelextrema
 
 
 def get_random_packed(
@@ -166,3 +167,9 @@ def apply_strain_to_structure(structure, deformations: list) -> list:
         )
         transformations += [ts]
     return transformations
+
+
+def find_min_after_peak(self, padf):
+    mins = argrelextrema(padf, np.less_equal, order=4)[0]
+    second_min = [i for ind, i in enumerate(mins) if i != ind][0]
+    return second_min
