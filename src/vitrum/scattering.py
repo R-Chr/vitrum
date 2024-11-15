@@ -84,6 +84,12 @@ class scattering:
         self.xray_cb = [i * j for i, j in zip(self.c, f_i)]
         self.xray_timesby = [pair[0] * pair[1] for pair in itertools.product(self.xray_cb, repeat=2)]
 
+        self.distances = self.get_all_distances()
+
+    def get_all_distances(self):
+        "Calculating distances..."
+        return np.array([atom.get_dist() for atom in tqdm(self.atom_list)])
+
     def get_partial_pdf(self, pair):
         """
         Calculate the partial probability density function (PDF) of a
@@ -96,14 +102,21 @@ class scattering:
         Returns:
             pdf (ndarray): An array of shape (nbin,) containing the PDF values.
         """
-        print("Calculating RDFs...")
-        pdf = np.mean(
-            [
-                atoms.get_pdf(target_atoms=[pair[0], pair[1]], rrange=self.rrange, nbin=self.nbin)[1]
-                for atoms in tqdm(self.atom_list)
-            ],
-            axis=0,
-        )
+        pdf = []
+        for index, atom in enumerate(self.atom_list):
+            distances = self.distances[index]
+            atom_1 = np.where(np.array(atom.get_chemical_symbols()) == pair[0])[0]
+            atom_2 = np.where(np.array(atom.get_chemical_symbols()) == pair[1])[0]
+            dist_list = distances[np.ix_(atom_1, atom_2)]
+            edges = np.linspace(0, self.rrange, self.nbin + 1)
+            volbin = []
+            for i in range(self.nbin):
+                vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
+                volbin.append(vol)
+            h, bin_edges = np.histogram(dist_list, bins=self.nbin, range=(0, self.rrange))
+            h[0] = 0
+            pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / atom.get_volume())
+        pdf = np.mean([pdf], axis=0)
         return pdf
 
     def get_total_rdf(self, type="neutron"):
