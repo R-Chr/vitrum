@@ -173,3 +173,21 @@ def find_min_after_peak(self, padf):
     mins = argrelextrema(padf, np.less_equal, order=4)[0]
     second_min = [i for ind, i in enumerate(mins) if i != ind][0]
     return second_min
+
+
+def correct_atom_types(atoms_list, atom_to_type_map):
+    """
+    Correct the atom types in a list of Atoms objects.
+
+    Parameters:
+        atoms_list (list of Atoms objects): The list of Atoms objects to correct.
+        atom_to_type_map (dict): A dictionary mapping atomic numbers to atom types.
+
+    Returns:
+        atoms_list (list of Atoms objects): The corrected list of Atoms objects.
+    """
+
+    for atoms in atoms_list:
+        corr_symbols = [atom_to_type_map[i] for i in atoms.get_atomic_numbers()]
+        atoms.set_chemical_symbols(corr_symbols)
+    return atoms_list

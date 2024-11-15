@@ -4,6 +4,7 @@ import itertools
 import math
 from pathlib import Path
 from vitrum.glass_Atoms import glass_Atoms
+from tqdm import tqdm
 
 
 class scattering:
@@ -95,10 +96,11 @@ class scattering:
         Returns:
             pdf (ndarray): An array of shape (nbin,) containing the PDF values.
         """
+        print("Calculating RDFs...")
         pdf = np.mean(
             [
                 atoms.get_pdf(target_atoms=[pair[0], pair[1]], rrange=self.rrange, nbin=self.nbin)[1]
-                for atoms in self.atom_list
+                for atoms in tqdm(self.atom_list)
             ],
             axis=0,
         )
