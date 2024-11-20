@@ -170,7 +170,7 @@ class glass_Atoms(Atoms):
             coordination_numbers.append(neighbors.shape[0])
         return coordination_numbers
 
-    def NBO_analysis(
+    def get_bridging_analysis(
         self,
         center_type: str,
         bridge_type: str,
@@ -183,14 +183,14 @@ class glass_Atoms(Atoms):
         Parameters:
             center_type (str): The type of the center atoms.
             bridge_type (str): The type of the bridge atoms.
-            former_types (Optional[List[str]], optional): A list of types of the former atoms. Defaults to None.
+            former_types (Optional[List], optional): A list of types of the former atoms. Defaults to None.
             cutoff (Union[str, float, int], optional): The cutoff distance for considering a bridge.
                 If "Auto", the cutoff is determined by finding the minimum value after the peak in the
                 radial distribution function. If a float or int, the cutoff is set to the specified value.
                 Defaults to "Auto".
 
         Returns:
-            List[int]: A list of the number of bridges for each center atom.
+            num_of_bridges (list): A list of the number of bridges for each center atom.
         """
         distances = self.get_dist()
         types = np.array(self.get_chemical_symbols())

@@ -1,5 +1,6 @@
 import numpy as np
 from vitrum.glass_Atoms import glass_Atoms
+from scipy.stats import linregress
 
 
 class diffusion:
@@ -16,11 +17,11 @@ class diffusion:
         """
 
         self.trajectory = [glass_Atoms(atom) for atom in trajectory]
-        self.chemical_symbols = trajectory[0].get_chemical_symbols()
+        self.chemical_symbols = np.array(trajectory[0].get_chemical_symbols())
         self.species = np.unique(self.chemical_symbols)
         self.sample_times = sample_times
 
-    def calculate_mean_square_displacement(self):
+    def get_mean_square_displacements(self):
         """
         Calculates the mean square displacement for each atom in the trajectory.
 
@@ -40,13 +41,44 @@ class diffusion:
         mean_square_displacement.append(np.mean(displacement_array, axis=1))
 
         for species in self.species:
-            indices = np.where(np.array(self.chemical_symbols) == species)[0]
+            indices = np.where(self.chemical_symbols == species)[0]
             mean_square_displacement.append(np.mean(displacement_array[:, indices], axis=1))
 
         return mean_square_displacement
 
-    def calculate_diffusion_coefficients(self):
+    def get_diffusion_coef(self, skip_first=100, msds=None):
+        if msds is None:
+            msds = self.get_mean_square_displacements()
+        D = []
+        for msd in msds:
+            lin_reg = linregress(self.sample_times[skip_first:], msd[skip_first:])
+            D.append((lin_reg.slope / 6))
+
+    def get_van_hove_self_correlation(self, target_atom, t_window=None, nbin=70):
+        index = np.where(self.chemical_symbols == target_atom)[0]
+
+        if t_window is None:
+            start_indicies = [0]
+            end_indicies = [-1]
+        else:
+            start_indicies = np.arange(0, len(self.sample_times) - t_window, t_window)
+            end_indicies = np.arange(t_window, len(self.sample_times), t_window)
+
+        hist_all = []
+        for start, end in zip(start_indicies, end_indicies):
+            start_postions = self.trajectory[start].get_positions()[index]
+            current_positions = self.trajectory[end].get_positions()[index]
+            cell = np.diagonal(self.trajectory[start].get_cell())[0]
+            dif_pos = np.abs(current_positions - start_postions)
+            dif_pos = np.where(dif_pos > 0.5 * cell, np.abs(dif_pos - cell), dif_pos)
+            distances = np.sqrt(np.sum(dif_pos**2, axis=1))
+            hist, edges = np.histogram(distances, bins=10 ** np.linspace(np.log10(0.1), np.log10(100), nbin))
+            hist_all.append(hist)
+        hist = np.mean(np.array(hist_all), axis=0)
+        return edges[:-1], hist / len(self.chemical_symbols)
+
+    def get_van_hove_dist_correlation(self):
         pass
 
-    def calculate_van_hove_self_correlation(self):
+    def get_velocity_autocorrelation(self):
         pass
