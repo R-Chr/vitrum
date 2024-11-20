@@ -84,40 +84,41 @@ class scattering:
         self.xray_cb = [i * j for i, j in zip(self.c, f_i)]
         self.xray_timesby = [pair[0] * pair[1] for pair in itertools.product(self.xray_cb, repeat=2)]
 
-        self.distances = self.get_all_distances()
+        self.partial_pdfs = self.calculate_partial_pdfs()
 
-    def get_all_distances(self):
-        "Calculating distances..."
-        return np.array([atom.get_dist() for atom in tqdm(self.atom_list)])
+    def calculate_partial_pdfs(self):
+        pdfs = np.zeros((len(self.atom_list), len(self.pairs), self.nbin))
+        for atom_ind, atom in enumerate(tqdm(self.atom_list)):
+            distances = atom.get_dist()
+            for pair_ind, pair in enumerate(self.pairs):
+                atom_1 = np.where(np.array(atom.get_chemical_symbols()) == pair[0])[0]
+                atom_2 = np.where(np.array(atom.get_chemical_symbols()) == pair[1])[0]
+                dist_list = distances[np.ix_(atom_1, atom_2)]
+                edges = np.linspace(0, self.rrange, self.nbin + 1)
+                volbin = []
+                for i in range(self.nbin):
+                    vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
+                    volbin.append(vol)
+                h, bin_edges = np.histogram(dist_list, bins=self.nbin, range=(0, self.rrange))
+                h[0] = 0
+                pdfs[atom_ind, pair_ind, :] = (h / volbin) / (
+                    dist_list.shape[0] * dist_list.shape[1] / atom.get_volume()
+                )
+        pdfs = np.mean(pdfs, axis=0)
+        return pdfs
 
-    def get_partial_pdf(self, pair):
+    def get_partial_pdf(self, pair: tuple):
         """
-        Calculate the partial probability density function (PDF) of a
-          given pair of target atoms within a specified range.
+        get the partial probability density function (PDF) of a
+          given pair of target atoms
 
         Parameters:
-            pair (list): A list of two elements representing the target atoms.
-              Each element can be either a string (chemical symbol) or an integer (atomic number).
+            pair (tuple): A tuple of two elements representing the target atoms. Example: ('Si', 'O')
 
         Returns:
             pdf (ndarray): An array of shape (nbin,) containing the PDF values.
         """
-        pdf = []
-        for index, atom in enumerate(self.atom_list):
-            distances = self.distances[index]
-            atom_1 = np.where(np.array(atom.get_chemical_symbols()) == pair[0])[0]
-            atom_2 = np.where(np.array(atom.get_chemical_symbols()) == pair[1])[0]
-            dist_list = distances[np.ix_(atom_1, atom_2)]
-            edges = np.linspace(0, self.rrange, self.nbin + 1)
-            volbin = []
-            for i in range(self.nbin):
-                vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
-                volbin.append(vol)
-            h, bin_edges = np.histogram(dist_list, bins=self.nbin, range=(0, self.rrange))
-            h[0] = 0
-            pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / atom.get_volume())
-        pdf = np.mean([pdf], axis=0)
-        return pdf
+        return self.partial_pdfs[self.pairs.index(pair)]
 
     def get_total_rdf(self, type="neutron"):
         """
@@ -173,7 +174,7 @@ class scattering:
         """
         S_q_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
-            partial_sq = self.get_partial_structure_factor(target_atoms=[pair[0], pair[1]])
+            partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]))
             if type == "neutron":
                 S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
             elif type == "fake_xray":
@@ -181,3 +182,11 @@ class scattering:
             elif type == "xray":
                 S_q_tot = S_q_tot + (self.xray_timesby[ind] * partial_sq) / np.sum(self.xray_timesby, axis=0)
         return S_q_tot
+
+    def get_T_r():
+        "Not implemented yet"
+        pass
+
+    def get_D_r():
+        "Not implemented yet"
+        pass
