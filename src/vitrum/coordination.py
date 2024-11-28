@@ -37,3 +37,7 @@ class coordination:
         dist, edges = np.histogram(np.hstack(angles), bins=nbin, density=True)
         angles = edges[1:] - 0.5 * (np.ptp(edges) / nbin)
         return angles, dist
+
+    def get_coordination_numbers(self, center_type, neigh_type, nbin=70, cutoff="Auto"):
+        "Not implemented yet"
+        pass

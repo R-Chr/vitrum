@@ -42,7 +42,7 @@ class glass_Atoms(Atoms):
         corr_symbols = [dict[i] for i in self.get_atomic_numbers()]
         self.set_chemical_symbols(corr_symbols)
 
-    def get_pdf(self, target_atoms, rrange=10, nbin=100):
+    def get_pdf(self, target_atoms, rrange=10, nbin=100, indicies=None):
         """
         Calculate the probability density function (PDF) of a given pair of target atoms within a specified range.
 
@@ -51,19 +51,25 @@ class glass_Atoms(Atoms):
               string (chemical symbol) or an integer (atomic number).
             rrange (float, optional): The range within which to calculate the PDF. Defaults to 10.
             nbin (int, optional): The number of bins to use for the histogram. Defaults to 100.
+            indicies (list, optional): A list of two elements representing the indicies of the target atoms. Specifying
+              this parameter will override the target_atoms parameter. Defaults to None.
 
         Returns:
             xval (ndarray): An array of shape (nbin,) containing the distance values.
             pdf (ndarray): An array of shape (nbin,) containing the PDF values.
         """
-        if isinstance(target_atoms[0], str):
-            types = self.get_chemical_symbols()
-        if isinstance(target_atoms[0], int):
-            types = self.get_atomic_numbers()
-        types = np.array(types)
-        distances = self.get_dist()
-        atom_1 = np.where(types == target_atoms[0])[0]
-        atom_2 = np.where(types == target_atoms[1])[0]
+        if indicies is None:
+            if isinstance(target_atoms[0], str):
+                types = self.get_chemical_symbols()
+            if isinstance(target_atoms[0], int):
+                types = self.get_atomic_numbers()
+            types = np.array(types)
+            distances = self.get_dist()
+            atom_1 = np.where(types == target_atoms[0])[0]
+            atom_2 = np.where(types == target_atoms[1])[0]
+        else:
+            atom_1 = indicies[0]
+            atom_2 = indicies[1]
         dist_list = distances[np.ix_(atom_1, atom_2)]
         edges = np.linspace(0, rrange, nbin + 1)
         xval = edges[1:] - 0.5 * (rrange / nbin)
