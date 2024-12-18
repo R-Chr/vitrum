@@ -1,5 +1,6 @@
 import numpy as np
 from vitrum.glass_Atoms import glass_Atoms
+import itertools
 
 
 class coordination:
@@ -32,11 +33,13 @@ class coordination:
             angles (ndarray): An array of shape (nbin,) containing the angle, values.
             dist (ndarray): A list of arrays containing the angular distribution values.
         """
-        angles = []
+        angles_all = []
         for atoms in self.atoms_list:
-            angles.append(atoms.get_all_angles(center_type, neigh_types, cutoff))
+            angles = atoms.get_all_angles(center_type, neigh_types, cutoff)
+            flat_list_angles = list(itertools.chain(*angles))
+            angles_all.append(np.array(flat_list_angles))
 
-        dist, edges = np.histogram(np.hstack(angles), bins=nbin, density=True, range=range)
+        dist, edges = np.histogram(np.hstack(angles_all), bins=nbin, density=True, range=range)
         angles = edges[1:] - 0.5 * (np.ptp(edges) / nbin)
         return angles, dist
 
