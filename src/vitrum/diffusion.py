@@ -26,7 +26,8 @@ class diffusion:
         Calculates the mean square displacement for each atom in the trajectory.
 
         Returns:
-            list: A list of NumPy arrays, where each array represents the mean square displacement
+
+            ndarray: An array of mean square displacements for each atom in the trajectory.
                 for each atom at the corresponding time step.
         """
         initial_positions = self.trajectory[0].get_positions()
@@ -44,7 +45,7 @@ class diffusion:
             indices = np.where(self.chemical_symbols == species)[0]
             mean_square_displacement.append(np.mean(displacement_array[:, indices], axis=1))
 
-        return mean_square_displacement
+        return np.array(mean_square_displacement)
 
     def get_diffusion_coef(self, skip_first=100, msds=None):
         if msds is None:
@@ -53,6 +54,7 @@ class diffusion:
         for msd in msds:
             lin_reg = linregress(self.sample_times[skip_first:], msd[skip_first:])
             D.append((lin_reg.slope / 6))
+        return np.array(D)
 
     def get_van_hove_self_correlation(self, target_atom, t_window=None, nbin=70):
         index = np.where(self.chemical_symbols == target_atom)[0]

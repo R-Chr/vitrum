@@ -15,7 +15,7 @@ class coordination:
         self.chemical_symbols = atoms_list[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
 
-    def get_angle_distribution(self, center_type, neigh_types, nbin=70, cutoff="Auto"):
+    def get_angle_distribution(self, center_type, neigh_types, nbin=70, cutoff="Auto", range=None):
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
 
@@ -25,6 +25,8 @@ class coordination:
             nbin (int, optional): The number of bins to use for the histogram. Defaults to 70.
             cutoff (float, int, list, or "Auto", optional): Range within which to calculate the angular distribution.
               Defaults to "Auto". Can be a list of cutoffs for each neighbor type, or a specific cutoff for all.
+            range (list, optional): The range of the histogram.
+              Defaults to None (range is determined automatically from np.histogram).
 
         Returns:
             angles (ndarray): An array of shape (nbin,) containing the angle, values.
@@ -32,9 +34,9 @@ class coordination:
         """
         angles = []
         for atoms in self.atoms_list:
-            angles.append(atoms.get_angle_distribution(center_type, neigh_types, nbin, cutoff))
+            angles.append(atoms.get_all_angles(center_type, neigh_types, cutoff))
 
-        dist, edges = np.histogram(np.hstack(angles), bins=nbin, density=True)
+        dist, edges = np.histogram(np.hstack(angles), bins=nbin, density=True, range=range)
         angles = edges[1:] - 0.5 * (np.ptp(edges) / nbin)
         return angles, dist
 

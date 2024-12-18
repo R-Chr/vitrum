@@ -277,6 +277,7 @@ class balace:
         df = pd.DataFrame(data)
         print(f"Iteration {iteration} has {len(df)} structures")
         df = df[~df["forces"].apply(lambda x: np.max(x) > force_threshold)]
+        df = df[~df["forces"].apply(lambda x: np.min(x) < -force_threshold)]
         print(f"{len(df)} structures remain after force threshold filter")
         df_new = train_test_split(df, test_size=0.1, random_state=1)
         print(f"{len(df_new[0])} structures added to train set and {len(df_new[1])} structures added to test set")
