@@ -133,7 +133,7 @@ class glass_Atoms(Atoms):
             unique_pairs = set()
 
             # Generate combinations
-            for a, b in product(neigh_index[0][neighbor1], neigh_index[0][neighbor2]):
+            for a, b in product(neigh_index[0][neighbor1], neigh_index[1][neighbor2]):
                 if a != b:
                     unique_pairs.add(tuple(sorted((a, b))))
             combinations = np.array(list(unique_pairs))
@@ -169,7 +169,6 @@ class glass_Atoms(Atoms):
             cutoff = pdf[0][find_min_after_peak(pdf[1])]
         elif isinstance(cutoff, float) or isinstance(cutoff, int):
             cutoff = cutoff
-        print(cutoff)
         coordination_numbers = []
         for center in range(len(atom_1)):
             neighbors = np.where((dist_list[center, :] < cutoff) & (dist_list[center, :] > 0))[0]
@@ -229,3 +228,6 @@ class glass_Atoms(Atoms):
             num_of_bridges.append(q_species)
 
         return num_of_bridges
+
+    def get_density(self):
+        return (np.sum(self.get_masses()) / 6.02214076 * 10**-23) / (self.get_volume() * 10**-24)

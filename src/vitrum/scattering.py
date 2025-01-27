@@ -190,3 +190,18 @@ class scattering:
     def get_D_r():
         "Not implemented yet"
         pass
+
+
+# Make pdf from distance list into its own function
+# def pdf(dist_list, atoms, rrange=10, nbin=100):
+#    edges = np.linspace(0,rrange,nbin+1)
+#    xval=edges[1:]-0.5*(rrange/nbin)
+#    volbin = []
+#    for i in range(nbin):
+#        vol = ((4/3)*np.pi*(edges[i+1])**3)-((4/3)*np.pi*(edges[i])**3)
+#        volbin.append(vol)
+#
+#    h, bin_edges = np.histogram(dist_list, bins=nbin, range=(0,rrange))
+#    h[0] = 0
+#    pdf = (h/volbin)/(dist_list.shape[0]*dist_list.shape[1]/atoms.get_volume())
+#    return xval, pdf
