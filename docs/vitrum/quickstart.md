@@ -9,13 +9,12 @@ from ase.io import read
 atoms = read("md.lammpstrj", index=":" , format="lammps-dump-text")
 ```
 
-Often the chemical symbols of the atoms in the atoms object are not the same as the chemical symbols used in the simulation. This can be corrected using the `set_new_chemical_symbols` method of the glass_Atoms class. For example, if the chemical symbols used in the simulation are ['Na', 'O', 'Si'], the following line can be used to correct the symbols:
+Often the chemical symbols of the atoms in the atoms object are not the same as the chemical symbols used in the simulation. This can be corrected using the `correct_atom_types` function. For example, if the chemical symbols used in the simulation are ['Na', 'O', 'Si'], the following line can be used to correct the symbols:
 
 ```
+from vitrum.utility import correct_atom_types
 corr_atoms_dic = {1: 'Na', 2: 'O', 3:'Si'}
-for atom in atoms:
-    corr_symbols = [corr_atoms_dic[i] for i in atom.get_atomic_numbers()]
-    atom.set_chemical_symbols(corr_symbols)
+correct_atom_types(atoms, corr_atoms_dic)
 ```
 
 ### Generating random structures

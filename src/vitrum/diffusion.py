@@ -71,8 +71,7 @@ class diffusion:
             start_postions = self.trajectory[start].get_positions()[index]
             current_positions = self.trajectory[end].get_positions()[index]
             cell = np.diagonal(self.trajectory[start].get_cell())[0]
-            dif_pos = np.abs(current_positions - start_postions)
-            dif_pos = np.where(dif_pos > 0.5 * cell, np.abs(dif_pos - cell), dif_pos)
+            dif_pos = current_positions - start_postions
             distances = np.sqrt(np.sum(dif_pos**2, axis=1))
             hist, edges = np.histogram(distances, bins=10 ** np.linspace(np.log10(0.1), np.log10(100), nbin))
             hist_all.append(hist)

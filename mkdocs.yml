@@ -25,8 +25,9 @@ nav:
     - Scattering: vitrum/scattering.md
     - Coordination: vitrum/coordination.md
     - Diffusion analysis: vitrum/dynamics.md
+    - Diffusion analysis: vitrum/rings.md
     - BALACE: vitrum/balace.md
     - Utilities: vitrum/utilities.md
-    - Extended ASE atoms: vitrum/glass_atoms.md
+    - Extended ASE Atoms: vitrum/glass_atoms.md
 
 #    - FAQs: pacemaker/faq.md
