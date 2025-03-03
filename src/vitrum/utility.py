@@ -80,27 +80,31 @@ def get_random_packed(
 
     k = (cell_vol / (side_ratios[0] * side_ratios[1] * side_ratios[2])) ** (1 / 3)
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])
-    pos = np.array([[0, 0, 0]])
 
-    escape_counter = 0
-    while len(pos) < full_cell_composition.num_atoms:
-        xyz_pos = np.random.rand(1, 3) * cell
-        delta = np.abs(xyz_pos - pos)
-        delta = np.where(delta > 0.5 * cell, np.abs(delta - cell), delta)
-        if np.all(delta > minAllowDis):
-            pos = np.append(pos, xyz_pos, axis=0)
-            escape_counter = 0
-        else:
-            delta = np.sqrt((delta**2).sum(axis=1))
+    tries = 0
+    while tries < 10:
+        pos = np.array([[0, 0, 0]])
+        escape_counter = 0
+        while len(pos) < full_cell_composition.num_atoms:
+            xyz_pos = np.random.rand(1, 3) * cell
+            delta = np.abs(xyz_pos - pos)
+            delta = np.where(delta > 0.5 * cell, np.abs(delta - cell), delta)
             if np.all(delta > minAllowDis):
                 pos = np.append(pos, xyz_pos, axis=0)
                 escape_counter = 0
             else:
-                escape_counter += 1
-                if escape_counter > 1000:
-                    raise ValueError(
-                        "Error: Cannot find suitable positions for atoms, lower minAllowDis or decrease the density"
-                    )
+                delta = np.sqrt((delta**2).sum(axis=1))
+                if np.all(delta > minAllowDis):
+                    pos = np.append(pos, xyz_pos, axis=0)
+                    escape_counter = 0
+                else:
+                    escape_counter += 1
+                    if escape_counter > 1000:
+                        break
+        if len(pos) == full_cell_composition.num_atoms:
+            break
+    if tries == 10:
+        raise ValueError("Error: Cannot find suitable positions for atoms, lower minAllowDis or decrease the density")
 
     formula = sum([[i] * structure[i] for i in structure], [])
     if datatype == "ase":
