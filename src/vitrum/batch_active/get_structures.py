@@ -31,6 +31,7 @@ def get_atoms_from_wfs(lp, run_uuids, high_temp_params, sampling=":", state=None
     """
     wf_ids = [get_wflow_id_from_run_uuid(id) for id in run_uuids]
     atoms = []
+    metadata = []
 
     if state == "train_ace_high_temp":
         sampling = high_temp_params["sampling"]
@@ -38,20 +39,25 @@ def get_atoms_from_wfs(lp, run_uuids, high_temp_params, sampling=":", state=None
         sampling = sampling
 
     for wf_id in wf_ids:
-        wf = lp.get_wf_summary_dict(wf_id)
-        for fw in wf["states"]:
-            if wf["states"][fw] == "COMPLETED":
-                dirs = wf["launch_dirs"][fw][0]
+        wf = lp.get_wf_by_fw_id(wf_id)
+        launch_dirs = [fw.launches[0].launch_dir if fw.launches else None for fw in wf.fws]
+        for dirs, fw in zip(launch_dirs, wf.fws):
+            if fw.states == "COMPLETED":
                 atoms_fw = read(f"{dirs}/OUTCAR.gz", format="vasp-out", index=":")
                 num_samples = len(atoms_fw)
                 if sampling == ":":
                     atoms = atoms + atoms_fw
+                    num_samples = len(atoms_fw)
                 elif isinstance(sampling, int):
                     sample_index = np.linspace(0, num_samples - 1, sampling, dtype=int)
                     atoms = atoms + [atoms_fw[i] for i in sample_index]
+                    num_samples = len(sample_index)
                 elif isinstance(sampling, list):
                     atoms = atoms + [atoms_fw[i] for i in sampling]
-    return atoms
+                    num_samples = len(sampling)
+                metadata = metadata + [fw.spec["sample_type"]] * num_samples
+
+    return atoms, metadata
 
 
 def get_structures_from_lammps(
@@ -106,12 +112,12 @@ def get_structures_from_lammps(
             atoms_forced += atoms
 
     print(f"Included {len(atoms_selected)} selected structures and {len(atoms_forced)} forced structures.")
-
+    metadata = ["manual"] * len(atoms_selected) + ["gamma"] * len(atoms_forced)
     structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced] + [
         AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected
     ]
 
-    return structures
+    return structures, metadata
 
 
 def select_structures(folder, atom_types, select_files, num_select_structures=500, **kwargs):

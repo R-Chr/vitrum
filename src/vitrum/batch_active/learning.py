@@ -52,70 +52,59 @@ class balace:
             composition_params (dict): dictionary containing composition parameters
         """
         self.auto_queue = auto_queue
-        self.state = "high_temp_run"
+        self.state = "start"
         self.filename = filename
         self.runs = {}
         self.wd = os.getcwd()
         self.units = units
         self.iteration = 0
         self.config_file = config_file
-        self.read_config()
+        self.load_config()
+        self.set_defaults()
+        self.validate_config()
         self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
 
-    def read_config(self):
-        if os.path.isfile(self.config_file) is False:
+    def load_config(self):
+        """Loads the YAML configuration file."""
+        if not os.path.isfile(self.config_file):
             raise FileNotFoundError(f"Config file {self.config_file} not found.")
 
         with open(self.config_file, "r") as file:
-            config = yaml.safe_load(file)
+            self.config = yaml.safe_load(file)
 
-        for key, value in config.items():
+        # Apply config values as attributes
+        for key, value in self.config.items():
             setattr(self, key, value)
 
+    def set_defaults(self):
+        """Sets default values for missing attributes."""
+        self.incar_settings = getattr(self, "incar_settings", False)
+        self.high_temp_params = getattr(self, "high_temp_params", {"temperature": 5000, "steps": 100, "sampling": 5})
+        self.strain_params = getattr(self, "strain_params", {"num_strains": 3, "max_strain": 0.2})
+        self.database = getattr(self, "database", None)
+        self.qadapter = load_object_from_file(self.qadapter_file) if hasattr(self, "qadapter_file") else None
+        self.reference_energy = getattr(self, "reference_energy", "auto")
+        self.lammps_params = getattr(self, "lammps_params", {})
+        self.selection_params = getattr(self, "selection_params", {})
+        self.composition_params = getattr(self, "composition_params", {})
+
+    def validate_config(self):
+        """Validates required config values."""
         if not hasattr(self, "mp_api_key"):
             raise RuntimeError("mp_api_key not specified in config file.")
 
-        if hasattr(self, "launchpad"):
-            self.lp = LaunchPad.from_file(self.launchpad)
-        else:
+        if not hasattr(self, "launchpad"):
             raise RuntimeError("Launchpad yaml not specified in config file.")
+        self.lp = LaunchPad.from_file(self.launchpad)
 
-        if not hasattr(self, "incar_settings"):
-            self.incar_settings = False
+        if "num_strains" not in self.strain_params or "max_strain" not in self.strain_params:
+            raise RuntimeError("strain_params is missing required fields (num_strains, max_strain).")
 
-        if not hasattr(self, "high_temp_params"):
-            self.high_temp_params = {"temperature": 5000, "steps": 100, "sampling": 5}
-
-        if not hasattr(self, "strain_params"):
-            self.strain_params = {"num_strains": 3, "max_strain": 0.2}
-        else:
-            if "num_strains" not in self.strain_params:
-                raise RuntimeError("strain_params is specified in yaml file but no num_strains specified")
-            elif "max_strain" not in self.strain_params:
-                raise RuntimeError("strain_params is specified in yaml file but no max_strain specified")
-
-        if hasattr(self, "database"):
-            if os.path.isfile(self.database["train"]) is False:
+        if self.database:
+            if not os.path.isfile(self.database.get("train", "")):
                 raise FileNotFoundError("train_data.pckl.gzip not found")
-            elif os.path.isfile(self.database["test"]) is False:
+            if not os.path.isfile(self.database.get("test", "")):
                 raise FileNotFoundError("test_data.pckl.gzip not found")
-        else:
-            self.database = None
-
-        if hasattr(self, "qadapter_file"):
-            self.qadapter = load_object_from_file(self.qadapter_file)
-
-        if not hasattr(self, "reference_energy"):
-            self.reference_energy = "auto"
-
-        if not hasattr(self, "lammps_params"):
-            self.lammps_params = {}
-
-        if not hasattr(self, "selection_params"):
-            self.selection_params = {}
-
-        if not hasattr(self, "composition_params"):
-            self.composition_params = {}
 
     def save(self):
         with open(self.filename, "wb") as f:
@@ -152,14 +141,69 @@ class balace:
             self.lp.add_wf(wf)
             return True
 
+    def run_high_temp(self):
+        structures = gen_even_structures(units=self.units, mp_api_key=self.mp_api_key, **self.composition_params)
+        wf, run_id = high_temp_run(structures, self.strain_params, self.incar_settings, self.high_temp_params)
+        self.runs.setdefault("DFT", []).append([str(run_id)])
+        self.state = "high_temp_AIMD"
+        self.lp.add_wf(wf)
+        print("High temperature run added to workflow queue")
+
+    def run_train_pace(self):
+        previous_run_ids = self.runs["DFT"][-1]
+        if self.state == "high_temp_AIMD":
+            stop = self.check_resubmit_high_temp(previous_run_ids)
+        else:
+            stop = False
+
+        if not stop:
+            atoms, metadata = get_atoms_from_wfs(self.lp, previous_run_ids, self.high_temp_params, state=self.state)
+            self.database = update_ace_database(
+                self.wd, atoms, self.iteration, database_paths=self.database, metadata=metadata
+            )
+            wf, directory = train_pace()
+            self.lp.add_wf(wf)
+            self.runs.setdefault("train_ace", []).append(directory)
+            print(f"Training ace model, Iteration: {self.iteration}")
+            self.iteration += 1
+            self.state = "trained_ace"
+
+    def run_gen_lammps(self):
+        pot_dir = self.runs["train_ace"][-1]
+        if not os.path.exists(f"{pot_dir}/output_potential.asi"):
+            raise FileNotFoundError(
+                f"{pot_dir}/output_potential.asi not found. Make sure ACE potential has completed training"
+            )
+        run_id = str(uuid.uuid4())
+        print(f"Setting up for LAMMPS runs in /gen_structures/{run_id}")
+        lammps_input_writer(self.runs["train_ace"][-1], self.atom_types, **self.lammps_params)
+        path = f"{self.wd}/gen_structures/{run_id}"
+        os.makedirs(path)
+        structures = gen_even_structures(units=self.units, mp_api_key=self.mp_api_key, **self.composition_params)
+        directories = gen_lammps_structures(structures, self.strain_params, specorder=self.atom_types, path=path)
+        wfs = run_lammps(directories)
+        self.lp.add_wf(wfs)
+        self.runs.setdefault("run_lammps", []).append(run_id)
+        print("Generating structures with LAMMPS")
+        self.state = "lammps_runs"
+
+    def run_evaluate(self):
+        folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
+        potential_folder = self.runs["train_ace"][-1]
+        structures, metadata = get_structures_from_lammps(folder, potential_folder, **self.selection_params)
+        wf, run_id = static_run(structures, metadata)
+        self.runs.setdefault("DFT", []).append([str(run_id)])
+        self.lp.add_wf(wf)
+        self.state = "static_runs"
+        print("Evaluating new structures with VASP")
+
     def run_pace(self):
         """
         The main loop for the active learning workflow. It runs through the following states:
-
-        - high_temp_run: Runs a high temperature AIMD simulation using VASP.
-        - train_ace: Train the ACE model using the current database of structures.
-        - gen_lammps: Runs a LAMMPS simulation with the current ACE potential to generate new structures.
-        - evaluate: Evaluates the new structures with VASP.
+        - Runs a high temperature AIMD simulation using VASP.
+        - Trains the ACE model using the current database of structures.
+        - Runs LAMMPS simulations with the current ACE potential to generate new structures.
+        - Evaluates the new structures with VASP static calculations.
 
         Parameters:
             None
@@ -169,75 +213,21 @@ class balace:
         """
         print(f"Current state: {self.state}, Iteration: {self.iteration}")
 
-        if self.state == "high_temp_run":
-            structures = gen_even_structures(units=self.units, mp_api_key=self.mp_api_key, **self.composition_params)
-            wf, run_id = high_temp_run(structures, self.strain_params, self.incar_settings, self.high_temp_params)
-            if "DFT" not in self.runs:
-                self.runs["DFT"] = [[str(run_id)]]
-            else:
-                self.runs["DFT"].append([str(run_id)])
-            self.state = "train_ace_high_temp"
-            self.lp.add_wf(wf)
-            print("High temperature run added to workflow queue")
+        # Mapping states to methods
+        state_methods = {
+            "start": self.run_high_temp,
+            "high_temp_AIMD": self.run_train_pace,
+            "static_runs": self.run_train_pace,
+            "trained_ace": self.run_gen_lammps,
+            "lammps_runs": self.run_evaluate,
+        }
 
-        elif self.state == "train_ace_high_temp" or self.state == "train_ace_lammps":
-            previous_run_ids = self.runs["DFT"][-1]
-            if self.state == "train_ace_high_temp":
-                stop = self.check_resubmit_high_temp(previous_run_ids)
-            else:
-                stop = False
-
-            if stop:
-                pass
-            else:
-                atoms = get_atoms_from_wfs(self.lp, previous_run_ids, self.high_temp_params, state=self.state)
-                self.database = update_ace_database(self.wd, atoms, self.iteration, database_paths=self.database)
-                wf, directory = train_pace()
-                self.lp.add_wf(wf)
-                if "train_ace" not in self.runs:
-                    self.runs["train_ace"] = [directory]
-                else:
-                    self.runs["train_ace"].append(directory)
-
-                print(f"Training ace model, Iteration: {self.iteration}")
-                self.iteration += 1
-                self.state = "gen_lammps"
-
-        elif self.state == "gen_lammps":
-            pot_dir = self.runs["train_ace"][-1]
-            if not os.path.exists(f"{pot_dir}/output_potential.asi"):
-                raise FileNotFoundError(
-                    f"{pot_dir}/output_potential.asi not found. Make sure ACE potential has completed training"
-                )
-
-            run_id = str(uuid.uuid4())
-            print(f"Setting up for LAMMPS runs in /gen_structures/{run_id}")
-            lammps_input_writer(self.runs["train_ace"][-1], self.atom_types, **self.lammps_params)
-            path = f"{self.wd}/gen_structures/{run_id}"
-            os.makedirs(path)
-            structures = gen_even_structures(units=self.units, mp_api_key=self.mp_api_key, **self.composition_params)
-            directories = gen_lammps_structures(structures, self.strain_params, specorder=self.atom_types, path=path)
-            wfs = run_lammps(directories)
-            self.lp.add_wf(wfs)
-            if "run_lammps" not in self.runs:
-                self.runs["run_lammps"] = [run_id]
-            else:
-                self.runs["run_lammps"].append(run_id)
-            print("Generating structures with LAMMPS")
-            self.state = "evaluate"
-
-        elif self.state == "evaluate":
-            folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
-            potential_folder = self.runs["train_ace"][-1]
-            structures = get_structures_from_lammps(folder, potential_folder, **self.selection_params)
-            wf, run_id = static_run(structures)
-            if "DFT" not in self.runs:
-                self.runs["DFT"] = [[str(run_id)]]
-            else:
-                self.runs["DFT"].append([str(run_id)])
-            self.lp.add_wf(wf)
-            self.state = "train_ace_lammps"
-            print("Evaluating new structures with VASP")
+        # Get the corresponding method and execute it
+        state_method = state_methods.get(self.state)
+        if state_method:
+            state_method()
+        else:
+            raise ValueError(f"Unknown state: {self.state}")
 
         self.save()
 

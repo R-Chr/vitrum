@@ -40,7 +40,7 @@ def high_temp_run(structures, strain_params, incar_settings, high_temp_params):
                 temperature=high_temp_params["temperature"],
                 steps=high_temp_params["steps"],
             )
-            job.update_metadata({"strain": strain, "composition": composition})
+            job.update_metadata({"strain": strain, "composition": composition, "sample_type": "high_temp"})
             flow_jobs.append(job)
 
     flow = Flow(flow_jobs, name="MD_flows")
@@ -52,9 +52,11 @@ def high_temp_run(structures, strain_params, incar_settings, high_temp_params):
 def static_run(structures, incar_settings, metadata=None):
     run_id = str(uuid.uuid4())
     flow_jobs = []
-    for structure in structures:
+    for structure, m_data in zip(structures, metadata):
         name = structure.reduced_formula
-        flow_jobs.append(static_flow(structure, name=name, incar_settings=incar_settings))
+        job = static_flow(structure, name=name, incar_settings=incar_settings)
+        job.update_metadata({"sample_type": m_data})
+        flow_jobs.append(job)
 
     flow = Flow(flow_jobs, name="Static_flows")
     wf = flow_to_workflow(flow, metadata={"uuid": run_id})
@@ -77,7 +79,7 @@ def rerun_crashed_jobs(crashed_jobs, run_id, incar_settings, high_temp_params, m
             temperature=high_temp_params["temperature"],
             steps=high_temp_params["steps"],
         )
-        job.update_metadata({"strain": strain, "composition": composition})
+        job.update_metadata({"strain": strain, "composition": composition, "sample_type": "high_temp"})
         flow_jobs.append(job)
 
     flow = Flow(flow_jobs, name="MD_rerun_flows")
