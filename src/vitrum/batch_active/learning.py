@@ -7,6 +7,8 @@ from vitrum.batch_active.get_structures import (
     get_wflow_id_from_run_uuid,
     get_structures_from_lammps,
 )
+
+from vitrum.structure_gen import gen_random_glasses
 import uuid
 import os
 from fireworks import LaunchPad
@@ -20,14 +22,13 @@ from fireworks.core.fworker import FWorker
 
 
 class balace:
-    def __init__(self, config_file="balace.yaml", filename="balace.pickle", units=["SiO2"], auto_queue=False):
+    def __init__(self, config_file="balace.yaml", filename="balace.pickle", auto_queue=False):
         """
         Initialize the balace class.
 
         Parameters:
             config_file (str): yaml file containing configuration for the balace class. Defaults to "balace.yaml".
             filename (str): filename to save the class to. Defaults to "balace.pickle".
-            units (list of str): list of composition units to use. Defaults to ["SiO2"].
             auto_queue (bool): whether to automatically queue runs. Defaults to False.
 
         Attributes:
@@ -56,7 +57,6 @@ class balace:
         self.filename = filename
         self.runs = {}
         self.wd = os.getcwd()
-        self.units = units
         self.iteration = 0
         self.config_file = config_file
         self.load_config()
@@ -78,6 +78,7 @@ class balace:
 
     def set_defaults(self):
         """Sets default values for missing attributes."""
+        self.potential = getattr(self, "potential", "pace")
         self.incar_settings = getattr(self, "incar_settings", False)
         self.high_temp_params = getattr(self, "high_temp_params", {"temperature": 5000, "steps": 100, "sampling": 5})
         self.strain_params = getattr(self, "strain_params", {"num_strains": 3, "max_strain": 0.2})
@@ -87,9 +88,21 @@ class balace:
         self.lammps_params = getattr(self, "lammps_params", {})
         self.selection_params = getattr(self, "selection_params", {})
         self.composition_params = getattr(self, "composition_params", {})
+        self.struc_gen_params = getattr(
+            self, "struc_gen_params", {"scheme": "even", "units": ["SiO2"], "target_atoms": 100}
+        )
 
     def validate_config(self):
         """Validates required config values."""
+        if not hasattr(self, "struc_gen_params"):
+            raise RuntimeError("struc_gen_params are not specified in config file.")
+
+        if self.struc_gen_params["scheme"] == "even" and "units" not in self.struc_gen_params:
+            raise RuntimeError("units not specified in struc_gen_params.")
+
+        if self.struc_gen_params["scheme"] == "random" and "atoms" not in self.struc_gen_params:
+            raise RuntimeError("atoms not specified in struc_gen_params.")
+
         if not hasattr(self, "mp_api_key"):
             raise RuntimeError("mp_api_key not specified in config file.")
 
@@ -142,7 +155,9 @@ class balace:
             return True
 
     def run_high_temp(self):
-        structures = gen_even_structures(units=self.units, mp_api_key=self.mp_api_key, **self.composition_params)
+        structures = gen_even_structures(
+            units=self.struc_gen_params["units"], mp_api_key=self.mp_api_key, **self.composition_params
+        )
         wf, run_id = high_temp_run(structures, self.strain_params, self.incar_settings, self.high_temp_params)
         self.runs.setdefault("DFT", []).append([str(run_id)])
         self.state = "high_temp_AIMD"
@@ -163,23 +178,54 @@ class balace:
             )
             wf, directory = train_pace()
             self.lp.add_wf(wf)
-            self.runs.setdefault("train_ace", []).append(directory)
+            self.runs.setdefault("potential", []).append(directory)
             print(f"Training ace model, Iteration: {self.iteration}")
             self.iteration += 1
             self.state = "trained_ace"
 
+    def run_train_grace(self):
+        previous_run_ids = self.runs["DFT"][-1]
+        atoms, metadata = get_atoms_from_wfs(self.lp, previous_run_ids, self.high_temp_params, state=self.state)
+        self.database = update_ace_database(
+            self.wd, atoms, self.iteration, database_paths=self.database, metadata=metadata
+        )
+        print(f"Train Grace based on dataset, Iteration: {self.iteration}")
+        self.iteration += 1
+        self.state = "trained_ace"
+
     def run_gen_lammps(self):
-        pot_dir = self.runs["train_ace"][-1]
-        if not os.path.exists(f"{pot_dir}/output_potential.asi"):
+        pot_dir = self.runs["potential"][-1]
+
+        if self.potential == "pace" and not os.path.exists(f"{pot_dir}/output_potential.yaml"):
             raise FileNotFoundError(
-                f"{pot_dir}/output_potential.asi not found. Make sure ACE potential has completed training"
+                f"{pot_dir}/output_potential.yaml not found. Make sure ACE potential has completed training"
             )
+
         run_id = str(uuid.uuid4())
         print(f"Setting up for LAMMPS runs in /gen_structures/{run_id}")
-        lammps_input_writer(self.runs["train_ace"][-1], self.atom_types, **self.lammps_params)
+        lammps_input_writer(self.runs["potential"][-1], self.potential, self.atom_types, **self.lammps_params)
         path = f"{self.wd}/gen_structures/{run_id}"
         os.makedirs(path)
-        structures = gen_even_structures(units=self.units, mp_api_key=self.mp_api_key, **self.composition_params)
+
+        if self.struc_gen_params["scheme"] == "even":
+            structures = gen_even_structures(
+                units=self.self.struc_gen_params["units"],
+                target_atoms=self.struc_gen_params["target_atoms"],
+                mp_api_key=self.mp_api_key,
+                **self.composition_params,
+            )
+        elif self.struc_gen_params["scheme"] == "random":
+            atoms = self.struc_gen_params["atoms"]
+            structures = gen_random_glasses(
+                atoms["modifiers"],
+                atoms["formers"],
+                atoms["anions"],
+                num_structures=self.struc_gen_params["num_structures"],
+                target_atoms=self.struc_gen_params["target_atoms"],
+                mp_api_key=self.mp_api_key,
+                datatype="pymatgen",
+            )
+
         directories = gen_lammps_structures(structures, self.strain_params, specorder=self.atom_types, path=path)
         wfs = run_lammps(directories)
         self.lp.add_wf(wfs)
@@ -189,7 +235,7 @@ class balace:
 
     def run_evaluate(self):
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
-        potential_folder = self.runs["train_ace"][-1]
+        potential_folder = self.runs["potential"][-1]
         structures, metadata = get_structures_from_lammps(folder, potential_folder, **self.selection_params)
         wf, run_id = static_run(structures, metadata)
         self.runs.setdefault("DFT", []).append([str(run_id)])
@@ -233,3 +279,34 @@ class balace:
 
         if self.auto_queue is True:
             self.queue_rapidfire() if hasattr(self, "qadapter") else print("No qadapter found, skipping auto queue")
+
+    def run_grace(self):
+        print(f"Current state: {self.state}, Iteration: {self.iteration}")
+        if self.state == "start":
+            directory = self.initial_potential
+            self.runs.setdefault("potential", []).append(directory)
+
+        # Mapping states to methods
+        state_methods = {
+            "start": self.run_gen_lammps,
+            "static_runs": self.run_train_grace,
+            "trained_ace": self.run_gen_lammps,
+            "lammps_runs": self.run_evaluate,
+        }
+
+        # Get the corresponding method and execute it
+        state_method = state_methods.get(self.state)
+        if state_method:
+            state_method()
+        else:
+            raise ValueError(f"Unknown state: {self.state}")
+
+        self.save()
+
+    def run(self):
+        if self.potential == "pace":
+            self.run_pace()
+        elif self.potential == "grace":
+            self.run_grace()
+        else:
+            raise ValueError(f"Unsupported potential type: {self.potential}")

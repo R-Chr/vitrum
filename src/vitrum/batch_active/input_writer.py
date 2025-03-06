@@ -3,61 +3,90 @@ import math
 
 
 def lammps_input_writer(
-    pot_dir, atoms, max_temp=5000, min_temp=0.01, cooling_rate=10, sample_rate=100000, seed=1, c_min=2.5, c_max=30
+    pot_dir,
+    potential,
+    atoms,
+    max_temp=5000,
+    min_temp=0.01,
+    cooling_rate=10,
+    sample_rate=100000,
+    equilibration_steps=10000,
+    seed=1,
+    c_min=2.5,
+    c_max=30,
+    gamma_sample_rate=5,
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
     if min_temp == 0:
         print("Using default min_temp = 0.01, LAMMPS cannot handle temperature = 0")
         min_temp = 0.01
 
-    input = f"""
-    #Initialization
-    units           metal
-    dimension       3
-    boundary        p p p
-    atom_style      atomic
+    potential_templates = {
+        "pace": (
+            "pair_style  pace/extrapolation\n"
+            "pair_coeff  * * {}/output_potential.yaml {}/output_potential.asi {}\n"
+            "fix gamma all pair 1 pace/extrapolation gamma 1"
+        ),
+        "grace": (
+            "pair_style  grace/fs extrapolation\n"
+            "pair_coeff  * * {}/FS_model.yaml {}/FS_model.asi {}\n"
+            "fix gamma all pair 1 grace/fs gamma 1"
+        ),
+    }
 
-    read_data structure.dat
+    if potential not in potential_templates:
+        raise ValueError(f"Unsupported potential type: {potential}")
 
-    ## in.lammps
-    pair_style  pace/extrapolation
-    pair_coeff  * * {pot_dir}/output_potential.yaml {pot_dir}/output_potential.asi {atom_string}
-    fix pace_gamma all pair 1 pace/extrapolation gamma 1
-    compute max_pace_gamma all reduce max f_pace_gamma
+    potential_string = potential_templates[potential].format(pot_dir, pot_dir, atom_string)
 
-    #output
-    thermo    1000
-    thermo_style   custom step temp pe etotal press vol density c_max_pace_gamma
-    velocity all create {max_temp} {seed} rot yes dist gaussian
+    cooling_steps = int(sample_rate * math.ceil(((max_temp - min_temp) * 1000 / cooling_rate) / sample_rate))
 
-    # dump extrapolative structures if c_max_pace_gamma > {c_min}, skip otherwise, check every steps
-    variable dump_skip equal "c_max_pace_gamma < {c_min}"
-    dump pace_dump all custom 5 gamma.dump id type x y z f_pace_gamma
-    dump_modify pace_dump skip v_dump_skip
+    input_script = f"""
+# Initialization
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+read_data       structure.dat
 
-    # stop simulation if maximum extrapolation grade exceeds {c_max}
-    variable max_pace_gamma equal c_max_pace_gamma
-    fix extreme_extrapolation all halt 1 v_max_pace_gamma > {c_max}
+# Potential setup
+{potential_string}
+compute max_gamma all reduce max f_gamma
 
-    fix 1 all nvt temp {max_temp} {max_temp} 0.1
-    run 10000
-    unfix 1
-    undump pace_dump
+# Output settings
+thermo          1000
+thermo_style    custom step temp pe etotal press vol density c_max_gamma
+velocity all create {max_temp} {seed} rot yes dist gaussian
 
-    reset_timestep 0
+# Dump settings
+variable dump_skip equal "c_max_gamma < {c_min}"
+dump gamma_dump all custom {gamma_sample_rate} gamma.dump id type x y z f_gamma
+dump_modify gamma_dump skip v_dump_skip
 
-    dump pace_dump all custom 5 gamma.dump id type x y z f_pace_gamma
-    dump_modify pace_dump append yes skip v_dump_skip
-    dump glass_dump all custom {sample_rate} glass.dump id type x y z
+# Stop condition
+variable max_gamma equal c_max_gamma
+fix extreme_extrapolation all halt 1 v_max_gamma > {c_max}
 
-    fix 1 all nvt temp {max_temp} {min_temp} 0.1
-    run {int(sample_rate * math.ceil(((max_temp-min_temp)*1000 / cooling_rate) / sample_rate))}
+# Equilibration
+fix 1 all nvt temp {max_temp} {max_temp} 0.1
+run {equilibration_steps}
+unfix 1
+undump gamma_dump
 
-    unfix 1
-    """
+reset_timestep 0
 
-    with open("in.ace", "w") as f:
-        f.writelines(input)
+# Cooling and sampling
+dump gamma_dump all custom {gamma_sample_rate} gamma.dump id type x y z f_gamma
+dump_modify gamma_dump append yes skip v_dump_skip
+dump glass_dump all custom {sample_rate} glass.dump id type x y z
+
+fix 1 all nvt temp {max_temp} {min_temp} 0.1
+run {cooling_steps}
+unfix 1
+"""
+
+    with open("in.run", "w") as f:
+        f.write(input_script.strip() + "\n")
 
 
 def ace_yaml_writer(

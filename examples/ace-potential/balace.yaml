@@ -2,10 +2,22 @@
 
 # Mandatory parameters
 mp_api_key: "YOUR_API_KEY_HERE"
-units: ["YOUR_UNITS_HERE"] # e.g. "SiO2", "Fe2O3", "Al2O3"
 lammps_exe: "YOUR_LAMMPS_PATH_HERE"
 launchpad: "YOUR_LAUNCHPAD_PATH_HERE"
+potential: pace # or "grace"
 
+struc_gen_params:
+  scheme: even
+  units: ["YOUR_UNITS_HERE"] # If scheme = even, insert atomic units e.g. "SiO2", "Fe2O3", "Al2O3"
+  target_atoms: 100
+
+  #scheme: random
+  #atoms: ["YOUR_ATOMS_HERE"]
+    #modifiers: ["YOUR_MODIFIERS_HERE"] # List of modifier atoms
+    #formers: ["YOUR_FORMERS_HERE"] # List of networkformer atoms
+    #anions: ["YOUR_ANIONS_HERE"] # List of anion atoms
+  #target_atoms: 100
+  #num_structures: 1000
 
 # Optional parameters
 

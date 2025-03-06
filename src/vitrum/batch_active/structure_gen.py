@@ -13,6 +13,8 @@ def gen_even_structures(
     mp_api_key: str,
     spacing: int = 10,
     datatype: str = "pymatgen",
+    target_atoms: int = 100,
+    minAllowDis: float = 1.7,
     **kwargs,
 ) -> list:
     """
@@ -38,7 +40,13 @@ def gen_even_structures(
     for comb in tqdm(valid_combinations):
         atoms_dict = {str(units[i]): comb[i] for i in range(len(units))}
         structures.append(
-            get_random_packed(atoms_dict, target_atoms=100, minAllowDis=1.7, mp_api_key=mp_api_key, datatype=datatype)
+            get_random_packed(
+                atoms_dict,
+                target_atoms=target_atoms,
+                minAllowDis=minAllowDis,
+                mp_api_key=mp_api_key,
+                datatype=datatype,
+            )
         )
     return structures
 
