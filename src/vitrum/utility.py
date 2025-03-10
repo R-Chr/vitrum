@@ -7,6 +7,7 @@ from pymatgen.alchemy.materials import TransformedStructure
 from pymatgen.transformations.standard_transformations import DeformStructureTransformation
 import warnings
 from scipy.signal import argrelextrema
+from ase.data import covalent_radii, atomic_numbers
 
 
 def get_random_packed(
@@ -77,6 +78,12 @@ def get_random_packed(
     if density:
         mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
         cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
+
+    if covalent_radii:
+        all_radii = np.hstack(
+            [np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure.keys()]
+        )
+        cell_vol = np.sum((4 / 3 * np.pi * all_radii**3)) * 3
 
     k = (cell_vol / (side_ratios[0] * side_ratios[1] * side_ratios[2])) ** (1 / 3)
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])

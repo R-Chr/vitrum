@@ -2,6 +2,8 @@ import random
 import numpy as np
 from vitrum.utility import get_random_packed
 import math
+from pymatgen.core import Element
+import tqdm
 
 
 def my_round(x):
@@ -27,7 +29,22 @@ def is_multiple(c, total, tol=1e-9):
     return math.isclose(ratio, round(ratio), abs_tol=tol)
 
 
-def gen_random_glasses(modifiers, formers, anions, num_structures=30, target_atoms=100, mp_api_key=None, **kwargs):
+def choose_count(weights):
+    outcomes = list(range(len(weights)))
+    return random.choices(outcomes, weights=weights, k=1)[0]
+
+
+def random_partition(x, total=10):
+    if x <= 1:
+        return [1]
+    cuts = np.sort(np.random.choice(range(1, total), x - 1, replace=False))
+    parts = np.diff([0] + list(cuts) + [total])
+    return parts / total
+
+
+def gen_random_glasses(
+    modifiers, formers, anions, weights=None, num_structures=30, target_atoms=100, mp_api_key=None, **kwargs
+):
     """
     Generate random glass structures from the atoms in given modifiers, formers and anions.
 
@@ -42,94 +59,69 @@ def gen_random_glasses(modifiers, formers, anions, num_structures=30, target_ato
     Returns:
         compositions (list): A list of random packed structures.
     """
+    charges_modifiers = {e: Element(e).oxidation_states[-1] for e in modifiers}
+    charges_formers = {e: Element(e).oxidation_states[-1] for e in formers}
+    charges_anions = {e: Element(e).oxidation_states[0] for e in anions}
 
-    charges = modifiers | formers | anions
-    RATIOS = np.linspace(0.2, 0.8, 4)
+    charges = charges_modifiers | charges_formers | charges_anions
     compositions = []
     composition_sets = set()
 
-    def choose_count(weights):
-        outcomes = list(range(len(weights)))
-        return random.choices(outcomes, weights=weights, k=1)[0]
+    num_mod_weights = weights.get("num_mod_weights", [0.5, 0.5, 0, 0])
+    num_former_weights = weights.get("num_former_weights", [0.05, 0.65, 0.3, 0])
+    num_anion_weights = weights.get("num_anion_weights", [0, 0.6, 0.4, 0])
+
+    bias_modifiers = weights.get("bias_modifiers", [1 for _ in modifiers])
+    bias_modifiers = bias_modifiers / np.sum(bias_modifiers)
+    bias_formers = weights.get("bias_formers", [1 for _ in formers])
+    bias_formers = bias_formers / np.sum(bias_formers)
+    bias_anions = weights.get("bias_anions", [1 for _ in anions])
+    bias_anions = bias_anions / np.sum(bias_anions)
+
+    pbar = tqdm.tqdm(total=num_structures)
 
     while len(compositions) < num_structures:
-        mod_weights = [0.5, 0.5, 0, 0]
-        former_weights = [0.1, 0.6, 0.3, 0]
-        anion_weights = [0, 0.6, 0.4, 0]
+        print("Generated structures")
+        pbar.n = len(compositions)
+        pbar.refresh()
 
-        num_mod = choose_count(mod_weights)
-        num_former = choose_count(former_weights)
-        num_anion = choose_count(anion_weights)
-
-        chosen_mods = random.sample(list(modifiers.keys()), num_mod) if num_mod else []
-        chosen_formers = random.sample(list(formers.keys()), num_former) if num_former else []
-        chosen_anions = random.sample(list(anions.keys()), num_anion) if num_anion else []
+        num_mod = choose_count(num_mod_weights)
+        num_former = choose_count(num_former_weights)
+        num_anion = choose_count(num_anion_weights)
 
         if (num_mod + num_former) == 0 or num_anion == 0:
             continue
 
-        if num_mod and num_former:
-            mod_form_ratio = random.choice(RATIOS)
-        elif num_mod:
-            mod_form_ratio = 1
-        else:
-            mod_form_ratio = 0
+        chosen_mods = np.random.choice(modifiers, num_mod, replace=False, p=bias_modifiers) if num_mod else []
+        chosen_formers = np.random.choice(formers, num_former, replace=False, p=bias_formers) if num_former else []
+        chosen_anions = np.random.choice(anions, num_anion, replace=False, p=bias_anions) if num_anion else []
 
         amounts = []
 
-        if num_mod == 1:
-            mod_amount = my_round(mod_form_ratio)
-            amounts.append(mod_amount)
-            avg_mod_charge = modifiers[chosen_mods[0]]
-        else:
-            avg_mod_charge = 0
+        mod_form_ratio = random_partition(2) if num_mod and num_former else [int(bool(num_mod)), int(bool(num_former))]
+        mod_ratio = random_partition(num_mod)
+        form_ratio = random_partition(num_former)
+        anion_ratio = random_partition(num_anion)
 
-        if num_former == 1:
-            form_amount = my_round(1 - mod_form_ratio)
-            amounts.append(form_amount)
-            avg_form_charge = formers[chosen_formers[0]]
-        elif num_former == 2:
-            form_ratio = random.choice(RATIOS)
-            amt1 = my_round(form_ratio * (1 - mod_form_ratio))
-            amt2 = my_round((1 - form_ratio) * (1 - mod_form_ratio))
-            amounts.extend([amt1, amt2])
-            avg_form_charge = formers[chosen_formers[0]] * form_ratio + formers[chosen_formers[1]] * (1 - form_ratio)
-        else:
-            avg_form_charge = 0
+        avg_mod_charge = np.sum([charges[chosen_mod] * mod_ratio[ind] for ind, chosen_mod in enumerate(chosen_mods)])
+        avg_form_charge = np.sum(
+            [charges[chosen_form] * form_ratio[ind] for ind, chosen_form in enumerate(chosen_formers)]
+        )
+        avg_anion_charge = np.sum(
+            [charges[chosen_anion] * anion_ratio[ind] for ind, chosen_anion in enumerate(chosen_anions)]
+        )
 
-        if num_mod and num_former:
-            avg_cation_charge = mod_form_ratio * avg_mod_charge + (1 - mod_form_ratio) * avg_form_charge
-        elif num_mod:
-            avg_cation_charge = avg_mod_charge
-        else:
-            avg_cation_charge = avg_form_charge
+        avg_cation_charge = mod_form_ratio[0] * avg_mod_charge + mod_form_ratio[1] * avg_form_charge
+        cation_anion_ratio = abs(avg_cation_charge) / abs(avg_anion_charge)
 
-        if num_anion == 1:
-            anion = chosen_anions[0]
-            avg_anion_charge = anions[anion]
-            cation_anion_ratio = abs(avg_cation_charge) / abs(avg_anion_charge)
-            anion_amount = my_round(cation_anion_ratio)
-            amounts.append(anion_amount)
-        elif num_anion == 2:
-            anion_ratio = random.choice(RATIOS)
-            amt1, amt2 = None, None
-            an1, an2 = chosen_anions[0], chosen_anions[1]
-            avg_anion_charge = anions[an1] * anion_ratio + anions[an2] * (1 - anion_ratio)
-            cation_anion_ratio = abs(avg_cation_charge) / abs(avg_anion_charge)
-            amt1 = my_round(anion_ratio * cation_anion_ratio)
-            amt2 = my_round((1 - anion_ratio) * cation_anion_ratio)
-            amounts.extend([amt1, amt2])
-        else:
-            continue
-
-        atoms = chosen_mods + chosen_formers + chosen_anions
+        if num_mod > 0:
+            amounts.extend([my_round(modifier_ratio * mod_form_ratio[0]) for modifier_ratio in mod_ratio])
+        if num_former > 0:
+            amounts.extend([my_round(former_ratio * mod_form_ratio[1]) for former_ratio in form_ratio])
+        if num_anion > 0:
+            amounts.extend([my_round(ani_ratio * cation_anion_ratio) for ani_ratio in anion_ratio])
+        atoms = list(chosen_mods) + list(chosen_formers) + list(chosen_anions)
         int_amounts = (np.array(amounts) * 100).astype(int)
-
-        formula = "".join(f"{atom}{amt}" for atom, amt in zip(atoms, int_amounts))
-        if formula in composition_sets:
-            continue
-        composition_sets.add(formula)
-
         total_charge = sum(amt * charges[atom] for amt, atom in zip(int_amounts, atoms))
 
         if total_charge != 0:
@@ -139,9 +131,14 @@ def gen_random_glasses(modifiers, formers, anions, num_structures=30, target_ato
                 continue
             int_amounts = np.array(int_amounts_list)
 
+        formula = "".join(f"{atom}{amt}" for atom, amt in zip(atoms, int_amounts))
+        if formula in composition_sets:
+            continue
+        composition_sets.add(formula)
         rand_atoms = get_random_packed(formula, target_atoms=target_atoms, mp_api_key=mp_api_key, **kwargs)
 
         if len(rand_atoms) > 200:
             continue
 
         compositions.append(rand_atoms)
+    return compositions

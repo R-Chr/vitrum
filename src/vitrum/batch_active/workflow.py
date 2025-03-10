@@ -124,6 +124,6 @@ def run_lammps(directories, wd, lammps_exe, run_id):
         command_string = f"cd {path}/ ; srun {lammps_exe} -in {wd}/in.ace"
         bash_readable_string = command_string.replace(")", r"\)").replace("(", r"\(")
         firetask = ScriptTask.from_str(bash_readable_string)
-        fws.append(Firework(firetask, name=f"{path}"))
+        fws.append(Firework(firetask, name=os.path.basename(os.path.normpath(path))))
     wf = Workflow(fws, name="lammps_runs", metadata={"uuid": run_id})
     return wf

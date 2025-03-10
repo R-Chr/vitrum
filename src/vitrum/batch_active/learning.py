@@ -62,7 +62,16 @@ class balace:
         self.load_config()
         self.set_defaults()
         self.validate_config()
-        self.atom_types = [atom.symbol for atom in Composition("".join([unit for unit in self.units]))]
+        if self.struc_gen_params["scheme"] == "even":
+            self.atom_types = [
+                atom.symbol for atom in Composition("".join([unit for unit in self.strain_params["units"]]))
+            ]
+        elif self.struc_gen_params["scheme"] == "random":
+            self.atom_types = (
+                self.struc_gen_params["atoms"]["modifiers"]
+                + self.struc_gen_params["atoms"]["formers"]
+                + self.struc_gen_params["atoms"]["anions"]
+            )
 
     def load_config(self):
         """Loads the YAML configuration file."""
@@ -78,7 +87,6 @@ class balace:
 
     def set_defaults(self):
         """Sets default values for missing attributes."""
-        self.potential = getattr(self, "potential", "pace")
         self.incar_settings = getattr(self, "incar_settings", False)
         self.high_temp_params = getattr(self, "high_temp_params", {"temperature": 5000, "steps": 100, "sampling": 5})
         self.strain_params = getattr(self, "strain_params", {"num_strains": 3, "max_strain": 0.2})
@@ -98,13 +106,19 @@ class balace:
             raise RuntimeError("struc_gen_params are not specified in config file.")
 
         if self.struc_gen_params["scheme"] == "even" and "units" not in self.struc_gen_params:
-            raise RuntimeError("units not specified in struc_gen_params.")
+            raise RuntimeError("units must be specified in struc_gen_params for even scheme.")
 
         if self.struc_gen_params["scheme"] == "random" and "atoms" not in self.struc_gen_params:
-            raise RuntimeError("atoms not specified in struc_gen_params.")
+            raise RuntimeError("atoms must be specified in struc_gen_params for random scheme.")
+
+        if not hasattr(self, "potential"):
+            raise RuntimeError("potential type must be specified in config file, e.g. pace or grace.")
 
         if not hasattr(self, "mp_api_key"):
             raise RuntimeError("mp_api_key not specified in config file.")
+
+        if not hasattr(self, "lammps_exe"):
+            raise RuntimeError("lammps_exe not specified in config file.")
 
         if not hasattr(self, "launchpad"):
             raise RuntimeError("Launchpad yaml not specified in config file.")
@@ -227,7 +241,7 @@ class balace:
             )
 
         directories = gen_lammps_structures(structures, self.strain_params, specorder=self.atom_types, path=path)
-        wfs = run_lammps(directories)
+        wfs = run_lammps(directories, self.wd, self.lammps_exe, run_id)
         self.lp.add_wf(wfs)
         self.runs.setdefault("run_lammps", []).append(run_id)
         print("Generating structures with LAMMPS")
@@ -283,6 +297,8 @@ class balace:
     def run_grace(self):
         print(f"Current state: {self.state}, Iteration: {self.iteration}")
         if self.state == "start":
+            if not hasattr(self, "initial_potential"):
+                raise ValueError("Initial potential not specified in config file.")
             directory = self.initial_potential
             self.runs.setdefault("potential", []).append(directory)
 
