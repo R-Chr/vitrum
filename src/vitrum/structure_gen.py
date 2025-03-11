@@ -43,7 +43,7 @@ def random_partition(x, total=10):
 
 
 def gen_random_glasses(
-    modifiers, formers, anions, weights=None, num_structures=30, target_atoms=100, mp_api_key=None, **kwargs
+    modifiers, formers, anions, weights={}, num_structures=30, target_atoms=100, mp_api_key=None, **kwargs
 ):
     """
     Generate random glass structures from the atoms in given modifiers, formers and anions.
