@@ -117,8 +117,8 @@ class balace:
         if not hasattr(self, "mp_api_key"):
             raise RuntimeError("mp_api_key not specified in config file.")
 
-        if not hasattr(self, "lammps_exe"):
-            raise RuntimeError("lammps_exe not specified in config file.")
+        if not hasattr(self, "lammps_command"):
+            raise RuntimeError("lammps_command not specified in config file.")
 
         if not hasattr(self, "launchpad"):
             raise RuntimeError("Launchpad yaml not specified in config file.")
@@ -242,7 +242,7 @@ class balace:
             )
 
         directories = gen_lammps_structures(structures, self.strain_params, specorder=self.atom_types, path=path)
-        wfs = run_lammps(directories, self.wd, self.lammps_exe, run_id)
+        wfs = run_lammps(directories, self.wd, self.lammps_command, run_id)
         self.lp.add_wf(wfs)
         self.runs.setdefault("run_lammps", []).append(run_id)
         print("Generating structures with LAMMPS")

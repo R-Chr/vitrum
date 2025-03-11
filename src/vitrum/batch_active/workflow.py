@@ -118,10 +118,10 @@ def train_pace(self, pace_kwargs=None):
     return wf, directory
 
 
-def run_lammps(directories, wd, lammps_exe, run_id):
+def run_lammps(directories, wd, lammps_command, run_id):
     fws = []
     for path in directories:
-        command_string = f"cd {path}/ ; srun {lammps_exe} -in {wd}/in.ace"
+        command_string = f"cd {path}/ ; {lammps_command} -in {wd}/in.run"
         bash_readable_string = command_string.replace(")", r"\)").replace("(", r"\(")
         firetask = ScriptTask.from_str(bash_readable_string)
         fws.append(Firework(firetask, name=os.path.basename(os.path.normpath(path))))
