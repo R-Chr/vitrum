@@ -234,7 +234,7 @@ class balace:
                 atoms["modifiers"],
                 atoms["formers"],
                 atoms["anions"],
-                weights=self.struc_gen_params.get("weights", None),
+                weights=self.struc_gen_params.get("weights", {}),
                 num_structures=self.struc_gen_params["num_structures"],
                 target_atoms=self.struc_gen_params["target_atoms"],
                 mp_api_key=self.mp_api_key,

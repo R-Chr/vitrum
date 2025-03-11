@@ -16,6 +16,7 @@ def get_random_packed(
     target_atoms=100,
     minAllowDis=1.7,
     mp_api_key=None,
+    covalent_radius=False,
     datatype="ase",
     seed=None,
     side_ratios=[1, 1, 1],
@@ -79,7 +80,7 @@ def get_random_packed(
         mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
         cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
 
-    if covalent_radii:
+    if covalent_radius:
         all_radii = np.hstack(
             [np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure.keys()]
         )
