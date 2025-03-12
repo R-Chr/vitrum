@@ -40,7 +40,9 @@ def lammps_input_writer(
 
     potential_string = potential_templates[potential].format(pot_dir, pot_dir, atom_string)
 
-    cooling_steps = int(sample_rate * math.ceil(((max_temp - min_temp) * 1000 / cooling_rate) / sample_rate))
+    cooling_steps = int(
+        sample_rate * math.ceil(((max_temp - min_temp) * 1000 / cooling_rate / timestep) / sample_rate)
+    )
 
     input_script = f"""
 # Initialization
