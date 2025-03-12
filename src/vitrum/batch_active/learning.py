@@ -64,7 +64,7 @@ class balace:
         self.validate_config()
         if self.struc_gen_params["scheme"] == "even":
             self.atom_types = [
-                atom.symbol for atom in Composition("".join([unit for unit in self.strain_params["units"]]))
+                atom.symbol for atom in Composition("".join([unit for unit in self.struc_gen_params["units"]]))
             ]
         elif self.struc_gen_params["scheme"] == "random":
             self.atom_types = (
@@ -168,10 +168,30 @@ class balace:
             self.lp.add_wf(wf)
             return True
 
+    def generate_structures(self):
+        if self.struc_gen_params["scheme"] == "even":
+            structures = gen_even_structures(
+                units=self.self.struc_gen_params["units"],
+                target_atoms=self.struc_gen_params["target_atoms"],
+                mp_api_key=self.mp_api_key,
+                **self.composition_params,
+            )
+        elif self.struc_gen_params["scheme"] == "random":
+            atoms = self.struc_gen_params["atoms"]
+            structures = gen_random_glasses(
+                atoms["modifiers"],
+                atoms["formers"],
+                atoms["anions"],
+                weights=self.struc_gen_params.get("weights", {}),
+                num_structures=self.struc_gen_params["num_structures"],
+                target_atoms=self.struc_gen_params["target_atoms"],
+                mp_api_key=self.mp_api_key,
+                datatype="pymatgen",
+            )
+        return structures
+
     def run_high_temp(self):
-        structures = gen_even_structures(
-            units=self.struc_gen_params["units"], mp_api_key=self.mp_api_key, **self.composition_params
-        )
+        structures = self.generate_structures()
         wf, run_id = high_temp_run(structures, self.strain_params, self.incar_settings, self.high_temp_params)
         self.runs.setdefault("DFT", []).append([str(run_id)])
         self.state = "high_temp_AIMD"
@@ -220,27 +240,7 @@ class balace:
         lammps_input_writer(self.runs["potential"][-1], self.potential, self.atom_types, **self.lammps_params)
         path = f"{self.wd}/gen_structures/{run_id}"
         os.makedirs(path)
-
-        if self.struc_gen_params["scheme"] == "even":
-            structures = gen_even_structures(
-                units=self.self.struc_gen_params["units"],
-                target_atoms=self.struc_gen_params["target_atoms"],
-                mp_api_key=self.mp_api_key,
-                **self.composition_params,
-            )
-        elif self.struc_gen_params["scheme"] == "random":
-            atoms = self.struc_gen_params["atoms"]
-            structures = gen_random_glasses(
-                atoms["modifiers"],
-                atoms["formers"],
-                atoms["anions"],
-                weights=self.struc_gen_params.get("weights", {}),
-                num_structures=self.struc_gen_params["num_structures"],
-                target_atoms=self.struc_gen_params["target_atoms"],
-                mp_api_key=self.mp_api_key,
-                datatype="pymatgen",
-            )
-
+        structures = self.generate_structures()
         directories = gen_lammps_structures(structures, self.strain_params, specorder=self.atom_types, path=path)
         wfs = run_lammps(directories, self.wd, self.lammps_command, run_id)
         self.lp.add_wf(wfs)

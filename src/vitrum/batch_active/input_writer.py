@@ -15,6 +15,7 @@ def lammps_input_writer(
     c_min=2.5,
     c_max=30,
     gamma_sample_rate=5,
+    timestep=2,
 ):
     atom_string = " ".join([str(atom) for atom in atoms])
     if min_temp == 0:
@@ -53,6 +54,8 @@ read_data       structure.dat
 {potential_string}
 compute max_gamma all reduce max f_gamma
 
+timestep {timestep}
+
 # Output settings
 thermo          1000
 thermo_style    custom step temp pe etotal press vol density c_max_gamma
@@ -68,7 +71,7 @@ variable max_gamma equal c_max_gamma
 fix extreme_extrapolation all halt 1 v_max_gamma > {c_max}
 
 # Equilibration
-fix 1 all nvt temp {max_temp} {max_temp} 0.1
+fix 1 all nvt temp {max_temp} {max_temp} {timestep*0.1}
 run {equilibration_steps}
 unfix 1
 undump gamma_dump
@@ -80,7 +83,7 @@ dump gamma_dump all custom {gamma_sample_rate} gamma.dump id type x y z f_gamma
 dump_modify gamma_dump append yes skip v_dump_skip
 dump glass_dump all custom {sample_rate} glass.dump id type x y z
 
-fix 1 all nvt temp {max_temp} {min_temp} 0.1
+fix 1 all nvt temp {max_temp} {min_temp} {timestep*0.1}
 run {cooling_steps}
 unfix 1
 """
