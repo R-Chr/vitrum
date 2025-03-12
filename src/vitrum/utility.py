@@ -1,25 +1,65 @@
 from ase import Atoms
-from mp_api.client import MPRester
 import numpy as np
 from pymatgen.core import Composition, Structure
 from collections import deque
 from pymatgen.alchemy.materials import TransformedStructure
 from pymatgen.transformations.standard_transformations import DeformStructureTransformation
-import warnings
 from scipy.signal import argrelextrema
 from ase.data import covalent_radii, atomic_numbers
+from atomate2.common.jobs.mpmorph import get_average_volume_from_mp, get_average_volume_from_db_cached
+
+
+def get_volume(
+    composition: Composition | str,
+    structure: dict,
+    vol_per_atom_source: float | str = "mp",
+    db_kwargs: dict | None = None,
+    density: float | None = None,
+):
+
+    struct_db = vol_per_atom_source.lower() if isinstance(vol_per_atom_source, str) else None
+    db_kwargs = db_kwargs or ({"use_cached": True} if struct_db == "mp" else {})
+    cell_vol = None
+    if isinstance(vol_per_atom_source, float | int):
+        vol_per_atom = vol_per_atom_source
+
+    elif struct_db == "mp":
+        vol_per_atom = get_average_volume_from_mp(composition, **db_kwargs)
+
+    elif struct_db == "icsd":
+        vol_per_atom = get_average_volume_from_db_cached(composition, db_name="icsd", **db_kwargs)
+
+    elif struct_db == "density":
+        if not density:
+            raise ValueError("Must specify a valid density")
+        mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
+        cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
+
+    elif struct_db == "covalent_radius":
+        all_radii = np.hstack(
+            [np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure.keys()]
+        )
+        cell_vol = np.sum((4 / 3 * np.pi * all_radii**3)) * 3
+
+    else:
+        raise ValueError(f"Unknown volume per atom source: {vol_per_atom_source}.")
+
+    if not cell_vol:
+        cell_vol = vol_per_atom * sum(structure.values())
+
+    return cell_vol
 
 
 def get_random_packed(
-    composition,
-    density=None,
-    target_atoms=100,
-    minAllowDis=1.7,
-    mp_api_key=None,
-    covalent_radius=False,
-    datatype="ase",
-    seed=None,
-    side_ratios=[1, 1, 1],
+    composition: str | dict | Composition,
+    target_atoms: int = 100,
+    minAllowDis: float = 1.7,
+    vol_per_atom_source: float | str = "mp",
+    datatype: str = "ase",
+    db_kwargs: dict | None = None,
+    density: float | None = None,
+    seed: int | None = None,
+    side_ratios: list = [1, 1, 1],
 ):
     """
     Generate a random packed structure based on the given composition.
@@ -51,40 +91,7 @@ def get_random_packed(
     for el in full_cell_composition:
         structure[str(el)] = int(full_cell_composition.element_composition.get(el))
     np.random.seed(seed)
-
-    if not mp_api_key and not density:
-        density = 2.5
-        warnings.warn("No MP API key provided, setting density to 2.5 g/cm3")
-
-    if mp_api_key:
-        mpr = MPRester(mp_api_key, mute_progress_bars=True)
-        comp_entries = mpr.get_entries(composition.reduced_formula)
-        if len(comp_entries) > 0:
-            vols = np.min([entry.structure.volume / entry.structure.num_sites for entry in comp_entries])
-        else:
-            _entries = mpr.get_entries_in_chemsys(
-                [str(el) for el in composition.elements], additional_criteria={"is_stable": True}
-            )
-            entries = []
-            for entry in _entries:
-                if set(entry.structure.composition.elements) == set(composition.elements):
-                    entries.append(entry)
-                if len(entry.structure.composition.elements) >= 2:
-                    entries.append(entry)
-            vols = [entry.structure.volume / entry.structure.num_sites for entry in entries]
-
-        vol_per_atom = np.mean(vols)
-        cell_vol = vol_per_atom * full_cell_composition.num_atoms
-
-    if density:
-        mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
-        cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
-
-    if covalent_radius:
-        all_radii = np.hstack(
-            [np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure.keys()]
-        )
-        cell_vol = np.sum((4 / 3 * np.pi * all_radii**3)) * 3
+    cell_vol = get_volume(composition, structure, vol_per_atom_source, db_kwargs, density)
 
     k = (cell_vol / (side_ratios[0] * side_ratios[1] * side_ratios[2])) ** (1 / 3)
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])

@@ -63,14 +63,12 @@ def static_run(structures, incar_settings, metadata=None):
     return wf, run_id
 
 
-def rerun_crashed_jobs(crashed_jobs, run_id, incar_settings, high_temp_params, mp_api_key):
+def rerun_crashed_jobs(crashed_jobs, run_id, incar_settings, high_temp_params):
     flow_jobs = []
     for info in crashed_jobs:
         composition = info["composition"]
         strain = info["strain"]
-        structure = get_random_packed(
-            composition, target_atoms=100, minAllowDis=1.5, mp_api_key=mp_api_key, datatype="pymatgen"
-        )
+        structure = get_random_packed(composition, target_atoms=100, minAllowDis=1.5, datatype="pymatgen")
         strain_struc = apply_strain_to_structure(structure, [np.eye(3) * (1.0 + strain)])[0].final_structure
         job = md_flow(
             strain_struc,

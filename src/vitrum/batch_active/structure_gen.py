@@ -10,7 +10,6 @@ import os
 
 def gen_even_structures(
     units,
-    mp_api_key: str,
     spacing: int = 10,
     datatype: str = "pymatgen",
     target_atoms: int = 100,
@@ -44,7 +43,6 @@ def gen_even_structures(
                 atoms_dict,
                 target_atoms=target_atoms,
                 minAllowDis=minAllowDis,
-                mp_api_key=mp_api_key,
                 datatype=datatype,
             )
         )

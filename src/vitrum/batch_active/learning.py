@@ -34,7 +34,6 @@ class balace:
         Attributes:
             auto_queue (bool): whether to automatically queue runs
             state (str): current state of the balace run
-            mp_api_key (str): materials project API keys
             filename (str): filename to save the class to
             runs (dict): dictionary containing information about runs
             wd (str): working directory
@@ -114,9 +113,6 @@ class balace:
         if not hasattr(self, "potential"):
             raise RuntimeError("potential type must be specified in config file, e.g. pace or grace.")
 
-        if not hasattr(self, "mp_api_key"):
-            raise RuntimeError("mp_api_key not specified in config file.")
-
         if not hasattr(self, "lammps_command"):
             raise RuntimeError("lammps_command not specified in config file.")
 
@@ -163,7 +159,7 @@ class balace:
         else:
             print(f"Found {len(crashed_jobs)} crashed jobs in wf: {wf_id}")
             print("Resubmitting crashed jobs...")
-            wf = rerun_crashed_jobs(crashed_jobs, run_id, self.incar_settings, self.high_temp_params, self.mp_api_key)
+            wf = rerun_crashed_jobs(crashed_jobs, run_id, self.incar_settings, self.high_temp_params)
             self.runs["DFT"][-1].append(str(run_id))
             self.lp.add_wf(wf)
             return True
@@ -173,7 +169,6 @@ class balace:
             structures = gen_even_structures(
                 units=self.self.struc_gen_params["units"],
                 target_atoms=self.struc_gen_params["target_atoms"],
-                mp_api_key=self.mp_api_key,
                 **self.composition_params,
             )
         elif self.struc_gen_params["scheme"] == "random":
@@ -185,7 +180,6 @@ class balace:
                 weights=self.struc_gen_params.get("weights", {}),
                 num_structures=self.struc_gen_params["num_structures"],
                 target_atoms=self.struc_gen_params["target_atoms"],
-                mp_api_key=self.mp_api_key,
                 datatype="pymatgen",
             )
         return structures

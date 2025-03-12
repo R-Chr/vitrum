@@ -42,9 +42,7 @@ def random_partition(x, total=10):
     return parts / total
 
 
-def gen_random_glasses(
-    modifiers, formers, anions, weights={}, num_structures=30, target_atoms=100, mp_api_key=None, **kwargs
-):
+def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30, target_atoms=100, **kwargs):
     """
     Generate random glass structures from the atoms in given modifiers, formers and anions.
 
@@ -135,7 +133,7 @@ def gen_random_glasses(
         if formula in composition_sets:
             continue
         composition_sets.add(formula)
-        rand_atoms = get_random_packed(formula, target_atoms=target_atoms, mp_api_key=mp_api_key, **kwargs)
+        rand_atoms = get_random_packed(formula, target_atoms=target_atoms, **kwargs)
 
         if len(rand_atoms) > 200:
             continue
