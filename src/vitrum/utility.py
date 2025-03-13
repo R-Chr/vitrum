@@ -70,7 +70,6 @@ def get_random_packed(
                                    is estimated using the Materials Project API.
         target_atoms (int, optional): The target number of atoms in the structure. Defaults to 100.
         minAllowDis (float, optional): The minimum allowed distance between atoms (in angstroms). Defaults to 1.7.
-        mp_api_key (str, optional): The API key for the Materials Project. Required if density is not provided.
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
         seed (int, optional): The seed for random number generation. Defaults to 0.

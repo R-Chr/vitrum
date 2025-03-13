@@ -77,9 +77,8 @@ def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30
     bias_anions = bias_anions / np.sum(bias_anions)
 
     pbar = tqdm.tqdm(total=num_structures)
-
+    print("Generated structures")
     while len(compositions) < num_structures:
-        print("Generated structures")
         pbar.n = len(compositions)
         pbar.refresh()
 
