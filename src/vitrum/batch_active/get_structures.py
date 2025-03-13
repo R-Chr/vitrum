@@ -1,6 +1,6 @@
 from ase.io import read
 import numpy as np
-import os
+from pathlib import Path
 from vitrum.utility import get_LAMMPS_dump_timesteps, correct_atom_types
 import subprocess
 from pymatgen.io.ase import AseAtomsAdaptor
@@ -64,35 +64,41 @@ def get_structures_from_lammps(
     folder,
     potential_folder,
     atom_types,
-    selection_params=None,
     pace_select=True,
     force_glass_structures=True,
     use_spaced_timesteps=False,
-    **kwargs,
+    max_gamma_structures=500,
 ):
     select_files = []
     forced_files = []
-    for dirpath, _, filenames in os.walk(folder):
-        for file in ["glass.dump", "gamma.dump"]:
-            if file in filenames:
-                file_path = os.path.join(dirpath, file)
-                if pace_select is True:
-                    if force_glass_structures is True:
-                        if file == "glass.dump":
-                            forced_files.append(file_path)
+
+    folder_path = Path(folder)
+    for dirpath in folder_path.rglob("*"):  # Recursively iterate over all directories/files
+        if dirpath.is_dir():  # Ensure it's a directory
+            for file in ["glass.dump", "gamma.dump"]:
+                file_path = dirpath / file  # Use pathlib's `/` operator to join paths
+                if file_path.exists():  # Check if file exists
+                    file_path_str = str(file_path).replace(")", r"\)").replace("(", r"\(")
+
+                    if pace_select:
+                        if force_glass_structures:
+                            if file == "glass.dump":
+                                forced_files.append(file_path_str)
+                            else:
+                                select_files.append(file_path_str)
                         else:
-                            select_files.append(file_path.replace(")", r"\)").replace("(", r"\("))
+                            select_files.append(file_path_str)
                     else:
-                        select_files.append(file_path.replace(")", r"\)").replace("(", r"\("))
-                else:
-                    forced_files.append(file_path)
+                        forced_files.append(file_path_str)
 
     atoms_selected = []
     atoms_forced = []
 
     if pace_select is True:
         print("Running PACE select")
-        atoms_selected += select_structures(potential_folder, atom_types, select_files, **selection_params)
+        atoms_selected += select_structures(
+            potential_folder, atom_types, select_files, num_select_structures=max_gamma_structures
+        )
 
     for file_path in forced_files:
         atoms = read(file_path, format="lammps-dump-text", index=":")
@@ -120,14 +126,23 @@ def get_structures_from_lammps(
     return structures, metadata
 
 
-def select_structures(folder, atom_types, select_files, num_select_structures=500, **kwargs):
+def select_structures(folder, atom_types, select_files, potential, num_select_structures=500):
+    print(select_files)
     atom_string = " ".join([str(atom) for atom in atom_types])
     file_string = " ".join(select_files)
-    subprocess.run(
-        f"pace_select -p {folder}/output_potential.yaml -a "
-        f'{folder}/output_potential.asi -e "{atom_string}"'
-        f" -m {num_select_structures} {file_string}",
-        shell=True,
-    )
+    if potential == "pace":
+        subprocess.run(
+            f"pace_select -p {folder}/output_potential.yaml -a "
+            f'{folder}/output_potential.asi -e "{atom_string}"'
+            f" -m {num_select_structures} {file_string}",
+            shell=True,
+        )
+    elif potential == "grace":
+        subprocess.run(
+            f"pace_select -p {folder}/FS_model.yaml"
+            f' -a {folder}/FS_model.asi -e "{atom_string}"'
+            f" -m {num_select_structures} {file_string}",
+            shell=True,
+        )
     atoms = pd.read_pickle("selected.pkl.gz", compression="gzip")
     return [structure for structure in atoms["ase_atoms"]]
