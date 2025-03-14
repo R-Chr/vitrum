@@ -246,9 +246,9 @@ class balace:
         folder = f"{self.wd}/gen_structures/{self.runs['run_lammps'][-1]}"
         potential_folder = self.runs["potential"][-1]
         structures, metadata = get_structures_from_lammps(
-            folder, potential_folder, atom_types=self.atom_types, **self.selection_params
+            folder, potential_folder, potential=self.potential, atom_types=self.atom_types, **self.selection_params
         )
-        wf, run_id = static_run(structures, metadata)
+        wf, run_id = static_run(structures, self.incar_settings, metadata)
         self.runs.setdefault("DFT", []).append([str(run_id)])
         self.lp.add_wf(wf)
         self.state = "static_runs"

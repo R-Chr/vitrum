@@ -52,6 +52,9 @@ def high_temp_run(structures, strain_params, incar_settings, high_temp_params):
 def static_run(structures, incar_settings, metadata=None):
     run_id = str(uuid.uuid4())
     flow_jobs = []
+    if metadata is None:
+        metadata = [None] * len(structures)
+
     for structure, m_data in zip(structures, metadata):
         name = structure.reduced_formula
         job = static_flow(structure, name=name, incar_settings=incar_settings)

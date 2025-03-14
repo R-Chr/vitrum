@@ -29,7 +29,7 @@ def get_atoms_from_wfs(lp, run_uuids, high_temp_params, sampling=":", state=None
         atoms: list
             A list of ase atoms objects.
     """
-    wf_ids = [get_wflow_id_from_run_uuid(id) for id in run_uuids]
+    wf_ids = [get_wflow_id_from_run_uuid(lp, id) for id in run_uuids]
     atoms = []
     metadata = []
 
@@ -42,7 +42,7 @@ def get_atoms_from_wfs(lp, run_uuids, high_temp_params, sampling=":", state=None
         wf = lp.get_wf_by_fw_id(wf_id)
         launch_dirs = [fw.launches[0].launch_dir if fw.launches else None for fw in wf.fws]
         for dirs, fw in zip(launch_dirs, wf.fws):
-            if fw.states == "COMPLETED":
+            if fw.state == "COMPLETED":
                 atoms_fw = read(f"{dirs}/OUTCAR.gz", format="vasp-out", index=":")
                 num_samples = len(atoms_fw)
                 if sampling == ":":
@@ -64,6 +64,7 @@ def get_structures_from_lammps(
     folder,
     potential_folder,
     atom_types,
+    potential,
     pace_select=True,
     force_glass_structures=True,
     use_spaced_timesteps=False,
@@ -97,11 +98,11 @@ def get_structures_from_lammps(
     if pace_select is True:
         print("Running PACE select")
         atoms_selected += select_structures(
-            potential_folder, atom_types, select_files, num_select_structures=max_gamma_structures
+            potential_folder, atom_types, select_files, potential, num_select_structures=max_gamma_structures
         )
 
     for file_path in forced_files:
-        atoms = read(file_path, format="lammps-dump-text", index=":")
+        atoms = read(file_path.replace("\\", ""), format="lammps-dump-text", index=":")
         if len(atoms) == 0:
             continue
         symbol_change_map = {i + 1: x for i, x in enumerate(atom_types)}
