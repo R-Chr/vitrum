@@ -5,6 +5,7 @@ from vitrum.utility import get_LAMMPS_dump_timesteps, correct_atom_types
 import subprocess
 from pymatgen.io.ase import AseAtomsAdaptor
 import pandas as pd
+import shutil
 
 
 def get_wflow_id_from_run_uuid(lp, run_uuid):
@@ -79,7 +80,7 @@ def get_structures_from_lammps(
             for file in ["glass.dump", "gamma.dump"]:
                 file_path = dirpath / file  # Use pathlib's `/` operator to join paths
                 if file_path.exists():  # Check if file exists
-                    file_path_str = str(file_path).replace(")", r"\)").replace("(", r"\(")
+                    file_path_str = str(file_path)  # .replace(")", r"\)").replace("(", r"\(")
 
                     if pace_select:
                         if force_glass_structures:
@@ -92,17 +93,23 @@ def get_structures_from_lammps(
                     else:
                         forced_files.append(file_path_str)
 
+    gamma_file = f"{folder}/gamma_structures.dat"
+    with open(gamma_file, "wb") as wfd:
+        for f in select_files:
+            with open(f, "rb") as fd:
+                shutil.copyfileobj(fd, wfd)
+
     atoms_selected = []
     atoms_forced = []
 
     if pace_select is True:
         print("Running PACE select")
         atoms_selected += select_structures(
-            potential_folder, atom_types, select_files, potential, num_select_structures=max_gamma_structures
+            potential_folder, atom_types, gamma_file, potential, num_select_structures=max_gamma_structures
         )
 
     for file_path in forced_files:
-        atoms = read(file_path.replace("\\", ""), format="lammps-dump-text", index=":")
+        atoms = read(file_path, format="lammps-dump-text", index=":")
         if len(atoms) == 0:
             continue
         symbol_change_map = {i + 1: x for i, x in enumerate(atom_types)}
@@ -127,22 +134,20 @@ def get_structures_from_lammps(
     return structures, metadata
 
 
-def select_structures(folder, atom_types, select_files, potential, num_select_structures=500):
-    print(select_files)
+def select_structures(folder, atom_types, gamma_file, potential, num_select_structures=500):
     atom_string = " ".join([str(atom) for atom in atom_types])
-    file_string = " ".join(select_files)
     if potential == "pace":
         subprocess.run(
             f"pace_select -p {folder}/output_potential.yaml -a "
             f'{folder}/output_potential.asi -e "{atom_string}"'
-            f" -m {num_select_structures} {file_string}",
+            f" -m {num_select_structures} {gamma_file}",
             shell=True,
         )
     elif potential == "grace":
         subprocess.run(
             f"pace_select -p {folder}/FS_model.yaml"
             f' -a {folder}/FS_model.asi -e "{atom_string}"'
-            f" -m {num_select_structures} {file_string}",
+            f" -m {num_select_structures} {gamma_file}",
             shell=True,
         )
     atoms = pd.read_pickle("selected.pkl.gz", compression="gzip")

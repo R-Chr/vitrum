@@ -5,7 +5,7 @@ from atomate2.vasp.sets.core import StaticSetGenerator
 from atomate2.vasp.sets.core import MDSetGenerator
 
 
-def static_flow(structure, name=False, incar_settings=False, kpoint=False, potcar_functional="PBE_54"):
+def static_flow(structure, name=False, incar_settings={}, kpoint=False, potcar_functional="PBE_54"):
     if not name:
         name = structure.reduced_formula
     num_atoms = len(structure)
@@ -42,7 +42,7 @@ def static_flow(structure, name=False, incar_settings=False, kpoint=False, potca
     static_maker = StaticMaker(
         name=name,
         input_set_generator=StaticSetGenerator(
-            user_incar_settings=incar_settings, user_kpoints_settings=kpoint, user_potcar_functional=potcar_functional
+            user_incar_settings=incar_set, user_kpoints_settings=kpoint, user_potcar_functional=potcar_functional
         ),
         run_vasp_kwargs=run_vasp_kwargs,
     )

@@ -86,7 +86,7 @@ class balace:
 
     def set_defaults(self):
         """Sets default values for missing attributes."""
-        self.incar_settings = getattr(self, "incar_settings", False)
+        self.incar_settings = getattr(self, "incar_settings", {})
         self.high_temp_params = getattr(self, "high_temp_params", {"temperature": 5000, "steps": 100, "sampling": 5})
         self.strain_params = getattr(self, "strain_params", {"num_strains": 3, "max_strain": 0.2})
         self.database = getattr(self, "database", None)
@@ -248,9 +248,10 @@ class balace:
         structures, metadata = get_structures_from_lammps(
             folder, potential_folder, potential=self.potential, atom_types=self.atom_types, **self.selection_params
         )
-        wf, run_id = static_run(structures, self.incar_settings, metadata)
+        wfs, run_id = static_run(structures, self.incar_settings, metadata)
         self.runs.setdefault("DFT", []).append([str(run_id)])
-        self.lp.add_wf(wf)
+        for wf in wfs:
+            self.lp.add_wf(wf)
         self.state = "static_runs"
         print("Evaluating new structures with VASP")
 

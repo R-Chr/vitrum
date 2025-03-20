@@ -20,6 +20,10 @@ def get_volume(
     struct_db = vol_per_atom_source.lower() if isinstance(vol_per_atom_source, str) else None
     db_kwargs = db_kwargs or ({"use_cached": True} if struct_db == "mp" else {})
     cell_vol = None
+
+    if density:
+        struct_db == "density"
+
     if isinstance(vol_per_atom_source, float | int):
         vol_per_atom = vol_per_atom_source
 

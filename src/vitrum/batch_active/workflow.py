@@ -51,7 +51,7 @@ def high_temp_run(structures, strain_params, incar_settings, high_temp_params):
 
 def static_run(structures, incar_settings, metadata=None):
     run_id = str(uuid.uuid4())
-    flow_jobs = []
+    wfs = []
     if metadata is None:
         metadata = [None] * len(structures)
 
@@ -59,11 +59,11 @@ def static_run(structures, incar_settings, metadata=None):
         name = structure.reduced_formula
         job = static_flow(structure, name=name, incar_settings=incar_settings)
         job.update_metadata({"sample_type": m_data})
-        flow_jobs.append(job)
+        flow = Flow(job, name="Static_flows")
+        wf = flow_to_workflow(flow, metadata={"uuid": run_id})
+        wfs.append(wf)
 
-    flow = Flow(flow_jobs, name="Static_flows")
-    wf = flow_to_workflow(flow, metadata={"uuid": run_id})
-    return wf, run_id
+    return wfs, run_id
 
 
 def rerun_crashed_jobs(crashed_jobs, run_id, incar_settings, high_temp_params):
