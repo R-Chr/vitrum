@@ -44,17 +44,17 @@ G_r = scattering_funcs.get_total_rdf(type="neutron")
 
 
 ## Diffusion analysis
-The `diffusion` class contains functions for calculating diffusion properties of materials, as averaged over a list of Extended ASE Atoms objects.
+The `diffusion` class contains functions for calculating diffusion properties of materials, as averaged over a list of ASE Atoms objects.
 
 ```
 from vitrum.scattering import diffusion
-diffusion_funcs = diffusion(atoms)
+diffusion_funcs = diffusion(atoms, sample_times = timesteps)
 ```
 
 To calculate the mean squared displacement of a material, the following line can be used:
 
 ```
-msd = diffusion_funcs.calculate_mean_square_displacement()
+msd = diffusion_funcs.get_mean_square_displacements()
 ```
 
 To get the timesteps at which the mean squared displacement was calculated, one of the utility functions can be used:
@@ -62,4 +62,11 @@ To get the timesteps at which the mean squared displacement was calculated, one 
 ```
 from vitrum.utility import get_LAMMPS_dump_timesteps
 timesteps = get_LAMMPS_dump_timesteps('md.lammpstrj')
+```
+
+The diffusion class assumes that trajectories are unwrapped, and not wrapped according to PBC. To unwrap a trajectory one of the utility functions can be used:
+
+```
+from vitrum.utility import unwrap_trajectory
+atoms = unwrap_trajectory(atoms)
 ```
