@@ -1,8 +1,8 @@
 import numpy as np
 from ase import Atoms
 from typing import List, Union, Optional
-from vitrum.utility import pdf, find_min_after_peak, get_dist
-from vitrum.utility import 
+from vitrum.utility import pdf, find_min_after_peak
+from vitrum.utility import get_dist as dist
 from itertools import product
 
 
@@ -20,8 +20,7 @@ class glass_Atoms(Atoms):
         """
         dim = np.diagonal(self.get_cell())
         positions = self.get_positions()
-        return get_dist(positions, dim)
-
+        return dist(positions, dim)
 
     def set_new_chemical_symbols(self, dict):
         """
