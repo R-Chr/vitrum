@@ -47,11 +47,12 @@ def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30
     Generate random glass structures from the atoms in given modifiers, formers and anions.
 
     Parameters:
-        modifiers (dict): A dictionary mapping the chemical symbols of the modifiers with their corresonding charge.
-        formers (dict): A dictionary mapping the chemical symbols of the network formers with their corresonding charge.
-        anions (dict): A dictionary mapping the chemical symbols of the anions with their corresonding charge.
+        modifiers (list): A list of the chemical symbols of the modifiers.
+        formers (list): A list of the chemical symbols of the network formers.
+        anions (list): A list of the chemical symbols of the anions.
+        weights (dict): A dictionary of weights for the number of modifiers, formers and anions.
+        num_structures (int, optional): The number of structures to generate. Defaults to 30.
         target_atoms (int, optional): The target number of atoms in the structure. Defaults to 100.
-        mp_api_key (str, optional): The API key for the Materials Project. Required if density is not provided.
         **kwargs: Additional keyword arguments to be passed to the get_random_packed function.
 
     Returns:

@@ -267,3 +267,53 @@ def unwrap_trajectory(atoms_list):
         new_positions = current_positions - cell * crossings
         atoms.set_positions(new_positions)
     return unwrapped_atoms_list
+
+
+def pdf(dist_list, volume, rrange=10, nbin=100):
+    """
+    Calculate the pair distribution function (PDF) of a list of distances.
+
+    Parameters:
+        dist_list (np.ndarray): A 2D numpy array of distances.
+        volume (float): The volume of the system.
+        rrange (float, optional): The range of the PDF. Defaults to 10.
+        nbin (int, optional): The number of bins. Defaults to 100.
+
+    Returns:
+        xval (np.ndarray): The x values of the PDF.
+        pdf (np.ndarray): The PDF values.
+    """
+
+    edges = np.linspace(0, rrange, nbin + 1)
+    xval = edges[1:] - 0.5 * (rrange / nbin)
+    volbin = []
+    for i in range(nbin):
+        vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
+        volbin.append(vol)
+
+    h, bin_edges = np.histogram(dist_list, bins=nbin, range=(0, rrange))
+    h[0] = 0
+    pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / volume)
+    return xval, pdf
+
+
+def get_dist(list, cell):
+    """
+    Calculate the distance between atoms in a box with PBC and 90 degree angles."
+
+    Parameters:
+        list (np.ndarray): A 2D numpy array of atomic positions.
+        cell (np.ndarray): The cell dimensions of the system
+
+    Returns:
+        i_i (np.ndarray): The interatomic distances.
+    """
+    dim = [cell[0], cell[1], cell[2]]
+    x_dif = np.abs(list[:, 0][np.newaxis, :] - list[:, 0][:, np.newaxis])
+    y_dif = np.abs(list[:, 1][np.newaxis, :] - list[:, 1][:, np.newaxis])
+    z_dif = np.abs(list[:, 2][np.newaxis, :] - list[:, 2][:, np.newaxis])
+    x_dif = np.where(x_dif > 0.5 * dim[0], np.abs(x_dif - dim[0]), x_dif)
+    y_dif = np.where(y_dif > 0.5 * dim[1], np.abs(y_dif - dim[1]), y_dif)
+    z_dif = np.where(z_dif > 0.5 * dim[2], np.abs(z_dif - dim[2]), z_dif)
+    i_i = np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
+    return i_i

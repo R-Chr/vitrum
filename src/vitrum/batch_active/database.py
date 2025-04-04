@@ -6,7 +6,8 @@ from sklearn.model_selection import train_test_split
 def update_ace_database(wd, atoms, iteration, force_threshold=100, database_paths=None, metadata=None):
     energy = [i.get_total_energy() for i in atoms]
     force = [i.get_forces().tolist() for i in atoms]
-    data = {"energy": energy, "forces": force, "ase_atoms": atoms, "iteration": iteration}
+    stress = np.array([i.get_stress() for i in atoms])
+    data = {"energy": energy, "forces": force, "stress": stress, "ase_atoms": atoms, "iteration": iteration}
     if metadata:
         data["sample_type"] = metadata
     # create a DataFrame

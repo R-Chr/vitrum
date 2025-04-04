@@ -1,8 +1,8 @@
 import numpy as np
 from ase import Atoms
 from typing import List, Union, Optional
-
-from vitrum.utility import find_min_after_peak
+from vitrum.utility import pdf, find_min_after_peak, get_dist
+from vitrum.utility import 
 from itertools import product
 
 
@@ -20,14 +20,8 @@ class glass_Atoms(Atoms):
         """
         dim = np.diagonal(self.get_cell())
         positions = self.get_positions()
-        x_dif = np.abs(positions[:, 0][np.newaxis, :] - positions[:, 0][:, np.newaxis])
-        y_dif = np.abs(positions[:, 1][np.newaxis, :] - positions[:, 1][:, np.newaxis])
-        z_dif = np.abs(positions[:, 2][np.newaxis, :] - positions[:, 2][:, np.newaxis])
-        x_dif = np.where(x_dif > 0.5 * dim[0], np.abs(x_dif - dim[0]), x_dif)
-        y_dif = np.where(y_dif > 0.5 * dim[1], np.abs(y_dif - dim[1]), y_dif)
-        z_dif = np.where(z_dif > 0.5 * dim[2], np.abs(z_dif - dim[2]), z_dif)
-        i_i = np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
-        return i_i
+        return get_dist(positions, dim)
+
 
     def set_new_chemical_symbols(self, dict):
         """
@@ -71,17 +65,7 @@ class glass_Atoms(Atoms):
             atom_1 = indicies[0]
             atom_2 = indicies[1]
         dist_list = distances[np.ix_(atom_1, atom_2)]
-        edges = np.linspace(0, rrange, nbin + 1)
-        xval = edges[1:] - 0.5 * (rrange / nbin)
-        volbin = []
-        for i in range(nbin):
-            vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
-            volbin.append(vol)
-
-        h, bin_edges = np.histogram(dist_list, bins=nbin, range=(0, rrange))
-        h[0] = 0
-        pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / self.get_volume())
-        return xval, pdf
+        return pdf(dist_list, self.get_volume(), rrange, nbin)
 
     def get_all_angles(self, center_type, neigh_types, cutoff="Auto"):
         """

@@ -9,7 +9,7 @@ import shutil
 
 
 def get_wflow_id_from_run_uuid(lp, run_uuid):
-    wf_ids = [i for i in lp.get_wf_ids() if lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid][0]
+    wf_ids = [i for i in lp.get_wf_ids() if lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid]
     return wf_ids
 
 
@@ -30,7 +30,7 @@ def get_atoms_from_wfs(lp, run_uuids, high_temp_params, sampling=":", state=None
         atoms: list
             A list of ase atoms objects.
     """
-    wf_ids = [get_wflow_id_from_run_uuid(lp, id) for id in run_uuids]
+    wf_ids = sum([get_wflow_id_from_run_uuid(lp, id) for id in run_uuids], [])
     atoms = []
     metadata = []
 
