@@ -285,15 +285,11 @@ def pdf(dist_list, volume, rrange=10, nbin=100):
     """
 
     edges = np.linspace(0, rrange, nbin + 1)
-    xval = edges[1:] - 0.5 * (rrange / nbin)
-    volbin = []
-    for i in range(nbin):
-        vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
-        volbin.append(vol)
-
+    xval = (edges[1:] + edges[:-1]) / 2
+    volbin = (4 / 3) * np.pi * (edges[1:] ** 3 - edges[:-1] ** 3)
     h, bin_edges = np.histogram(dist_list, bins=nbin, range=(0, rrange))
     h[0] = 0
-    pdf = (h / volbin) / (dist_list.shape[0] * dist_list.shape[1] / volume)
+    pdf = (h / volbin) / (dist_list.size / volume)
     return xval, pdf
 
 
