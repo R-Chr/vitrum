@@ -132,13 +132,13 @@ class scattering:
         """
         return self.partial_pdfs[self.pairs.index(pair)]
 
-    def get_total_rdf(self, type: str = "neutron", broaden: bool | int = False):
+    def get_total_rdf(self, type: str = "neutron", broaden: bool | int | float = False):
         """
         Calculate the total RDF for a given number of bins and range.
 
         Parameters:
             type (str, optional): The type of structure factor to calculate. Defaults to "neutron".
-            broaden (bool | int, optional): If True, apply Gaussian broadening to the RDF. If an integer, specify the maximum Q value
+            broaden (bool | int | float, optional): If True, apply Gaussian broadening to the RDF. If a number, specify the maximum Q value
               for broadening. Defaults to False.
 
         Returns:
@@ -157,11 +157,12 @@ class scattering:
             elif type == "xray":
                 gr_tot = gr_tot + (self.xray_timesby[ind] * pdf) / np.sum(self.xray_timesby, axis=0)
 
-        if isinstance(broaden, int):
-            Q_max = broaden
+        if broaden:
+            if isinstance(broaden, (int, float)):
+                Q_max = broaden
+            else:
+                raise ValueError("broaden must be a number or False")
             gr_tot = gaussian_broadening(gr_tot, self.xval, Q_max)
-        elif broaden:
-            raise ValueError("broaden must be a int equal to Qmax with a  or False")
 
         return gr_tot
 
