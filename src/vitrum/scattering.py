@@ -5,6 +5,18 @@ import math
 from pathlib import Path
 from vitrum.glass_Atoms import glass_Atoms
 from tqdm import tqdm
+from scipy.stats import norm
+
+
+def gaussian_broadening(g_r, r, Q_max):
+    # Broad by using a convolution using a Gaussian function
+    delta_r = r[np.newaxis, :] - r[:, np.newaxis]
+    sum_r = r[np.newaxis, :] + r[:, np.newaxis]
+    FWHM = 5.437 / Q_max
+    sigma = FWHM / 2.355
+    foubroad = g_r * (norm.pdf(delta_r, 0, sigma) - norm.pdf(sum_r, 0, sigma))
+    dist_broad = np.trapz(foubroad, r)
+    return dist_broad
 
 
 class scattering:
@@ -120,16 +132,21 @@ class scattering:
         """
         return self.partial_pdfs[self.pairs.index(pair)]
 
-    def get_total_rdf(self, type="neutron"):
+    def get_total_rdf(self, type: str = "neutron", broaden: bool | int = False):
         """
         Calculate the total RDF for a given number of bins and range.
 
         Parameters:
             type (str, optional): The type of structure factor to calculate. Defaults to "neutron".
+            broaden (bool | int, optional): If True, apply Gaussian broadening to the RDF. If an integer, specify the maximum Q value
+              for broadening. Defaults to False.
 
         Returns:
             gr_tot (ndarray): An array of shape (nbin,) containing the total RDF values.
         """
+        if type not in {"neutron", "xray", "fake_xray"}:
+            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'fake_xray'.")
+
         gr_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
             pdf = self.get_partial_pdf(pair=pair)
@@ -139,6 +156,13 @@ class scattering:
                 pass
             elif type == "xray":
                 gr_tot = gr_tot + (self.xray_timesby[ind] * pdf) / np.sum(self.xray_timesby, axis=0)
+
+        if isinstance(broaden, int):
+            Q_max = broaden
+            gr_tot = gaussian_broadening(gr_tot, self.xval, Q_max)
+        elif broaden:
+            raise ValueError("broaden must be a int equal to Qmax with a  or False")
+
         return gr_tot
 
     def get_partial_structure_factor(self, target_atoms: list):
@@ -172,6 +196,9 @@ class scattering:
         Returns:
             S_q_tot (ndarray): An array of shape (nbin,) containing the total structure factor.
         """
+        if type not in {"neutron", "xray", "fake_xray"}:
+            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'fake_xray'.")
+
         S_q_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
             partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]))
