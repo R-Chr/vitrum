@@ -1,3 +1,5 @@
 
 src/vitrum/fracture.py
 test.ipynb
+/src/vitrum.egg-info
+/src/vitrum/__pycache__

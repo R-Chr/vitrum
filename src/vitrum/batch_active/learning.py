@@ -1,6 +1,13 @@
 from vitrum.batch_active.input_writer import lammps_input_writer
 from vitrum.batch_active.structure_gen import gen_even_structures, gen_lammps_structures
-from vitrum.batch_active.workflow import high_temp_run, static_run, train_pace, run_lammps, rerun_crashed_jobs
+from vitrum.batch_active.workflow import (
+    high_temp_run,
+    static_run,
+    train_pace,
+    train_grace,
+    run_lammps,
+    rerun_crashed_jobs,
+)
 from vitrum.batch_active.database import update_ace_database
 from vitrum.batch_active.get_structures import (
     get_atoms_from_wfs,
@@ -204,7 +211,7 @@ class balace:
             self.database = update_ace_database(
                 self.wd, atoms, self.iteration, database_paths=self.database, metadata=metadata
             )
-            wf, directory = train_pace()
+            wf, directory = train_pace(self)
             self.lp.add_wf(wf)
             self.runs.setdefault("potential", []).append(directory)
             print(f"Training ace model, Iteration: {self.iteration}")
@@ -217,6 +224,8 @@ class balace:
         self.database = update_ace_database(
             self.wd, atoms, self.iteration, database_paths=self.database, metadata=metadata
         )
+        directory = train_grace(self)
+        self.runs.setdefault("potential", []).append(directory)
         print(f"Train Grace based on dataset, Iteration: {self.iteration}")
         self.iteration += 1
         self.state = "trained_ace"

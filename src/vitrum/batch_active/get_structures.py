@@ -9,7 +9,11 @@ import shutil
 
 
 def get_wflow_id_from_run_uuid(lp, run_uuid):
-    wf_ids = [i for i in lp.get_wf_ids() if lp.get_wf_summary_dict(i, mode="all")["metadata"]["uuid"] == run_uuid]
+    wf_ids = [
+        i
+        for i in lp.get_wf_ids()
+        if lp.workflows.find_one({"nodes": i}, projection=["metadata"]).get("metadata", {}).get("uuid") == run_uuid
+    ]
     return wf_ids
 
 

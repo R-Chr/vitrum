@@ -7,6 +7,9 @@ from pymatgen.transformations.standard_transformations import DeformStructureTra
 from scipy.signal import argrelextrema
 from ase.data import covalent_radii, atomic_numbers
 from atomate2.common.jobs.mpmorph import get_average_volume_from_mp, get_average_volume_from_db_cached
+from ase.calculators.lj import LennardJones
+from ase.calculators.morse import MorsePotential
+from ase.optimize import FIRE
 
 
 def get_volume(
@@ -64,6 +67,7 @@ def get_random_packed(
     density: float | None = None,
     seed: int | None = None,
     side_ratios: list = [1, 1, 1],
+    relax_structure: bool = False,
 ):
     """
     Generate a random packed structure based on the given composition.
@@ -125,6 +129,19 @@ def get_random_packed(
         raise ValueError("Error: Cannot find suitable positions for atoms, lower minAllowDis or decrease the density")
 
     formula = sum([[i] * structure[i] for i in structure], [])
+    if relax_structure:
+        print(relax_structure)
+        data = Atoms(formula, positions=pos, cell=cell, pbc=True)
+        if relax_structure == "lj":
+            data.calc = LennardJones()
+        elif relax_structure == "morse":
+            data.calc = MorsePotential(epsilon=1, r0=3, rho0=6)
+        else:
+            raise ValueError("Relaxation method not supported")
+        dyn = FIRE(data, loginterval=100)
+        dyn.run(fmax=0.05, steps=100)
+        pos = data.get_positions()
+
     if datatype == "ase":
         data = Atoms(formula, positions=pos, cell=cell, pbc=True)
     elif datatype == "pymatgen":

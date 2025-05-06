@@ -119,6 +119,16 @@ def train_pace(self, pace_kwargs=None):
     return wf, directory
 
 
+def train_grace(self, grace_kwargs=None):
+    """
+    Run the ACE training using grace.
+    """
+    directory = f"{self.wd}/ace_fitting/{self.iteration}"
+    os.makedirs(f"{directory}")
+    print("Automatic training of Grace not implemented yet")
+    print(f"Place trained FS_model.yaml and FS_model.asi in {directory}")
+
+
 def run_lammps(directories, wd, lammps_command, run_id):
     fws = []
     for path in directories:

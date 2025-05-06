@@ -6,6 +6,7 @@ from pathlib import Path
 from vitrum.glass_Atoms import glass_Atoms
 from tqdm import tqdm
 from scipy.stats import norm
+from ase import Atom
 
 
 def gaussian_broadening(g_r, r, Q_max):
@@ -48,12 +49,12 @@ class scattering:
         edges = np.linspace(0, self.rrange, self.nbin + 1)
         self.xval = edges[1:] - 0.5 * (self.rrange / self.nbin)
         self.qval = np.linspace(0.5, qrange, self.nbin)
-
         self.chemical_symbols = atom_list[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
         self.pairs = [pair for pair in itertools.product(self.species, repeat=2)]
         self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
         self.aveden = len(atom_list[0]) / atom_list[0].get_volume()
+        self.atomic_numbers = [Atom(atom).number for atom in self.species]
 
         # Neutron
         if neutron_scattering_coef is None:
@@ -78,11 +79,11 @@ class scattering:
         self.x_ray_b = x_ray_scattering_coef[:, [2, 4, 6, 8]]
         self.x_ray_c = x_ray_scattering_coef[:, [9]]
 
-        f_i = []
+        self.f_i = []
 
         for ind in range(len(self.species)):
 
-            f_i.append(
+            self.f_i.append(
                 np.sum(
                     [
                         self.x_ray_a[ind][i] * np.exp(-self.x_ray_b[ind][i] * ((self.qval) / (4 * np.pi)) ** 2)
@@ -93,8 +94,13 @@ class scattering:
                 + self.x_ray_c[ind]
             )
 
-        self.xray_cb = [i * j for i, j in zip(self.c, f_i)]
+        self.xray_cb = [i * j for i, j in zip(self.c, self.f_i)]
         self.xray_timesby = [pair[0] * pair[1] for pair in itertools.product(self.xray_cb, repeat=2)]
+
+        self.approx_xray_cb = np.array([i * j for i, j in zip(self.c, self.atomic_numbers)])
+        self.approx_xray_timesby = np.array(
+            [pair[0] * pair[1] for pair in itertools.product(self.approx_xray_cb, repeat=2)]
+        )
 
         self.partial_pdfs = self.calculate_partial_pdfs()
 
@@ -144,18 +150,39 @@ class scattering:
         Returns:
             gr_tot (ndarray): An array of shape (nbin,) containing the total RDF values.
         """
-        if type not in {"neutron", "xray", "fake_xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'fake_xray'.")
+        if type not in {"neutron", "xray", "approx_xray"}:
+            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
 
         gr_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
             pdf = self.get_partial_pdf(pair=pair)
             if type == "neutron":
                 gr_tot = gr_tot + (self.timesby[ind] * pdf) / sum(self.timesby)
-            elif type == "fake_xray":
-                pass
+            elif type == "approx_xray":
+                gr_tot = gr_tot + (self.approx_xray_timesby[ind] * pdf) / np.sum(self.approx_xray_timesby, axis=0)
             elif type == "xray":
-                gr_tot = gr_tot + (self.xray_timesby[ind] * pdf) / np.sum(self.xray_timesby, axis=0)
+
+                ### Attempt to use Fourier transform of xray scattering function f_ij(Q)
+                #  xray_cb = np.array([i * j for i, j in zip(self.c, self.f_i)])
+                #  xray_timesby = np.array([pair[0] * pair[1] for pair in itertools.product(self.f_i, repeat=2)])
+                #  f_ij = xray_timesby / np.sum(xray_cb, axis=0)
+                #  g_x_all = []
+                #  for f_i, pdf in zip(f_ij, pdfs):
+                #      cos_qr = np.cos(np.outer(self.xval, self.qval))  # shape (Q, r)
+                #      j_ij = (1 / np.pi) * np.trapz(f_i * cos_qr, self.qval, axis=0)  # shape (r,)
+                #      y = sc.xval
+                #      f_y = y * (pdf-1)
+                #      conv_result = np.convolve(f_y, j_ij, mode='same') * (y[1] - y[0])  # scale by dy
+                #      g_X= conv_result / y
+                #      g_x_all.append(g_X)
+                #  cc = np.array([[pair[0] * pair[1] for pair in itertools.product(self.c, repeat=2)]]).T
+                #  gr_tot = np.sum(cc*np.array(g_x_all), axis=0)
+
+                print(
+                    " X-ray RDF using Fourier transform of xray scattering function f_ij(Q) is not implemented yet. Using approximation from atomic number."
+                )
+                # Use the approximate X-ray scattering factor
+                gr_tot = gr_tot + (self.approx_xray_timesby[ind] * pdf) / np.sum(self.approx_xray_timesby, axis=0)
 
         if broaden:
             if isinstance(broaden, (int, float)):
@@ -197,30 +224,30 @@ class scattering:
         Returns:
             S_q_tot (ndarray): An array of shape (nbin,) containing the total structure factor.
         """
-        if type not in {"neutron", "xray", "fake_xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'fake_xray'.")
+        if type not in {"neutron", "xray", "approx_xray"}:
+            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
 
         S_q_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
             partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]))
             if type == "neutron":
                 S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
-            elif type == "fake_xray":
-                pass
+            elif type == "approx_xray":
+                raise NotImplementedError("Approximate X-ray structure factor is not implemented.")
             elif type == "xray":
                 S_q_tot = S_q_tot + (self.xray_timesby[ind] * partial_sq) / np.sum(self.xray_timesby, axis=0)
         return S_q_tot
 
-    def get_T_r():
-        "Not implemented yet"
-        pass
+    def get_T_r_pdf(self, type="neutron", broaden: bool | int | float = False):
+        return 4 * math.pi * self.xval * self.aveden * self.get_total_rdf(type=type, broaden=broaden)
 
-    def get_D_r():
-        "Not implemented yet"
-        pass
+    def get_reducded_pdf(self, type="neutron", broaden: bool | int | float = False):
+        return (-4 * math.pi * self.xval * self.aveden) + (
+            4 * math.pi * self.xval * self.aveden * self.get_total_rdf(type=type, broaden=broaden)
+        )
 
 
-# Make pdf from distance list into its own function
+# Make pdf from distance list into its own function q
 # def pdf(dist_list, atoms, rrange=10, nbin=100):
 #    edges = np.linspace(0,rrange,nbin+1)
 #    xval=edges[1:]-0.5*(rrange/nbin)

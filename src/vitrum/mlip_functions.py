@@ -11,7 +11,7 @@ def get_dimer_radial_energy(calc, formula, cutoff=8, num_data_points=100):
     distances = np.linspace(0.1, cutoff, num_data_points)
     for d in distances:
         atoms = Atoms(formula, positions=[(0, 0, 0), (0, 0, d)], pbc=False)
-        atoms.set_calculator(calc)
+        atoms.calc = calc
         pred_energy.append(atoms.get_potential_energy())
     return distances, pred_energy
 

@@ -28,12 +28,13 @@ def update_ace_database(
     """
     energy = [i.get_total_energy() for i in atoms]
     force = [i.get_forces().tolist() for i in atoms]
-    stress = np.array([i.get_stress() for i in atoms])
+    stress = [i.get_stress() for i in atoms]
     data = {"energy": energy, "forces": force, "stress": stress, "ase_atoms": atoms, "iteration": iteration}
     if metadata:
         data["sample_type"] = metadata
     # create a DataFrame
     df = pd.DataFrame(data)
+    df["stress"] = df["stress"].apply(np.array)
     print(f"Iteration {iteration} has {len(df)} structures")
     df = df[~df["forces"].apply(lambda x: np.max(x) > force_threshold)]
     df = df[~df["forces"].apply(lambda x: np.min(x) < -force_threshold)]
