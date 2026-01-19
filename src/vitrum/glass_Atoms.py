@@ -2,7 +2,7 @@ import numpy as np
 from ase import Atoms
 from typing import List, Union, Optional
 from vitrum.utility import pdf, find_min_after_peak
-from vitrum.utility import get_dist as dist
+from vitrum.utility import get_dist_numba as dist
 from itertools import product
 
 

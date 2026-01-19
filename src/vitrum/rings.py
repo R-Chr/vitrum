@@ -1,72 +1,109 @@
-# Implementation of rings is an adapted version of the code for calculating rings from https://github.com/MotokiShiga/sova-cui
-# making the code compatible with the vitrum package.
-# Its MIT License (MIT) can be seen below
-
-# MIT License
-#
-# Copyright (c) 2024 Motoki Shiga
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
-import numpy as np
-import networkx as nx
 from vitrum.glass_Atoms import glass_Atoms
+import numpy as np
+from scipy.sparse import csr_array, coo_matrix
+from scipy.sparse.csgraph import dijkstra
+from ase.neighborlist import NeighborList
+from ase.data import covalent_radii
+from ase.symbols import symbols2numbers
+from ase.io import write
 
-
-def enumerate_guttman_ring(atoms_all, chemical_bond_index):
-    """
-    Enumerate all possible rings in a given set of atoms.
-
-    Parameters:
-        atoms_all (list): A list of Atoms objects representing the atoms in the system.
-        chemical_bond_index (ndarray): An array of shape (n_bonds, 2) representing the indices of the atoms involved in each bond.
-
+def check_ring_is_periodic(ring, offsets):
+    ''' 
+    Check if the ring wraps around the period cell, i.e., is not a true ring.
+    Args:
+        ring (list(int)): Atom indices of the ring
+        offsets (dict(type(int, int)): Unit cell offsets for all atoms
     Returns:
-        set_rings (set): A set of tuples representing the indices of the atoms involved in each ring.
-    """
+        bool: True if the ring is periodic, False otherwise
+    '''
+    total_offset = np.zeros(3)
+    for i in range(len(ring) - 1):
+        total_offset += offsets[(ring[i], ring[i+1])]
+    total_offset += offsets[(ring[-1], ring[0])]
+    return np.all(total_offset == 0)
 
-    set_rings = set()
-    G = nx.Graph()
-    G.add_nodes_from(atoms_all)
-    G.add_edges_from(chemical_bond_index)
+def find_rings(ats, radii_factor=1.3, repeat=(1, 1, 1), bonds=None, limit=np.inf):
+    ''' Find rings in the unit cell.
+        Rings are found according to the definition of L. Guttman, J. Non-Cryst. Solids 1990, 116.
+        Args:
+            ats (ase.Atoms): Atoms object containing the structure
+            radii_factor (float): Factor to multiply covalent radii for neighbor search
+            repeat (tuple(int, int, int)): How often to repeat the unit cell in each direction. Increase for small cells.
+            bonds (list(tuple(str, str))): List of allowed bonds, e.g., [('C', 'C'), ('C', 'O')], can be None to allow all bonds.
+    '''
+    s = ats.repeat(repeat)
+    pos = s.get_positions()
+    nat = len(s)
+    lat = s.get_cell()
+    els = s.get_chemical_symbols()
+    radii = covalent_radii[symbols2numbers(els)]
 
-    for i in range(chemical_bond_index.shape[0]):
-        n0 = chemical_bond_index[i, 0]
-        n1 = chemical_bond_index[i, 1]
-        if (n0 in atoms_all) | (n1 in atoms_all):
-            G.remove_edge(n0, n1)
-            try:
-                paths = nx.all_shortest_paths(G, source=n0, target=n1)
-                for path in paths:
-                    path = np.array(path)
-                    i_min = np.argmin(path)
-                    path = tuple(np.r_[path[i_min:], path[:i_min]])
-                    # to aline the orientation
-                    if path[-1] < path[1]:
-                        path = path[::-1]
-                        path = tuple(np.r_[path[-1], path[:-1]])
-                    set_rings.add(path)
-            except nx.NetworkXNoPath:
-                pass  # Nothing to do
-            G.add_edge(n0, n1)
-    return set_rings
+    if bonds is not None:
+        # Don't need to find neighbors for elements not included in bonds
+        elements = set().union(*bonds)
+        radii = [x if el in elements else 0. for el, x in zip(els, radii)]
+        radii = np.array(radii, dtype=float)
+           
+    nl = NeighborList(radii * radii_factor, self_interaction=False, bothways=False, skin=0.)
+    nl.update(s)
 
+    d_idx = []
+    d_val = []
+    # unit cell offsets for all atoms
+    all_offsets = {}
+
+    for i in range(nat):
+        indices, offsets = nl.get_neighbors(i)
+
+        rs = pos[indices, :] + offsets @ lat - pos[i, :]
+        ds = np.linalg.norm(rs, axis=1)
+        for j, r, o in zip(indices, ds, offsets):
+            # Ignore bonds that are not included
+            if ((els[i], els[j]) in bonds or (els[j], els[i]) in bonds):
+                d_idx.append((i, j))
+                d_val.append(r)
+                d_idx.append((j, i))
+                d_val.append(r)
+                all_offsets[(i, j)] = o
+                all_offsets[(j, i)] = -o
+
+
+    # sparse matrix of bonds, removes zero entries
+    d = csr_array((d_val, np.array(d_idx, dtype=np.int32).T), shape=(nat, nat))
+
+    # now find the rings 
+    rings = {}
+    for i in range(len(ats)):
+        indices, offsets = nl.get_neighbors(i)
+        for j, _ in zip(indices, offsets):
+            if bonds is not None: 
+                # skip if bond is not allowed
+                if not ((els[i], els[j]) in bonds or (els[j], els[i]) in bonds):
+                    continue
+            # Remove the bond between the two selected neighbors
+            d_tmp = d.copy()
+            d_tmp[i, j] = 0
+            d_tmp[j, i] = 0
+            d_tmp.eliminate_zeros()
+            # Now find the shortest path between i and j
+            dist_matrix, predecessors = dijkstra(d_tmp, indices=i, return_predecessors=True, directed=False, unweighted=True, limit=limit)
+            if dist_matrix[j] < np.inf:
+                k = j
+                ring = [k]
+                while predecessors[k] != i:
+                    k = predecessors[k]
+                    ring.append(k)
+                ring.append(i)
+
+                if not check_ring_is_periodic(ring, all_offsets):
+                    print('WARNING: ring is wrapping around periodic cell! Consider increasing `repeat`.')
+                    continue
+
+                ring = [x % len(ats) for x in ring]  # take it back to primary cell
+                rings[tuple(sorted(ring))] = ring
+
+
+    return list(rings.values())
 
 class Ring(object):
     """
@@ -118,12 +155,12 @@ class RINGs:
     A class for calculating and analyzing rings in atomistic systems.
 
     Parameters:
-        atoms (list): A list of Atoms objects representing the atoms in the system.
+        atoms: An Atoms objects representing the atoms in the system.
         included_atoms (list): A list of strings representing the chemical symbols of the atoms to include in the analysis.
         bonding_dict (dict): A dictionary mapping the chemical symbols of the atoms to their bonding partners.
     """
 
-    def __init__(self, atoms, included_atoms, bonding_dict):
+    def __init__(self, atoms, included_atoms, bonding_dict=None):
         super().__init__()
         self.bonding_dict = bonding_dict
         atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
@@ -132,44 +169,34 @@ class RINGs:
         self.atom_symbols = np.array(self.atoms.get_chemical_symbols())
         self.atom_types = np.unique(self.atom_symbols).tolist()
         self.atom_ids = [np.where(self.atom_symbols == atom_type)[0] for atom_type in self.atom_types]
-        self.rings = []
+        self.rings = None
 
-    def get_bonds(self):
-        """
-        Get the bonds in the system.
 
-        Returns:
-            bonds (list): A list of tuples representing the indices of the atoms involved in each bond.
-        """
-
-        dist = self.atoms.get_dist()
-        bonds = []
-        for _, value in self.bonding_dict.items():
-            atom_ids_1 = self.atom_ids[self.atom_types.index(value[0])]
-            atom_ids_2 = self.atom_ids[self.atom_types.index(value[1])]
-            cutoff = value[2]
-
-            dist_list = dist[np.ix_(atom_ids_1, atom_ids_2)]
-
-            for loc, id in enumerate(atom_ids_1):
-                bond_ids = np.where((dist_list[loc, :] < cutoff) & (dist_list[loc, :] > 0))[0]
-
-                for bond_id in bond_ids:
-                    bonds.append([id, atom_ids_2[bond_id]])
-
-        return bonds
-
-    def calculate(self):
+    def calculate(self, radii_factor=1.3, repeat=(1,1,1), max_size=np.inf):
         """
         Calculate the rings in the system.
 
         Returns:
             rings (list): A list of Ring objects representing the rings in the system.
         """
+        bonds = self.bonding_dict
 
-        bonds = self.get_bonds()
-        self.chemical_bond_index_atoms = np.array(bonds)
-        atoms_all = np.arange(self.num_atoms)
-        set_rings = enumerate_guttman_ring(atoms_all, self.chemical_bond_index_atoms)
-        self.rings = [Ring(self.atoms[list(r)], list(r), self.bonding_dict) for r in list(set_rings)]
+        rings = find_rings(ats=self.atoms, radii_factor=radii_factor, repeat=repeat, bonds=bonds, limit=max_size)
+
+        self.rings = [Ring(self.atoms[list(r)], list(r)) for r in rings]
         return self.rings
+
+    def write_rings(self, filename, format='extxyz'):
+        """
+        Write the rings to a file.
+
+        Parameters:
+            filename (str): The name of the file to write the rings to.
+        """
+        write(filename, [r.atoms for r in self.rings], format=format)
+    
+    def get_ring_size_distribution(self):
+        if self.rings is None:
+            raise ValueError("Rings have not been calculated yet.")
+        ring_sizes = [len(r.atoms) for r in self.rings]
+        return np.bincount(ring_sizes)

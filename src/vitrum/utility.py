@@ -6,11 +6,18 @@ from pymatgen.alchemy.materials import TransformedStructure
 from pymatgen.transformations.standard_transformations import DeformStructureTransformation
 from scipy.signal import argrelextrema
 from ase.data import covalent_radii, atomic_numbers
-from atomate2.common.jobs.mpmorph import get_average_volume_from_mp, get_average_volume_from_db_cached
+from atomate2.common.jobs.mpmorph import get_average_volume_from_mp, get_average_volume_from_db_cached, get_average_volume_from_mp_api
 from ase.calculators.lj import LennardJones
 from ase.calculators.morse import MorsePotential
 from ase.optimize import FIRE
-
+from itertools import product
+from ase.neighborlist import NeighborList
+from ase.symbols import symbols2numbers
+from mp_api.client import MPRester, MPRestError
+from pymatgen.analysis.phase_diagram import PhaseDiagram
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+from numba import njit, prange
 
 def get_volume(
     composition: Composition | str,
@@ -18,14 +25,19 @@ def get_volume(
     vol_per_atom_source: float | str = "mp",
     db_kwargs: dict | None = None,
     density: float | None = None,
+    MP_API_KEY: str | None = None,
 ):
 
+    
     struct_db = vol_per_atom_source.lower() if isinstance(vol_per_atom_source, str) else None
     db_kwargs = db_kwargs or ({"use_cached": True} if struct_db == "mp" else {})
     cell_vol = None
 
     if density:
-        struct_db == "density"
+        if not isinstance(density, (float, int)):
+            raise ValueError("Density must be a float or int.")
+        
+        struct_db = "density"
 
     if isinstance(vol_per_atom_source, float | int):
         vol_per_atom = vol_per_atom_source
@@ -37,8 +49,6 @@ def get_volume(
         vol_per_atom = get_average_volume_from_db_cached(composition, db_name="icsd", **db_kwargs)
 
     elif struct_db == "density":
-        if not density:
-            raise ValueError("Must specify a valid density")
         mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
         cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
 
@@ -48,6 +58,12 @@ def get_volume(
         )
         cell_vol = np.sum((4 / 3 * np.pi * all_radii**3)) * 3
 
+    elif struct_db == "convex_hull":
+        try:
+            vol_per_atom = get_average_volume_convex_hull(composition, MP_API_KEY=MP_API_KEY)
+        except MPRestError as e:
+            raise ValueError(f"Could not retrieve volume from convex hull. Check your MP_API_KEY. Error: {e}")
+
     else:
         raise ValueError(f"Unknown volume per atom source: {vol_per_atom_source}.")
 
@@ -56,18 +72,30 @@ def get_volume(
 
     return cell_vol
 
+def get_average_volume_convex_hull(composition, MP_API_KEY=None):
+    with MPRester(api_key=MP_API_KEY) as mpr:
+        entries = mpr.get_entries_in_chemsys(
+            elements=[str(el) for el in composition.elements],
+            additional_criteria={"thermo_types": ["GGA_GGA+U"]},
+        )
+    pd = PhaseDiagram(entries)
+    decomp = pd.get_decomposition(composition)
+    volume = sum([d.structure.volume / d.composition.num_atoms * decomp[d] for d in decomp])
+    return volume
 
 def get_random_packed(
     composition: str | dict | Composition,
     target_atoms: int = 100,
-    minAllowDis: float = 1.7,
+    min_distance: float | None = None,
+    radii_scaling: float = 1.0,
+    volume_scaling: float = 1.0,
     vol_per_atom_source: float | str = "mp",
     datatype: str = "ase",
     db_kwargs: dict | None = None,
     density: float | None = None,
     seed: int | None = None,
     side_ratios: list = [1, 1, 1],
-    relax_structure: bool = False,
+    **kwargs,
 ):
     """
     Generate a random packed structure based on the given composition.
@@ -77,79 +105,95 @@ def get_random_packed(
         density (float, optional): The target density of the structure (in g/cm^3). If not provided, the volume per atom
                                    is estimated using the Materials Project API.
         target_atoms (int, optional): The target number of atoms in the structure. Defaults to 100.
-        minAllowDis (float, optional): The minimum allowed distance between atoms (in angstroms). Defaults to 1.7.
+        radii_scaling (float, optional): Scaling factor for the covalent radii of the atoms. Defaults to 1.0.
+        volume_scaling (float, optional): Scaling factor for the volume of the structure. Defaults to 1.0.
+        vol_per_atom_source (float or str, optional): The source for the volume per atom. Can be a float value or one of the following strings:
+                                                    "mp" (Materials Project), "icsd" (Inorganic Crystal Structure Database),
+                                                     "density" (use provided density), "covalent_radius" (estimate from covalent radii),
+                                                     or "convex_hull" (estimate from convex hull). Defaults to "mp".
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
+        db_kwargs (dict, optional): Additional keyword arguments for database access. Defaults to None.
         seed (int, optional): The seed for random number generation. Defaults to 0.
         side_ratios (list, optional): The side ratios for the lattice. Defaults to [1, 1, 1].
 
     Returns:
         data (ase.Atoms or pymatgen.core.Structure): The generated random packed structure.
     """
+
     if isinstance(composition, str):
         composition = Composition(composition)
     elif isinstance(composition, dict):
         comp_string = "".join(mol * (int(composition[mol] * 10)) for mol in composition)
         composition = Composition(comp_string)
-    formula, factor = composition.get_integer_formula_and_factor()
-    integer_composition = Composition(formula)
+    elements, factor = composition.get_integer_formula_and_factor()
+    integer_composition = Composition(elements)
     full_cell_composition = integer_composition * np.ceil(target_atoms / integer_composition.num_atoms)
+
     structure = {}
     for el in full_cell_composition:
         structure[str(el)] = int(full_cell_composition.element_composition.get(el))
+    elements = sum([[i] * structure[i] for i in structure], [])
     np.random.seed(seed)
-    cell_vol = get_volume(composition, structure, vol_per_atom_source, db_kwargs, density)
 
+    cell_vol = get_volume(composition, structure, vol_per_atom_source, db_kwargs, density, **kwargs)
+
+    cell_vol *= volume_scaling
     k = (cell_vol / (side_ratios[0] * side_ratios[1] * side_ratios[2])) ** (1 / 3)
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])
+    cell = np.diag(cell)
 
-    tries = 0
-    while tries < 10:
-        pos = np.array([[0, 0, 0]])
-        escape_counter = 0
-        while len(pos) < full_cell_composition.num_atoms:
-            xyz_pos = np.random.rand(1, 3) * cell
-            delta = np.abs(xyz_pos - pos)
-            delta = np.where(delta > 0.5 * cell, np.abs(delta - cell), delta)
-            if np.all(delta > minAllowDis):
-                pos = np.append(pos, xyz_pos, axis=0)
-                escape_counter = 0
-            else:
-                delta = np.sqrt((delta**2).sum(axis=1))
-                if np.all(delta > minAllowDis):
-                    pos = np.append(pos, xyz_pos, axis=0)
-                    escape_counter = 0
-                else:
-                    escape_counter += 1
-                    if escape_counter > 1000:
-                        break
-        if len(pos) == full_cell_composition.num_atoms:
+    radii = covalent_radii[symbols2numbers(elements)] * radii_scaling
+    
+    if min_distance:
+        radii = np.maximum(radii, min_distance / 2)
+
+    nat = len(elements)
+    
+    pos = np.random.rand(len(elements), 3) @ cell
+    ats = Atoms(elements, cell=cell, pbc=True, positions=pos)
+    skin = 0.0
+    nl = NeighborList(radii, self_interaction=False, bothways=True, skin=skin)
+
+    for it in range(500):
+        nl.update(ats)
+        pos = ats.get_positions()
+        dx = np.zeros(pos.shape)
+        dsum = 0
+        for i in range(nat):
+            indices, offsets = nl.get_neighbors(i)
+            rs = pos[indices, :] + offsets @ cell - pos[i, :]
+            # ds is the overlap
+            ds = np.linalg.norm(rs, axis=1) - (radii[indices] + radii[i])
+            if np.any(ds > 1.e-10):
+                print('Assertion failed: ds <= 0')
+                print(np.max(ds))
+                quit()
+            # sum overlaps 
+            dsum += np.sum(ds) 
+            ds -= skin
+            # move atoms away from each other by overlap amount
+            dx[i,:] = np.sum(rs / np.linalg.norm(rs, axis=1)[:, None] * ds[:, None], axis=0)
+        # print(it, dsum, np.linalg.norm(dx))
+        ats.set_positions(pos + dx)
+        if dsum >= -1.e-5:
             break
-    if tries == 10:
-        raise ValueError("Error: Cannot find suitable positions for atoms, lower minAllowDis or decrease the density")
+    else:
+        raise RuntimeError('Cell packing not converged')
 
-    formula = sum([[i] * structure[i] for i in structure], [])
-    if relax_structure:
-        print(relax_structure)
-        data = Atoms(formula, positions=pos, cell=cell, pbc=True)
-        if relax_structure == "lj":
-            data.calc = LennardJones()
-        elif relax_structure == "morse":
-            data.calc = MorsePotential(epsilon=1, r0=3, rho0=6)
-        else:
-            raise ValueError("Relaxation method not supported")
-        dyn = FIRE(data, loginterval=100)
-        dyn.run(fmax=0.05, steps=100)
-        pos = data.get_positions()
+    ats.wrap()
+    if datatype == "pymatgen":
+        structure = Structure(
+            lattice=ats.get_cell(),
+            species=ats.get_chemical_symbols(),
+            coords=ats.get_scaled_positions(),
+            to_unit_cell=True,
+            coords_are_cartesian=False,
+        )
+    else:
+        structure = ats
+    return structure
 
-    if datatype == "ase":
-        data = Atoms(formula, positions=pos, cell=cell, pbc=True)
-    elif datatype == "pymatgen":
-        lattice_vectors = [[0, 0, 0] for _ in range(3)]
-        for i in range(3):
-            lattice_vectors[i][i] = cell[i]
-        data = Structure(lattice_vectors, formula, pos, coords_are_cartesian=True)
-    return data
 
 
 def get_LAMMPS_dump_timesteps(filename: str):
@@ -225,11 +269,13 @@ def correct_atom_types(atoms_list, atom_to_type_map):
     Returns:
         atoms_list (list of Atoms objects): The corrected list of Atoms objects.
     """
+    #Check if atoms_list is a list of Atoms objects
+    if not isinstance(atoms_list, list):
+        atoms_list = [atoms_list]
 
     for atoms in atoms_list:
         corr_symbols = [atom_to_type_map[i] for i in atoms.get_atomic_numbers()]
         atoms.set_chemical_symbols(corr_symbols)
-    return atoms_list
 
 
 def get_high_low_displacement_index(initial_state, current_state, target_atom, percentage=0.25):
@@ -309,6 +355,34 @@ def pdf(dist_list, volume, rrange=10, nbin=100):
     pdf = (h / volbin) / (dist_list.size / volume)
     return xval, pdf
 
+@njit(parallel=True)
+def get_dist_numba(pos, cell):
+    n = pos.shape[0]
+    # Initialize the output matrix
+    dist_matrix = np.zeros((n, n))
+    
+    # Extract cell dimensions for faster access
+    lx, ly, lz = cell[0], cell[1], cell[2]
+    half_lx, half_ly, half_lz = lx / 2.0, ly / 2.0, lz / 2.0
+
+    for i in prange(n):
+        for j in range(i + 1, n):  # Only calculate the upper triangle
+            dx = abs(pos[i, 0] - pos[j, 0])
+            dy = abs(pos[i, 1] - pos[j, 1])
+            dz = abs(pos[i, 2] - pos[j, 2])
+
+            # Apply Periodic Boundary Conditions (Minimum Image Convention)
+            if dx > half_lx: dx -= lx
+            if dy > half_ly: dy -= ly
+            if dz > half_lz: dz -= lz
+
+            d = np.sqrt(dx**2 + dy**2 + dz**2)
+            
+            # Fill both symmetric entries
+            dist_matrix[i, j] = d
+            dist_matrix[j, i] = d
+            
+    return dist_matrix
 
 def get_dist(list, cell):
     """
@@ -330,3 +404,131 @@ def get_dist(list, cell):
     z_dif = np.where(z_dif > 0.5 * dim[2], np.abs(z_dif - dim[2]), z_dif)
     i_i = np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
     return i_i
+
+
+def r_chi(function_1, function_2, x_min=0, x_max=np.inf, steps=100):
+    """
+    Calculate the Wright coefficient (https://doi.org/10.1016/0022-3093(93)90232-M) between two functions
+
+    Parameters:
+        function_1 (dict): Dictionary with keys 'x' and 'y' representing the first function, usually from simulations
+        function_2 (dict): Dictionary with keys 'x' and 'y' representing the second function, usually from experimental meassurements.
+
+    Returns:
+        rchi (float): Wright coefficient, a measure of similarity between the two functions.
+    """
+    # Determine the overlapping x-range
+    min_x_val = np.max([np.min(function_1["x"]), np.min(function_2["x"]), x_min])
+    max_x_val = np.min([np.max(function_1["x"]), np.max(function_2["x"]), x_max])
+
+    if min_x_val >= max_x_val:
+        raise ValueError("No overlapping x-range between the two functions.")
+
+    # Create common x-axis over the overlap region
+    common_x = np.linspace(min_x_val, max_x_val, steps)
+
+    # Interpolate both functions onto the common x-axis
+    interp_f1 = interp1d(function_1["x"], function_1["y"], kind="linear", bounds_error=False, fill_value=0)
+    interp_f2 = interp1d(function_2["x"], function_2["y"], kind="linear", bounds_error=False, fill_value=0)
+
+    y1 = interp_f1(common_x)
+    y2 = interp_f2(common_x)
+
+    # Calculate the r-chi (Wright coefficient)
+    numerator = np.sum((y1 - y2) ** 2)
+
+    denominator = np.sum(y2**2)
+    rchi = np.sqrt(numerator / denominator)
+
+    return rchi, common_x, y1, y2
+
+
+def homogeniety_checker(
+    atoms,
+    grid_density,
+    slide_steps=2,
+    target_species="all",
+    upper_bound=1.5,
+    lower_bound=0.5,
+    box_threshold=0.1,
+    seperated_species_threshold=0.5,
+):
+    atoms.wrap()
+    species = np.unique(atoms.get_chemical_symbols()) if target_species == "all" else [target_species]
+
+    if len(species) == 0:
+        raise ValueError("No species found in the atoms object.")
+
+    cell_lengths = np.array(atoms.get_cell()).diagonal()
+    num_boxes = np.prod(grid_density)
+
+    x_edges = np.linspace(0, cell_lengths[0], grid_density[0] + 1)
+    y_edges = np.linspace(0, cell_lengths[1], grid_density[1] + 1)
+    z_edges = np.linspace(0, cell_lengths[2], grid_density[2] + 1)
+
+    slide_fractions = np.linspace(0, 1, slide_steps, endpoint=False)
+
+    phase_seperated_species = 0
+
+    for spec in species:
+        spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
+        num_atoms = len(spec_atoms)
+        avg_atoms_per_box = num_atoms / num_boxes
+
+        if avg_atoms_per_box < 2:
+            continue
+
+        positions = spec_atoms.get_positions()
+
+        out_of_bounds_boxes = []
+        for dx, dy, dz in product(slide_fractions, repeat=3):
+            # Apply offset in each direction
+            x_slide = x_edges + dx * (cell_lengths[0] / grid_density[0])
+            y_slide = y_edges + dy * (cell_lengths[1] / grid_density[1])
+            z_slide = z_edges + dz * (cell_lengths[2] / grid_density[2])
+
+            x_slide[-1] = cell_lengths[0]
+            y_slide[-1] = cell_lengths[1]
+            z_slide[-1] = cell_lengths[2]
+
+            x_idx = np.digitize(positions[:, 0], x_slide) - 1
+            y_idx = np.digitize(positions[:, 1], y_slide) - 1
+            z_idx = np.digitize(positions[:, 2], z_slide) - 1
+
+            x_idx[x_idx == -1] = 2
+            y_idx[y_idx == -1] = 2
+            z_idx[z_idx == -1] = 2
+
+            counts = np.zeros(grid_density, dtype=int)
+            for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+                counts[xi, yi, zi] += 1
+
+            too_low = counts < avg_atoms_per_box * lower_bound
+            too_high = counts > avg_atoms_per_box * upper_bound
+            out_of_bounds_boxes.append(np.sum(too_low | too_high))
+
+        if np.sum(out_of_bounds_boxes) > num_boxes * slide_steps**3 * box_threshold:
+            phase_seperated_species += 1
+
+    if phase_seperated_species > seperated_species_threshold * len(species):
+        return False
+    else:
+        return True
+
+
+def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
+    atoms.wrap()
+    species = ["O", "N", "F", "Cl", "Br", "I"]
+    for spec in species:
+        if spec not in atoms.get_chemical_symbols():
+            continue
+        spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
+        if len(spec_atoms) < 2:
+            continue
+        spec_positions = spec_atoms.get_positions()
+        distances = np.linalg.norm(spec_positions[:, np.newaxis] - spec_positions, axis=-1)
+        np.fill_diagonal(distances, np.inf)  # Ignore self-distances
+        num_dimers = np.sum(distances < bond_length)
+        if num_dimers > num_allowed:  # Adjust threshold as needed
+            return True
+    return False

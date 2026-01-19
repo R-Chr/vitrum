@@ -7,7 +7,7 @@ from vitrum.glass_Atoms import glass_Atoms
 from tqdm import tqdm
 from scipy.stats import norm
 from ase import Atom
-
+from scipy import integrate
 
 def gaussian_broadening(g_r, r, Q_max):
     # Broad by using a convolution using a Gaussian function
@@ -22,7 +22,7 @@ def gaussian_broadening(g_r, r, Q_max):
 
 class scattering:
     def __init__(
-        self, atom_list, qrange=30, rrange=15, nbin=500, neutron_scattering_coef=None, x_ray_scattering_coef=None
+        self, atom_list, qrange=30, rrange=15, nbin=500, neutron_scattering_coef=None, x_ray_scattering_coef=None, disable_progress=False
     ):
         """
         Initializes a new instance of the class with the given atom_list.
@@ -53,8 +53,10 @@ class scattering:
         self.species = np.unique(self.chemical_symbols)
         self.pairs = [pair for pair in itertools.product(self.species, repeat=2)]
         self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
-        self.aveden = len(atom_list[0]) / atom_list[0].get_volume()
+        self.volume = atom_list[0].get_volume()
+        self.aveden = len(atom_list[0]) / self.volume
         self.atomic_numbers = [Atom(atom).number for atom in self.species]
+        self.disable_progress = disable_progress
 
         # Neutron
         if neutron_scattering_coef is None:
@@ -106,7 +108,7 @@ class scattering:
 
     def calculate_partial_pdfs(self):
         pdfs = np.zeros((len(self.atom_list), len(self.pairs), self.nbin))
-        for atom_ind, atom in enumerate(tqdm(self.atom_list)):
+        for atom_ind, atom in enumerate(tqdm(self.atom_list, disable=self.disable_progress)):
             distances = atom.get_dist()
             for pair_ind, pair in enumerate(self.pairs):
                 atom_1 = np.where(np.array(atom.get_chemical_symbols()) == pair[0])[0]
@@ -245,6 +247,12 @@ class scattering:
         return (-4 * math.pi * self.xval * self.aveden) + (
             4 * math.pi * self.xval * self.aveden * self.get_total_rdf(type=type, broaden=broaden)
         )
+    
+    def get_N_running(self, pair: tuple):
+        pair_pdf = self.get_partial_pdf(pair)
+        n_v = len(np.where(self.chemical_symbols == pair[0])) / self.volume
+        integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
+        return integrate.cumulative_trapezoid(integrand, self.xval, initial=0.0)
 
 
 # Make pdf from distance list into its own function q

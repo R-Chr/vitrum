@@ -130,9 +130,9 @@ def get_structures_from_lammps(
             atoms_forced += atoms
 
     print(f"Included {len(atoms_selected)} selected structures and {len(atoms_forced)} forced structures.")
-    metadata = ["manual"] * len(atoms_selected) + ["gamma"] * len(atoms_forced)
-    structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced] + [
-        AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected
+    metadata = ["gamma"] * len(atoms_selected) + ["manual"] * len(atoms_forced)
+    structures = [AseAtomsAdaptor().get_structure(atom) for atom in atoms_selected] + [
+        AseAtomsAdaptor().get_structure(atom) for atom in atoms_forced
     ]
 
     return structures, metadata
