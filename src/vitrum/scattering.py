@@ -22,13 +22,15 @@ def gaussian_broadening(g_r, r, Q_max):
 
 class scattering:
     def __init__(
-        self, atom_list, qrange=30, rrange=15, nbin=500, neutron_scattering_coef=None, x_ray_scattering_coef=None, disable_progress=False
+        self, atoms, qmin=0.5, qmax=20, rrange=None, nbin=500,  neutron_scattering_coef=None, x_ray_scattering_coef=None, disable_progress=False
     ):
         """
         Initializes a new instance of the class with the given atom_list.
 
         Parameters:
-            atom_list (list): A list of Atoms objects representing the atom list.
+            atom (Atoms, list): A list of Atoms objects or a single Atoms object.
+            qmin (float, optional): The minimum q-value to use. Defaults to 0.5.
+            qmax (float, optional): The maximum q-value to use. Defaults to 20.
             qrange (float, optional): The range of q-values to use. Defaults to 30.
             rrange (float, optional): The range of r-values to use. Defaults to 15.
             nbin (int, optional): The number of bins to use. Defaults to 500.
@@ -41,14 +43,24 @@ class scattering:
         Returns:
             None
         """
+
+        if isinstance(atoms, list):
+            atom_list = atoms
+        else:
+            atom_list = [atoms]
+            
         self.atom_list = [glass_Atoms(atom) for atom in atom_list]
         script_dir = Path(__file__).parent
 
-        self.rrange = rrange
+        if rrange:
+            self.rrange = rrange
+        else:
+            self.rrange = np.min(np.diag(atom_list[0].get_cell())/2)
+
         self.nbin = nbin
         edges = np.linspace(0, self.rrange, self.nbin + 1)
         self.xval = edges[1:] - 0.5 * (self.rrange / self.nbin)
-        self.qval = np.linspace(0.5, qrange, self.nbin)
+        self.qval = np.linspace(qmin, qmax, self.nbin)
         self.chemical_symbols = atom_list[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
         self.pairs = [pair for pair in itertools.product(self.species, repeat=2)]
@@ -107,26 +119,29 @@ class scattering:
         self.partial_pdfs = self.calculate_partial_pdfs()
 
     def calculate_partial_pdfs(self):
-        pdfs = np.zeros((len(self.atom_list), len(self.pairs), self.nbin))
-        for atom_ind, atom in enumerate(tqdm(self.atom_list, disable=self.disable_progress)):
-            distances = atom.get_dist()
-            for pair_ind, pair in enumerate(self.pairs):
-                atom_1 = np.where(np.array(atom.get_chemical_symbols()) == pair[0])[0]
-                atom_2 = np.where(np.array(atom.get_chemical_symbols()) == pair[1])[0]
-                dist_list = distances[np.ix_(atom_1, atom_2)]
-                edges = np.linspace(0, self.rrange, self.nbin + 1)
-                volbin = []
-                for i in range(self.nbin):
-                    vol = ((4 / 3) * np.pi * (edges[i + 1]) ** 3) - ((4 / 3) * np.pi * (edges[i]) ** 3)
-                    volbin.append(vol)
-                h, bin_edges = np.histogram(dist_list, bins=self.nbin, range=(0, self.rrange))
-                h[0] = 0
-                pdfs[atom_ind, pair_ind, :] = (h / volbin) / (
-                    dist_list.shape[0] * dist_list.shape[1] / atom.get_volume()
-                )
-        pdfs = np.mean(pdfs, axis=0)
-        return pdfs
+        edges = np.linspace(0, self.rrange, self.nbin + 1)
+        volbin = (4 / 3) * np.pi * (edges[1:]**3 - edges[:-1]**3)
 
+        pdf_sum = np.zeros((len(self.pairs), self.nbin))
+        n_frames = len(self.atom_list)
+
+        for atom in tqdm(self.atom_list, disable=self.disable_progress):
+            distances = atom.get_dist()
+            symbols = np.array(atom.get_chemical_symbols())
+            volume = atom.get_volume()
+            
+            for pair_ind, pair in enumerate(self.pairs):
+                idx_1 = np.flatnonzero(symbols == pair[0])
+                idx_2 = np.flatnonzero(symbols == pair[1])           
+                dist_list = distances[np.ix_(idx_1, idx_2)]
+                h, _ = np.histogram(dist_list, bins=self.nbin, range=(0, self.rrange))
+                if pair[0] == pair[1]:
+                    h[0] = 0
+                number_density_factor = (len(idx_1) * len(idx_2)) / volume
+                current_pdf = (h / volbin) / number_density_factor
+                pdf_sum[pair_ind, :] += current_pdf
+        return pdf_sum / n_frames
+    
     def get_partial_pdf(self, pair: tuple):
         """
         get the partial probability density function (PDF) of a
@@ -163,29 +178,18 @@ class scattering:
             elif type == "approx_xray":
                 gr_tot = gr_tot + (self.approx_xray_timesby[ind] * pdf) / np.sum(self.approx_xray_timesby, axis=0)
             elif type == "xray":
-
-                ### Attempt to use Fourier transform of xray scattering function f_ij(Q)
-                #  xray_cb = np.array([i * j for i, j in zip(self.c, self.f_i)])
-                #  xray_timesby = np.array([pair[0] * pair[1] for pair in itertools.product(self.f_i, repeat=2)])
-                #  f_ij = xray_timesby / np.sum(xray_cb, axis=0)
-                #  g_x_all = []
-                #  for f_i, pdf in zip(f_ij, pdfs):
-                #      cos_qr = np.cos(np.outer(self.xval, self.qval))  # shape (Q, r)
-                #      j_ij = (1 / np.pi) * np.trapz(f_i * cos_qr, self.qval, axis=0)  # shape (r,)
-                #      y = sc.xval
-                #      f_y = y * (pdf-1)
-                #      conv_result = np.convolve(f_y, j_ij, mode='same') * (y[1] - y[0])  # scale by dy
-                #      g_X= conv_result / y
-                #      g_x_all.append(g_X)
-                #  cc = np.array([[pair[0] * pair[1] for pair in itertools.product(self.c, repeat=2)]]).T
-                #  gr_tot = np.sum(cc*np.array(g_x_all), axis=0)
-
+#                denom_Q = np.sum(self.xray_cb)**2
+#                for ind, pair in enumerate(self.pairs):
+#                    numerator_Q = self.xray_timesby[ind]
+#                    w_ij_Q = np.divide(numerator_Q, denom_Q, 
+#                                    out=np.zeros_like(numerator_Q), 
+#                                    where=denom_Q != 0)
+#                    w_ij_eff = np.trapz(w_ij_Q, self.qval) / (self.qval[-1] - self.qval[0])
+#                    gr_tot += w_ij_eff * pdf
                 print(
-                    " X-ray RDF using Fourier transform of xray scattering function f_ij(Q) is not implemented yet. Using approximation from atomic number."
+                    " X-ray RDF using Fourier transform of xray scattering function f_ij(Q) is not implemented yet."
                 )
-                # Use the approximate X-ray scattering factor
-                gr_tot = gr_tot + (self.approx_xray_timesby[ind] * pdf) / np.sum(self.approx_xray_timesby, axis=0)
-
+                break
         if broaden:
             if isinstance(broaden, (int, float)):
                 Q_max = broaden
@@ -227,15 +231,13 @@ class scattering:
             S_q_tot (ndarray): An array of shape (nbin,) containing the total structure factor.
         """
         if type not in {"neutron", "xray", "approx_xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
+            raise ValueError("Invalid type. Choose either 'neutron', 'xray'")
 
         S_q_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
             partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]))
             if type == "neutron":
                 S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
-            elif type == "approx_xray":
-                raise NotImplementedError("Approximate X-ray structure factor is not implemented.")
             elif type == "xray":
                 S_q_tot = S_q_tot + (self.xray_timesby[ind] * partial_sq) / np.sum(self.xray_timesby, axis=0)
         return S_q_tot
@@ -253,18 +255,3 @@ class scattering:
         n_v = len(np.where(self.chemical_symbols == pair[0])) / self.volume
         integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
         return integrate.cumulative_trapezoid(integrand, self.xval, initial=0.0)
-
-
-# Make pdf from distance list into its own function q
-# def pdf(dist_list, atoms, rrange=10, nbin=100):
-#    edges = np.linspace(0,rrange,nbin+1)
-#    xval=edges[1:]-0.5*(rrange/nbin)
-#    volbin = []
-#    for i in range(nbin):
-#        vol = ((4/3)*np.pi*(edges[i+1])**3)-((4/3)*np.pi*(edges[i])**3)
-#        volbin.append(vol)
-#
-#    h, bin_edges = np.histogram(dist_list, bins=nbin, range=(0,rrange))
-#    h[0] = 0
-#    pdf = (h/volbin)/(dist_list.shape[0]*dist_list.shape[1]/atoms.get_volume())
-#    return xval, pdf
