@@ -1,8 +1,11 @@
-from atomate2.vasp.jobs.core import StaticMaker
-from atomate2.vasp.jobs.md import MDMaker
+try:
+    from atomate2.vasp.jobs.core import StaticMaker
+    from atomate2.vasp.jobs.md import MDMaker
+    from atomate2.vasp.sets.core import StaticSetGenerator
+    from atomate2.vasp.sets.core import MDSetGenerator
+except ImportError:
+    raise ImportError("atomate2 is required for flows. Please install vitrum[batch_active].")
 from pymatgen.io.vasp import Kpoints
-from atomate2.vasp.sets.core import StaticSetGenerator
-from atomate2.vasp.sets.core import MDSetGenerator
 
 
 def static_flow(structure, name=False, incar_settings={}, kpoint=False, potcar_functional="PBE_54"):

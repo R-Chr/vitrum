@@ -18,14 +18,18 @@ from vitrum.batch_active.get_structures import (
 from vitrum.structure_gen import gen_random_glasses
 import uuid
 import os
-from fireworks import LaunchPad
+try:
+    from fireworks import LaunchPad
+    from fireworks.utilities.fw_serializers import load_object_from_file
+    from fireworks.queue.queue_launcher import rapidfire
+    from fireworks.core.fworker import FWorker
+except ImportError:
+    raise ImportError("fireworks is required for the balace class. Please install vitrum[batch_active].")
+    
 from pymatgen.core import Composition
 
 import yaml
 import pickle
-from fireworks.utilities.fw_serializers import load_object_from_file
-from fireworks.queue.queue_launcher import rapidfire
-from fireworks.core.fworker import FWorker
 
 
 class balace:

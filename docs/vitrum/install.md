@@ -11,12 +11,18 @@ To install vitrum:
 
 pip install directly  from this repository. (Make sure you have git installed)
 ```
-pip install git+https://github.com/R-Chr/vitrum.git
+pip install "vitrum @ git+https://github.com/R-Chr/vitrum.git"
 ```
 
 To update package to the most current version
 ```
-pip install --force-reinstall --no-deps git+https://github.com/R-Chr/vitrum.git
+pip install --force-reinstall --no-deps "vitrum @ git+https://github.com/R-Chr/vitrum.git"
+```
+
+
+### (optional) To install dependencies for batch_active (BALACE framework):
+```
+pip install "vitrum[batch_active] @ git+https://github.com/R-Chr/vitrum.git"
 ```
 
 ### (optional) Dionysus and Diode

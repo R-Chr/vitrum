@@ -23,10 +23,11 @@ setup(
         "pymatgen",
         "ruamel-yaml==0.17.9",
         "mp_api",
-        "fireworks",
-        "jobflow",
-        "atomate2",
+        "numba",
     ],
+    extras_require={
+        "workflows": ["fireworks", "jobflow", "atomate2"],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

@@ -1,61 +1,66 @@
 import numpy as np
 from ase import Atoms
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple, Dict
 from vitrum.utility import pdf, find_min_after_peak
 from vitrum.utility import get_dist_numba as dist
 from itertools import product
 
 
-class glass_Atoms(Atoms):
+class GlassAtoms(Atoms):
+    """
+    Extended ASE Atoms class for glass structure analysis.
+    """
     # def __init__(self):
     #    super().__init__()
 
-    def get_dist(self):
+    def get_dist(self) -> np.ndarray:
         """
         Calculate the distances between all pairs of atoms in the Atoms object.
 
         Returns:
-            i_i (ndarray): An array of shape (n_atoms, n_atoms) containing the distances
+            np.ndarray: An array of shape (n_atoms, n_atoms) containing the distances
                 between each pair of atoms.
         """
         dim = np.diagonal(self.get_cell())
         positions = self.get_positions()
         return dist(positions, dim)
 
-    def set_new_chemical_symbols(self, dict):
+    def set_new_chemical_symbols(self, symbol_map: Dict[int, str]):
         """
         Set new chemical symbols for the atoms in the object.
 
-        Parameters:
-            dict (dict): A dictionary mapping atomic numbers to new chemical symbols.
-
-        Returns:
-            None
+        Args:
+            symbol_map (Dict[int, str]): A dictionary mapping atomic numbers to new chemical symbols.
         """
-        corr_symbols = [dict[i] for i in self.get_atomic_numbers()]
+        corr_symbols = [symbol_map[i] for i in self.get_atomic_numbers()]
         self.set_chemical_symbols(corr_symbols)
 
     def get_pdf(self, target_atoms, rrange=10, nbin=100, indicies=None):
         """
         Calculate the probability density function (PDF) of a given pair of target atoms within a specified range.
 
-        Parameters:
-            target_atoms (list): A list of two elements representing the target atoms. Each element can be either a
-              string (chemical symbol) or an integer (atomic number).
-            rrange (float, optional): The range within which to calculate the PDF. Defaults to 10.
+        Args:
+            target_atoms (List[Union[str, int]]): A list of two elements representing the target atoms.
+                Each element can be either a string (chemical symbol) or an integer (atomic number).
+            rrange (float, optional): The range within which to calculate the PDF. Defaults to 10.0.
             nbin (int, optional): The number of bins to use for the histogram. Defaults to 100.
-            indicies (list, optional): A list of two elements representing the indicies of the target atoms. Specifying
-              this parameter will override the target_atoms parameter. Defaults to None.
+            indicies (Optional[List[np.ndarray]], optional): A list of two arrays representing the indices
+                of the target atoms. Specifying this parameter will override the target_atoms parameter.
+                Defaults to None.
 
         Returns:
-            xval (ndarray): An array of shape (nbin,) containing the distance values.
-            pdf (ndarray): An array of shape (nbin,) containing the PDF values.
+            Tuple[np.ndarray, np.ndarray]:
+                - xval: An array of shape (nbin,) containing the distance values.
+                - pdf: An array of shape (nbin,) containing the PDF values.
         """
         if indicies is None:
             if isinstance(target_atoms[0], str):
                 types = self.get_chemical_symbols()
-            if isinstance(target_atoms[0], int):
+            elif isinstance(target_atoms[0], int):
                 types = self.get_atomic_numbers()
+            else:
+                raise TypeError("target_atoms must contain strings or integers.")
+                
             types = np.array(types)
             distances = self.get_dist()
             atom_1 = np.where(types == target_atoms[0])[0]
@@ -63,21 +68,38 @@ class glass_Atoms(Atoms):
         else:
             atom_1 = indicies[0]
             atom_2 = indicies[1]
+            distances = self.get_dist() # Needed if indicies are provided but distances not calculated locally
+
+        if len(atom_1) == 0 or len(atom_2) == 0:
+             # Handle case where one species is missing to avoid errors in np.ix_
+             # Return zeros or meaningful empty result
+             edges = np.linspace(0, rrange, nbin + 1)
+             xval = edges[1:] - 0.5 * (rrange / nbin)
+             return xval, np.zeros(nbin)
+
         dist_list = distances[np.ix_(atom_1, atom_2)]
         return pdf(dist_list, self.get_volume(), rrange, nbin)
 
-    def get_all_angles(self, center_type, neigh_types, cutoff="Auto"):
+    def get_all_angles(
+        self,
+        center_type: str,
+        neigh_types: Union[str, List[str]],
+        cutoff: Union[float, int, List[float], str] = "Auto"
+    ) -> List[np.ndarray]:
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
 
-        Parameters:
+        Args:
             center_type (str): The atomic symbol of the central atom.
-            neigh_types (str, list): The atomic symbols of the neighbor atoms.
-            cutoff (float, int, list, or "Auto", optional): Range within which to calculate the angular distribution.
-              Defaults to "Auto". Can be a list of cutoffs for each neighbor type, or a specific cutoff for all.
+            neigh_types (Union[str, List[str]]): The atomic symbols of the neighbor atoms.
+            cutoff (Union[float, int, List[float], str], optional): Range within which to calculate the angular distribution.
+                Defaults to "Auto". Can be a list of cutoffs for each neighbor type, or a specific cutoff for all.
 
         Returns:
-            angles (list): A list of arrays containing the angular distribution values.
+            List[np.ndarray]: A list of arrays containing the angular distribution values.
+
+        Raises:
+            ValueError: If center_type or neigh_types are not present in the structure.
         """
         types = np.array(self.get_chemical_symbols())
         species = np.unique(types)
@@ -96,9 +118,9 @@ class glass_Atoms(Atoms):
         neigh_index = [np.where(types == neigh_type)[0] for neigh_type in neigh_types]
 
         if cutoff == "Auto":
-            pdf = [self.get_pdf(target_atoms=[center_type, neigh_type]) for neigh_type in neigh_types]
-            cutoff = [pdf[i][0][find_min_after_peak(pdf[i][1])] for i in range(len(neigh_types))]
-        elif isinstance(cutoff, float) or isinstance(cutoff, int):
+            pdf_vals = [self.get_pdf(target_atoms=[center_type, neigh_type]) for neigh_type in neigh_types]
+            cutoff = [pdf_vals[i][0][find_min_after_peak(pdf_vals[i][1])] for i in range(len(neigh_types))]
+        elif isinstance(cutoff, (float, int)):
             cutoff = [cutoff, cutoff]
 
         angles = []
@@ -127,18 +149,23 @@ class glass_Atoms(Atoms):
             angles.append(self.get_angles(indicies, mic=True))
         return angles
 
-    def get_coordination_number(self, center_type, neigh_type, cutoff="Auto"):
+    def get_coordination_number(
+        self,
+        center_type: str,
+        neigh_type: str,
+        cutoff: Union[float, int, str] = "Auto"
+    ) -> List[int]:
         """
         Calculate the coordination number of a given pair of target atoms within a specified range.
 
-        Parameters:
+        Args:
             center_type (str): The atomic symbol of the central atom.
             neigh_type (str): The atomic symbol of the neighbor atoms.
-            cutoff (float, int, or "Auto", optional): The range within which to calculate the coordination number.
+            cutoff (Union[float, int, str], optional): The range within which to calculate the coordination number.
               Defaults to "Auto".
 
         Returns:
-            coordination_numbers (list): A list containing the coordination numbers.
+            List[int]: A list containing the coordination numbers for each center atom.
         """
 
         distances = self.get_dist()
@@ -148,10 +175,9 @@ class glass_Atoms(Atoms):
         dist_list = distances[np.ix_(atom_1, atom_2)]
 
         if cutoff == "Auto":
-            pdf = self.get_pdf(target_atoms=[center_type, neigh_type])
-            cutoff = pdf[0][find_min_after_peak(pdf[1])]
-        elif isinstance(cutoff, float) or isinstance(cutoff, int):
-            cutoff = cutoff
+            pdf_vals = self.get_pdf(target_atoms=[center_type, neigh_type])
+            cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1])]
+
         coordination_numbers = []
         for center in range(len(atom_1)):
             neighbors = np.where((dist_list[center, :] < cutoff) & (dist_list[center, :] > 0))[0]
@@ -163,22 +189,22 @@ class glass_Atoms(Atoms):
         center_type: str,
         bridge_type: str,
         former_types: Optional[List[str]] = None,
-        cutoff: Union[float, int] = "Auto",
+        cutoff: Union[float, int, str] = "Auto",
     ) -> List[int]:
         """
         Calculate the number of bridges for each center atom of a given type.
 
-        Parameters:
+        Args:
             center_type (str): The type of the center atoms.
             bridge_type (str): The type of the bridge atoms.
-            former_types (Optional[List], optional): A list of types of the former atoms. Defaults to None.
-            cutoff (Union[str, float, int], optional): The cutoff distance for considering a bridge.
+            former_types (Optional[List[str]], optional): A list of types of the former atoms. Defaults to None.
+            cutoff (Union[float, int, str], optional): The cutoff distance for considering a bridge.
                 If "Auto", the cutoff is determined by finding the minimum value after the peak in the
                 radial distribution function. If a float or int, the cutoff is set to the specified value.
                 Defaults to "Auto".
 
         Returns:
-            num_of_bridges (list): A list of the number of bridges for each center atom.
+            List[int]: A list of the number of bridges for each center atom.
         """
         distances = self.get_dist()
         types = np.array(self.get_chemical_symbols())
@@ -189,15 +215,13 @@ class glass_Atoms(Atoms):
         if former_types is None:
             formers = centers
         elif isinstance(former_types, list):
-            formers = np.hstack([np.where(types == type)[0] for type in former_types])
+            formers = np.hstack([np.where(types == t)[0] for t in former_types])
         else:
             raise TypeError("former_types must be either None or a List of atom types")
 
         if cutoff == "Auto":
-            pdf = self.get_pdf(target_atoms=[center_type, bridge_type])
-            cutoff = pdf[0][find_min_after_peak(pdf[1])]
-        elif isinstance(cutoff, float) or isinstance(cutoff, int):
-            cutoff = cutoff
+            pdf_vals = self.get_pdf(target_atoms=[center_type, bridge_type])
+            cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1])]
 
         num_of_bridges = []
         for center in centers:
@@ -212,5 +236,14 @@ class glass_Atoms(Atoms):
 
         return num_of_bridges
 
-    def get_density(self):
+    def get_density(self) -> float:
+        """
+        Calculate the density of the structure.
+        
+        Returns:
+            float: Density in g/cm^3.
+        """
         return (np.sum(self.get_masses()) / 6.02214076 * 10**-23) / (self.get_volume() * 10**-24)
+
+# Alias for backward compatibility
+glass_Atoms = GlassAtoms

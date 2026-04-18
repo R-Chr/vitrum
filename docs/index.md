@@ -1,36 +1,37 @@
-# ⏳ vitrum⏳ 
+# ⏳ vitrum (WIP)⏳
 
-Implementation of various analysis methods commonly used for disordered and glassy material structures.
+**vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a comprehensive suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
 
-## Vitrun is a work in progress ⚠
- Nothing is sacred, and development is ongoing. APIs and functionality are subject to change at any time.
+## 🔴 Vitrum is a work in progress 🔴
+Nothing is sacred, and development is ongoing. APIs and functionality are subject to change at any time.
 
+## 🎯 Scope and Functionality
 
+`vitrum` offers:
 
-## 🎯 Scope and functionality
+### 1. Structural Characterization
+*   **Scattering Functions**: Calculate partial and total Radial Distribution Functions (RDF) and Structure Factors ($S(q)$) for both Neutron and X-ray scattering (`vitrum.scattering`).
+*   **Ring Analysis**: Analyze ring size distributions and statistics in network glasses (`vitrum.rings`).
+*   **Topological Analysis**: Compute persistent homology to identify medium-range order and topological features (`vitrum.persistent_homology`).
+*   **Coordination & Angles**: Analyze bond angle distributions and coordination environments (`vitrum.coordination`).
 
-#### Classes
-| Class name | Functionality |
-| ----------- | ----------- |
-| glass_Atoms | Extension to the ASE Atoms object, implementing various analysis of individual structures|
-| scattering | Calculate scattering functions based on a list of glass_Atoms objects|
-| diffusion | Calculate diffusion properties based on a trajectory of glass_Atoms objects |
-| persistent_homology | Calculate persistent homology based on a list of glass_Atoms objects |
-| rings| Calculate ring statistics based on a Atoms objects |
+### 2. Dynamics & Diffusion
+*   **Diffusion Analysis**: Calculate Mean Squared Displacement (MSD), diffusion coefficients, and Van Hove correlation functions (`vitrum.diffusion`).
 
-## 📖 Author
-Author: Rasmus Christensen (rasmusc@bio.aau.dk)
+### 3. Machine Learning & Workflows
+*   **BALACE Framework**: A Batch Active Learning framework for Atomistic Simulations (`vitrum.batch_active`).
+    *   Automated workflow for training Machine Learning Interatomic Potentials (MLIPs) based on ACE .
+    *   Integration with VASP and LAMMPS for data generation and active learning loops.
+    *   Job management via Fireworks and Jobflow.
+
+## � Author
+Rasmus Christensen (rasmusc@bio.aau.dk)
 
 ## ⭐ Acknowledgements
-
-`vitrum` has been built with the help of several open-source packages. All of these are listed in setup.py.
-
-These packages include:
-[`ASE`](https://wiki.fysik.dtu.dk/ase/index.html)
-[`NumPy`](https://numpy.org/)
-[`scikit-learn`](https://scikit-learn.org/stable/)
-[`scipy`](https://scipy.org/)
-[`pandas`](https://pandas.pydata.org/)
-[`Dionysus`](https://mrzv.org/software/dionysus2/)
-[`DioDe`](https://github.com/mrzv/diode)
-[`pymatgen`](https://pymatgen.org/)
+`vitrum` relies on several powerful open-source packages:
+*   [ASE](https://wiki.fysik.dtu.dk/ase/)
+*   [Pymatgen](https://pymatgen.org/)
+*   [NumPy](https://numpy.org/) / [SciPy](https://scipy.org/) / [pandas](https://pandas.pydata.org/)
+*   [scikit-learn](https://scikit-learn.org/)
+*   [Dionysus](https://mrzv.org/software/dionysus2/) / [DioDe](https://github.com/mrzv/diode)
+*   [Atomate2](https://github.com/materialsproject/atomate2) / [Jobflow](https://materialsproject.github.io/jobflow/) / [Fireworks](https://materialsproject.github.io/fireworks/)

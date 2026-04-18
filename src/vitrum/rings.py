@@ -1,4 +1,4 @@
-from vitrum.glass_Atoms import glass_Atoms
+from vitrum.glass_Atoms import GlassAtoms
 import numpy as np
 from scipy.sparse import csr_array, coo_matrix
 from scipy.sparse.csgraph import dijkstra
@@ -6,15 +6,21 @@ from ase.neighborlist import NeighborList
 from ase.data import covalent_radii
 from ase.symbols import symbols2numbers
 from ase.io import write
+from ase import Atoms
+from collections import Counter
+from typing import List, Dict, Optional, Tuple, Set, Union
 
-def check_ring_is_periodic(ring, offsets):
+
+def check_ring_is_periodic(ring: List[int], offsets: Dict[Tuple[int, int], np.ndarray]) -> bool:
     ''' 
     Check if the ring wraps around the period cell, i.e., is not a true ring.
+    
     Args:
-        ring (list(int)): Atom indices of the ring
-        offsets (dict(type(int, int)): Unit cell offsets for all atoms
+        ring (List[int]): Atom indices of the ring.
+        offsets (Dict[Tuple[int, int], np.ndarray]): Unit cell offsets for all atoms pairs.
+
     Returns:
-        bool: True if the ring is periodic, False otherwise
+        bool: True if the ring is periodic (wraps around), False otherwise (contained within cell without wrapping sum).
     '''
     total_offset = np.zeros(3)
     for i in range(len(ring) - 1):
@@ -22,14 +28,27 @@ def check_ring_is_periodic(ring, offsets):
     total_offset += offsets[(ring[-1], ring[0])]
     return np.all(total_offset == 0)
 
-def find_rings(ats, radii_factor=1.3, repeat=(1, 1, 1), bonds=None, limit=np.inf):
-    ''' Find rings in the unit cell.
-        Rings are found according to the definition of L. Guttman, J. Non-Cryst. Solids 1990, 116.
-        Args:
-            ats (ase.Atoms): Atoms object containing the structure
-            radii_factor (float): Factor to multiply covalent radii for neighbor search
-            repeat (tuple(int, int, int)): How often to repeat the unit cell in each direction. Increase for small cells.
-            bonds (list(tuple(str, str))): List of allowed bonds, e.g., [('C', 'C'), ('C', 'O')], can be None to allow all bonds.
+
+def find_rings(
+    ats: Atoms,
+    radii_factor: float = 1.3,
+    repeat: Tuple[int, int, int] = (1, 1, 1),
+    bonds: Optional[List[Tuple[str, str]]] = None,
+    limit: float = np.inf
+) -> List[List[int]]:
+    ''' 
+    Find rings in the unit cell.
+    Rings are found according to the definition of L. Guttman, J. Non-Cryst. Solids 1990, 116.
+    
+    Args:
+        ats (ase.Atoms): Atoms object containing the structure
+        radii_factor (float): Factor to multiply covalent radii for neighbor search
+        repeat (Tuple[int, int, int]): How often to repeat the unit cell in each direction. Increase for small cells.
+        bonds (Optional[List[Tuple[str, str]]]): List of allowed bonds, e.g., [('C', 'C'), ('C', 'O')], can be None to allow all bonds.
+        limit (float): Maximum ring size to search for.
+
+    Returns:
+        List[List[int]]: A list of rings, where each ring is a list of atom indices.
     '''
     s = ats.repeat(repeat)
     pos = s.get_positions()
@@ -108,13 +127,16 @@ def find_rings(ats, radii_factor=1.3, repeat=(1, 1, 1), bonds=None, limit=np.inf
 class Ring(object):
     """
     A class representing a ring in a atomistic system.
-
-    Parameters:
-        atoms (list): A list of Atoms objects representing the atoms in the system.
-        indexes (list, optional): A list of indices of the atoms involved in the ring. Defaults to None.
     """
 
-    def __init__(self, atoms, indexes=None):
+    def __init__(self, atoms: Atoms, indexes: Optional[List[int]] = None):
+        """
+        Initialize a Ring object.
+
+        Args:
+            atoms (Atoms): An Atoms object representing the atoms in the ring.
+            indexes (Optional[List[int]], optional): A list of indices of the atoms involved in the ring. Defaults to None.
+        """
         self.atoms = atoms
         self.indexes = indexes
         self._roundness = None
@@ -124,12 +146,12 @@ class Ring(object):
         self.atom_types = np.unique(self.atom_symbols).tolist()
         self.atom_ids = [np.where(self.atom_symbols == atom_type)[0] for atom_type in self.atom_types]
 
-    def center(self):
+    def center(self) -> np.ndarray:
         """
         Calculate the center of the ring.
 
         Returns:
-            center (ndarray): An array of shape (3,) representing the center of the ring.
+            np.ndarray: An array of shape (3,) representing the center of the ring.
         """
         positions = self.atoms.get_positions()
         cell = np.diagonal(self.atoms.get_cell())
@@ -140,31 +162,34 @@ class Ring(object):
         center = np.mod(center + cell, cell)
         return center
 
-    def size(self):
+    def size(self) -> int:
         """
         Calculate the size of the ring, i.e., the number of atoms in the ring.
 
         Returns:
-            size (int): The size of the ring.
+            int: The size of the ring.
         """
         return len(self.atoms)
 
 
-class RINGs:
+class RingAnalysis:
     """
     A class for calculating and analyzing rings in atomistic systems.
-
-    Parameters:
-        atoms: An Atoms objects representing the atoms in the system.
-        included_atoms (list): A list of strings representing the chemical symbols of the atoms to include in the analysis.
-        bonding_dict (dict): A dictionary mapping the chemical symbols of the atoms to their bonding partners.
     """
 
-    def __init__(self, atoms, included_atoms, bonding_dict=None):
+    def __init__(self, atoms: Atoms, included_atoms: List[str], bonding_dict: Optional[List[Tuple[str, str]]] = None):
+        """
+        Initialize the RingAnalysis class.
+
+        Args:
+            atoms (Atoms): An Atoms object representing the atoms in the system.
+            included_atoms (List[str]): A list of strings representing the chemical symbols of the atoms to include in the analysis.
+            bonding_dict (Optional[List[Tuple[str, str]]]): A list of allowed bonds, e.g., [('Si', 'O')].
+        """
         super().__init__()
         self.bonding_dict = bonding_dict
         atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
-        self.atoms = glass_Atoms(atoms)
+        self.atoms = GlassAtoms(atoms)
         self.num_atoms = len(self.atoms)
         self.atom_symbols = np.array(self.atoms.get_chemical_symbols())
         self.atom_types = np.unique(self.atom_symbols).tolist()
@@ -172,12 +197,22 @@ class RINGs:
         self.rings = None
 
 
-    def calculate(self, radii_factor=1.3, repeat=(1,1,1), max_size=np.inf):
+    def calculate(
+        self,
+        radii_factor: float = 1.3,
+        repeat: Tuple[int, int, int] = (1, 1, 1),
+        max_size: float = np.inf
+    ) -> List[Ring]:
         """
         Calculate the rings in the system.
 
+        Args:
+            radii_factor (float): Factor to multiply covalent radii for neighbor search.
+            repeat (Tuple[int, int, int]): Repeat unit cell.
+            max_size (float): Maximum ring size.
+
         Returns:
-            rings (list): A list of Ring objects representing the rings in the system.
+            List[Ring]: A list of Ring objects representing the rings in the system.
         """
         bonds = self.bonding_dict
 
@@ -186,17 +221,54 @@ class RINGs:
         self.rings = [Ring(self.atoms[list(r)], list(r)) for r in rings]
         return self.rings
 
-    def write_rings(self, filename, format='extxyz'):
+    def write_rings(self, filename: str, format: str = 'extxyz'):
         """
         Write the rings to a file.
 
-        Parameters:
+        Args:
             filename (str): The name of the file to write the rings to.
+            format (str): The format of the file.
         """
+        if self.rings is None:
+            raise ValueError("Rings have not been calculated yet.")
         write(filename, [r.atoms for r in self.rings], format=format)
     
-    def get_ring_size_distribution(self):
+    def get_ring_size_distribution(self) -> Dict[int, int]:
+        """
+        Get the distribution of ring sizes.
+
+        Returns:
+            Dict[int, int]: A dictionary where keys are ring sizes and values are counts.
+        """
         if self.rings is None:
             raise ValueError("Rings have not been calculated yet.")
         ring_sizes = [len(r.atoms) for r in self.rings]
-        return np.bincount(ring_sizes)
+        return dict(Counter(ring_sizes))
+    
+    def plot_ring_size_distribution(self, ax=None):
+            """
+            Plots the distribution of ring sizes using matplotlib.
+            """
+            import matplotlib.pyplot as plt
+            
+            dist = self.get_ring_size_distribution()
+            if not dist:
+                print("No rings found. Ensure you have run .calculate() first.")
+                return
+
+            sizes = sorted(dist.keys())
+            counts = np.array([dist[size] for size in sizes])
+            frequency = counts / np.sum(counts)
+
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(9, 6))
+                ax.set_xlabel('Ring Size', fontsize=12)
+                ax.set_ylabel('Frequency', fontsize=12)
+                ax.set_xticks(sizes)  
+
+            ax.plot(sizes, frequency)
+
+            return ax
+
+# Alias for backward compatibility
+RINGs = RingAnalysis

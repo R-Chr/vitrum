@@ -1,34 +1,37 @@
 import numpy as np
-from vitrum.glass_Atoms import glass_Atoms
+from vitrum.glass_Atoms import GlassAtoms
 from scipy.stats import linregress
+from typing import List, Union, Optional, Tuple
+from ase import Atoms
 
 
-class diffusion:
-    def __init__(self, trajectory: list, sample_times: list):
+class Diffusion:
+    """
+    Class for analyzing diffusion in glass structures.
+    """
+    def __init__(self, trajectory: List[Atoms], sample_times: List[float]):
         """
         Initializes a new instance of the class with the given a trajectory as a list of Atoms objects.
 
-        Parameters:
-            trajectory (list): A list of Atoms objects representing the trajectory.
-            sample_times (list): A list of sampled times.
-
-        Returns:
-            None
+        Args:
+            trajectory (List[Atoms]): A list of Atoms objects representing the trajectory.
+            sample_times (List[float]): A list of sampled times.
         """
 
-        self.trajectory = [glass_Atoms(atom) for atom in trajectory]
+        self.trajectory = [GlassAtoms(atom) for atom in trajectory]
         self.chemical_symbols = np.array(trajectory[0].get_chemical_symbols())
         self.species = np.unique(self.chemical_symbols)
         self.sample_times = sample_times
 
-    def get_mean_square_displacements(self):
+    def get_mean_square_displacements(self) -> np.ndarray:
         """
         Calculates the mean square displacement for each atom in the trajectory.
 
         Returns:
-
-            ndarray: An array of mean square displacements for each atom in the trajectory.
-                for each atom at the corresponding time step.
+            np.ndarray: An array of mean square displacements. 
+                Rows correspond to:
+                0: Total MSD
+                1+: MSD for each species in self.species order.
         """
         initial_positions = self.trajectory[0].get_positions()
         displacement_array = np.zeros((len(self.trajectory), len(self.chemical_symbols)))
@@ -47,7 +50,17 @@ class diffusion:
 
         return np.array(mean_square_displacement)
 
-    def get_diffusion_coef(self, skip_first=100, msds=None):
+    def get_diffusion_coef(self, skip_first: int = 100, msds: Optional[np.ndarray] = None) -> np.ndarray:
+        """
+        Calculate the diffusion coefficients.
+
+        Args:
+            skip_first (int, optional): Number of initial time steps to skip for linear regression. Defaults to 100.
+            msds (Optional[np.ndarray], optional): Pre-calculated MSDs. If None, they are calculated.
+
+        Returns:
+            np.ndarray: Array of diffusion coefficients.
+        """
         if msds is None:
             msds = self.get_mean_square_displacements()
         D = []
@@ -56,7 +69,25 @@ class diffusion:
             D.append((lin_reg.slope / 6))
         return np.array(D)
 
-    def get_van_hove_self_correlation(self, target_atom, t_window=None, nbin=70):
+    def get_van_hove_self_correlation(
+        self,
+        target_atom: str,
+        t_window: Optional[int] = None,
+        nbin: int = 70
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate the Van Hove self-correlation function.
+
+        Args:
+            target_atom (str): The chemical symbol of the target atom.
+            t_window (Optional[int], optional): Time window stride. Defaults to None.
+            nbin (int, optional): Number of bins for histogram. Defaults to 70.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: 
+                - edges: Bin edges (distance).
+                - hist: Histogram values (probability).
+        """
         index = np.where(self.chemical_symbols == target_atom)[0]
 
         if t_window is None:
@@ -83,3 +114,6 @@ class diffusion:
 
     def get_velocity_autocorrelation(self):
         pass
+
+# Alias for backward compatibility
+diffusion = Diffusion

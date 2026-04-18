@@ -27,7 +27,31 @@ def get_volume(
     density: float | None = None,
     MP_API_KEY: str | None = None,
 ):
+    """
+    Get the volume of the cell based on the composition and various estimation methods.
 
+    Args:
+        composition (Union[Composition, str]): The composition of the material.
+        structure (dict): A dictionary mapping element symbols to their count in the structure.
+        vol_per_atom_source (Union[float, str], optional): Method to estimate volume per atom.
+            Options:
+            - "mp": Use Materials Project (requires API key).
+            - "icsd": Use ICSD database (if available).
+            - "density": Calculate from provided density.
+            - "covalent_radius": Estimate from covalent radii.
+            - "convex_hull": Estimate from convex hull on Materials Project.
+            - float: Directly provide the volume per atom.
+            Defaults to "mp".
+        db_kwargs (dict, optional): Keyword arguments for database queries. Defaults to None.
+        density (float, optional): Density in g/cm^3. Required if vol_per_atom_source="density". Defaults to None.
+        MP_API_KEY (str, optional): Materials Project API key. Defaults to None.
+
+    Returns:
+        float: The calculated total volume of the cell in Angstrom^3.
+
+    Raises:
+        ValueError: If estimating from density but estimates fail, or if an unknown source is provided.
+    """
     
     struct_db = vol_per_atom_source.lower() if isinstance(vol_per_atom_source, str) else None
     db_kwargs = db_kwargs or ({"use_cached": True} if struct_db == "mp" else {})
@@ -73,6 +97,16 @@ def get_volume(
     return cell_vol
 
 def get_average_volume_convex_hull(composition, MP_API_KEY=None):
+    """
+    Get the average volume per atom from the convex hull on Materials Project.
+
+    Args:
+        composition (Composition): The composition to query.
+        MP_API_KEY (str, optional): Materials Project API Key.
+
+    Returns:
+        float: Average volume per atom.
+    """
     with MPRester(api_key=MP_API_KEY) as mpr:
         entries = mpr.get_entries_in_chemsys(
             elements=[str(el) for el in composition.elements],
@@ -252,7 +286,17 @@ def apply_strain_to_structure(structure, deformations: list) -> list:
     return transformations
 
 
-def find_min_after_peak(self, padf):
+def find_min_after_peak(padf):
+    """
+    Find the index of the first local minimum after the first peak in a function.
+    Useful for determining cutoffs from PDFs.
+
+    Args:
+        padf (np.ndarray): The probability density function or similar array.
+
+    Returns:
+        int: The index of the minimum.
+    """
     mins = argrelextrema(padf, np.less_equal, order=4)[0]
     second_min = [i for ind, i in enumerate(mins) if i != ind][0]
     return second_min
@@ -357,6 +401,16 @@ def pdf(dist_list, volume, rrange=10, nbin=100):
 
 @njit(parallel=True)
 def get_dist_numba(pos, cell):
+    """
+    Calculate the distance matrix between atoms using Numba for performance.
+
+    Args:
+        pos (np.ndarray): Array of atomic positions (N x 3).
+        cell (np.ndarray): Cell dimensions (3,). Assumes an orthorhombic cell (lx, ly, lz).
+
+    Returns:
+        np.ndarray: Symmetric distance matrix (N x N).
+    """
     n = pos.shape[0]
     # Initialize the output matrix
     dist_matrix = np.zeros((n, n))
@@ -386,14 +440,14 @@ def get_dist_numba(pos, cell):
 
 def get_dist(list, cell):
     """
-    Calculate the distance between atoms in a box with PBC and 90 degree angles."
+    Calculate the pairwise distance matrix for atoms in a periodic simulation box.
 
-    Parameters:
-        list (np.ndarray): A 2D numpy array of atomic positions.
-        cell (np.ndarray): The cell dimensions of the system
+    Args:
+        list (np.ndarray): Atomic positions (N x 3).
+        cell (np.ndarray): Cell dimensions (3,). Assumes an orthorhombic cell.
 
     Returns:
-        i_i (np.ndarray): The interatomic distances.
+        np.ndarray: Symmetric distance matrix (N x N) containing distances between all atom pairs.
     """
     dim = [cell[0], cell[1], cell[2]]
     x_dif = np.abs(list[:, 0][np.newaxis, :] - list[:, 0][:, np.newaxis])
@@ -402,8 +456,7 @@ def get_dist(list, cell):
     x_dif = np.where(x_dif > 0.5 * dim[0], np.abs(x_dif - dim[0]), x_dif)
     y_dif = np.where(y_dif > 0.5 * dim[1], np.abs(y_dif - dim[1]), y_dif)
     z_dif = np.where(z_dif > 0.5 * dim[2], np.abs(z_dif - dim[2]), z_dif)
-    i_i = np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
-    return i_i
+    return np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
 
 
 def r_chi(function_1, function_2, x_min=0, x_max=np.inf, steps=100):
@@ -453,6 +506,25 @@ def homogeniety_checker(
     box_threshold=0.1,
     seperated_species_threshold=0.5,
 ):
+    """
+    Check the homogeneity of the atomic structure by analyzing atom density in grid boxes.
+
+    Args:
+        atoms (Atoms): The ASE Atoms object to analyze.
+        grid_density (tuple or list): Number of grid divisions in x, y, z directions (nx, ny, nz).
+        slide_steps (int, optional): Number of steps to slide the grid for averaging. Defaults to 2.
+        target_species (str or list, optional): Species to check. "all" checks all present species. Defaults to "all".
+        upper_bound (float, optional): Multiplier for average density to consider a box over-dense. Defaults to 1.5.
+        lower_bound (float, optional): Multiplier for average density to consider a box under-dense. Defaults to 0.5.
+        box_threshold (float, optional): Fraction of boxes allowed to be out of bounds before flagging a species. Defaults to 0.1.
+        seperated_species_threshold (float, optional): Fraction of species allowed to be phase separated before the structure is flagged. Defaults to 0.5.
+
+    Returns:
+        bool: True if the structure is considered homogeneous, False otherwise.
+
+    Raises:
+        ValueError: If no species are found in the atoms object.
+    """
     atoms.wrap()
     species = np.unique(atoms.get_chemical_symbols()) if target_species == "all" else [target_species]
 
@@ -517,6 +589,17 @@ def homogeniety_checker(
 
 
 def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
+    """
+    Check for the presence of dimers (e.g., O2, N2, F2, Cl2, Br2, I2) in the structure.
+
+    Args:
+        atoms (Atoms): The ASE Atoms object to check.
+        bond_length (float, optional): The cutoff distance to define a bond. Defaults to 2.0.
+        num_allowed (int, optional): The maximum number of allowed dimers before returning True. Defaults to 2.
+
+    Returns:
+        bool: True if the number of dimers exceeds `num_allowed`, False otherwise.
+    """
     atoms.wrap()
     species = ["O", "N", "F", "Cl", "Br", "I"]
     for spec in species:
