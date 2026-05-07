@@ -30,7 +30,7 @@ def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndar
     FWHM = 5.437 / Q_max
     sigma = FWHM / 2.355
     foubroad = g_r * (norm.pdf(delta_r, 0, sigma) - norm.pdf(sum_r, 0, sigma))
-    dist_broad = np.trapz(foubroad, r)
+    dist_broad = np.trapezoid(foubroad, r)
     return dist_broad
 
 
@@ -275,7 +275,7 @@ class Scattering:
 #                    w_ij_Q = np.divide(numerator_Q, denom_Q, 
 #                                    out=np.zeros_like(numerator_Q), 
 #                                    where=denom_Q != 0)
-#                    w_ij_eff = np.trapz(w_ij_Q, self.qval) / (self.qval[-1] - self.qval[0])
+#                    w_ij_eff = np.trapezoid(w_ij_Q, self.qval) / (self.qval[-1] - self.qval[0])
 #                    gr_tot += w_ij_eff * pdf
                 print(
                     " X-ray RDF using Fourier transform of xray scattering function f_ij(Q) is not implemented yet."
@@ -321,7 +321,7 @@ class Scattering:
                 lorch_correction[np.isnan(lorch_correction)] = 1.0
             A_q = A_q * lorch_correction
             
-        A_q = 1 + self.aveden * np.trapz(A_q[0].T, self.xval)
+        A_q = 1 + self.aveden * np.trapezoid(A_q[0].T, self.xval)
         return A_q
 
     def get_weighted_partial_structure_factors(
