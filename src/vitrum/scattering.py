@@ -8,7 +8,7 @@ from tqdm import tqdm
 from scipy.stats import norm
 from ase import Atom, Atoms
 from scipy import integrate
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Dict
 import logging
 from collections import defaultdict
 from ase.neighborlist import neighbor_list
@@ -323,6 +323,88 @@ class Scattering:
             
         A_q = 1 + self.aveden * np.trapz(A_q[0].T, self.xval)
         return A_q
+
+    def get_weighted_partial_structure_factors(
+        self,
+        type: str = "neutron",
+        lorch: bool = False,
+    ) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+        """
+        Calculate weighted partial structure factors W_ij * S_ij(Q) for all
+        unique element pairs, and their sum (the total S(Q)).
+
+        Weights follow the same definition as get_structure_factor():
+            neutron: W_ij = c_i*b_i * c_j*b_j / (sum_k c_k*b_k)^2
+            xray:    W_ij(Q) = c_i*f_i(Q) * c_j*f_j(Q) / (sum_k c_k*f_k(Q))^2
+
+        Cross terms (i != j) are merged: S_ij = S_ji, so their weights are
+        multiplied by 2 and only one label (e.g. "Si-O") is returned.
+
+        The sum of all weighted partials equals get_structure_factor(type=type).
+
+        Args:
+            type (str): Weighting scheme, "neutron" or "xray". Defaults to "neutron".
+            lorch (bool): If True, apply Lorch modification function to reduce
+                truncation ripples. Passed through to get_partial_structure_factor().
+                Defaults to False.
+
+        Returns:
+            Tuple[Dict[str, np.ndarray], np.ndarray]:
+                - partials: dict mapping pair label (e.g. "Si-O") to
+                  W_ij * S_ij(Q), shape (nbin,).
+                - total_sq: sum of all weighted partials, shape (nbin,).
+                  Equivalent to get_structure_factor(type=type).
+
+        Raises:
+            ValueError: If type is not "neutron" or "xray".
+
+        Example:
+            >>> partials, total = scatter.get_weighted_partial_structure_factors(type="xray")
+            >>> for label, wsq in partials.items():
+            ...     plt.plot(scatter.qval, wsq, label=label)
+            >>> plt.plot(scatter.qval, total, 'k--', label='Total')
+        """
+        if type not in {"neutron", "xray"}:
+            raise ValueError("Invalid type. Choose either 'neutron' or 'xray'.")
+
+        # Denominators — same as in get_structure_factor()
+        if type == "neutron":
+            denom = sum(self.timesby)
+        else:
+            denom = np.sum(self.xray_timesby, axis=0)
+
+        # Unique pairs only; cross terms (i != j) get weight * 2
+        unique_pairs = list(itertools.combinations_with_replacement(self.species, 2))
+
+        partials: Dict[str, np.ndarray] = {}
+        total_sq = np.zeros(self.nbin)
+
+        for pair in unique_pairs:
+            label = f"{pair[0]}-{pair[1]}"
+
+            # pairs uses product(), so both (i,j) and (j,i) exist — try both
+            try:
+                idx = self.pairs.index(pair)
+            except ValueError:
+                idx = self.pairs.index((pair[1], pair[0]))
+
+            # Reuse existing method — same formula as get_structure_factor()
+            partial_sq = self.get_partial_structure_factor(
+                target_atoms=(pair[0], pair[1]), lorch=lorch
+            )
+
+            multiplier = 1.0 if pair[0] == pair[1] else 2.0
+            if type == "neutron":
+                weight = multiplier * self.timesby[idx] / denom
+            else:
+                weight = multiplier * self.xray_timesby[idx] / denom
+
+            w_sij = np.asarray(weight * partial_sq, dtype=float)
+            partials[label] = w_sij
+            total_sq += w_sij
+
+        return partials, total_sq
+
 
     def get_structure_factor(self, type: str = "neutron", lorch: bool = False) -> np.ndarray:
         """
