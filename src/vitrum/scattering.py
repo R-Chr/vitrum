@@ -1,17 +1,20 @@
-import pandas as pd
-import numpy as np
 import itertools
-import math
-from pathlib import Path
-from vitrum.glass_Atoms import GlassAtoms
-from tqdm import tqdm
-from scipy.stats import norm
-from ase import Atom, Atoms
-from scipy import integrate
-from typing import List, Union, Optional, Tuple
 import logging
+import math
 from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from ase import Atom, Atoms
 from ase.neighborlist import neighbor_list
+from scipy import integrate
+from scipy.stats import norm
+from tqdm import tqdm
+
+from vitrum.glass_Atoms import GlassAtoms
+
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
     """
@@ -30,7 +33,7 @@ def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndar
     FWHM = 5.437 / Q_max
     sigma = FWHM / 2.355
     foubroad = g_r * (norm.pdf(delta_r, 0, sigma) - norm.pdf(sum_r, 0, sigma))
-    dist_broad = np.trapz(foubroad, r)
+    dist_broad = np.trapezoid(foubroad, r)
     return dist_broad
 
 
@@ -275,7 +278,7 @@ class Scattering:
 #                    w_ij_Q = np.divide(numerator_Q, denom_Q, 
 #                                    out=np.zeros_like(numerator_Q), 
 #                                    where=denom_Q != 0)
-#                    w_ij_eff = np.trapz(w_ij_Q, self.qval) / (self.qval[-1] - self.qval[0])
+#                    w_ij_eff = np.trapezoid(w_ij_Q, self.qval) / (self.qval[-1] - self.qval[0])
 #                    gr_tot += w_ij_eff * pdf
                 print(
                     " X-ray RDF using Fourier transform of xray scattering function f_ij(Q) is not implemented yet."
@@ -321,8 +324,75 @@ class Scattering:
                 lorch_correction[np.isnan(lorch_correction)] = 1.0
             A_q = A_q * lorch_correction
             
-        A_q = 1 + self.aveden * np.trapz(A_q[0].T, self.xval)
+        A_q = 1 + self.aveden * np.trapezoid(A_q[0].T, self.xval)
         return A_q
+
+    def get_weighted_partial_structure_factors(
+        self,
+        type: str = "neutron",
+        lorch: bool = False,
+    ) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+        """
+        Calculate weighted partial structure factors W_ij * S_ij(Q) for all
+        unique element pairs.
+
+        Weights follow the same definition as get_structure_factor():
+            neutron: W_ij = c_i*b_i * c_j*b_j / (sum_k c_k*b_k)^2
+            xray:    W_ij(Q) = c_i*f_i(Q) * c_j*f_j(Q) / (sum_k c_k*f_k(Q))^2
+
+        Cross terms (i != j) are merged: S_ij = S_ji, so their weights are
+        multiplied by 2 and only one label (e.g. "Si-O") is returned.
+
+        The sum of all weighted partials equals get_structure_factor(type=type).
+
+        Args:
+            type (str): Weighting scheme, "neutron" or "xray". Defaults to "neutron".
+            lorch (bool): If True, apply Lorch modification function to reduce
+                truncation ripples. Passed through to get_partial_structure_factor().
+                Defaults to False.
+
+        Returns:
+            Tuple[Dict[str, np.ndarray], np.ndarray]:
+                - partials: dict mapping pair label (e.g. "Si-O") to
+                  W_ij * S_ij(Q), shape (nbin,).
+                - total_sq: sum of all weighted partials, shape (nbin,).
+                  Equivalent to get_structure_factor(type=type).
+
+        """
+        if type == "neutron":
+            denom = sum(self.timesby)
+        elif type == "xray":
+            denom = np.sum(self.xray_timesby, axis=0)
+        else:
+            raise ValueError("Invalid type. Choose either 'neutron' or 'xray'.")
+
+        unique_pairs = list(itertools.combinations_with_replacement(self.species, 2))
+
+        weighted_partials: Dict[str, np.ndarray] = {}
+
+        for pair in unique_pairs:
+            label = f"{pair[0]}-{pair[1]}"
+
+            try:
+                idx = self.pairs.index(pair)
+            except ValueError:
+                idx = self.pairs.index((pair[1], pair[0]))
+
+            partial_sq = self.get_partial_structure_factor(
+                target_atoms=(pair[0], pair[1]), lorch=lorch
+            )
+
+            multiplier = 1.0 if pair[0] == pair[1] else 2.0
+            if type == "neutron":
+                weight = multiplier * self.timesby[idx] / denom
+            else:
+                weight = multiplier * self.xray_timesby[idx] / denom
+
+            w_sij = np.asarray(weight * partial_sq, dtype=float)
+            weighted_partials[label] = w_sij
+
+        return weighted_partials
+
 
     def get_structure_factor(self, type: str = "neutron", lorch: bool = False) -> np.ndarray:
         """
