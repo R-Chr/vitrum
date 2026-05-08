@@ -1,17 +1,20 @@
-import pandas as pd
-import numpy as np
 import itertools
-import math
-from pathlib import Path
-from vitrum.glass_Atoms import GlassAtoms
-from tqdm import tqdm
-from scipy.stats import norm
-from ase import Atom, Atoms
-from scipy import integrate
-from typing import List, Union, Optional, Tuple, Dict
 import logging
+import math
 from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from ase import Atom, Atoms
 from ase.neighborlist import neighbor_list
+from scipy import integrate
+from scipy.stats import norm
+from tqdm import tqdm
+
+from vitrum.glass_Atoms import GlassAtoms
+
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
     """
@@ -331,7 +334,7 @@ class Scattering:
     ) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
         """
         Calculate weighted partial structure factors W_ij * S_ij(Q) for all
-        unique element pairs, and their sum (the total S(Q)).
+        unique element pairs.
 
         Weights follow the same definition as get_structure_factor():
             neutron: W_ij = c_i*b_i * c_j*b_j / (sum_k c_k*b_k)^2
@@ -355,40 +358,26 @@ class Scattering:
                 - total_sq: sum of all weighted partials, shape (nbin,).
                   Equivalent to get_structure_factor(type=type).
 
-        Raises:
-            ValueError: If type is not "neutron" or "xray".
-
-        Example:
-            >>> partials, total = scatter.get_weighted_partial_structure_factors(type="xray")
-            >>> for label, wsq in partials.items():
-            ...     plt.plot(scatter.qval, wsq, label=label)
-            >>> plt.plot(scatter.qval, total, 'k--', label='Total')
         """
-        if type not in {"neutron", "xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron' or 'xray'.")
-
-        # Denominators — same as in get_structure_factor()
         if type == "neutron":
             denom = sum(self.timesby)
-        else:
+        elif type == "xray":
             denom = np.sum(self.xray_timesby, axis=0)
+        else:
+            raise ValueError("Invalid type. Choose either 'neutron' or 'xray'.")
 
-        # Unique pairs only; cross terms (i != j) get weight * 2
         unique_pairs = list(itertools.combinations_with_replacement(self.species, 2))
 
-        partials: Dict[str, np.ndarray] = {}
-        total_sq = np.zeros(self.nbin)
+        weighted_partials: Dict[str, np.ndarray] = {}
 
         for pair in unique_pairs:
             label = f"{pair[0]}-{pair[1]}"
 
-            # pairs uses product(), so both (i,j) and (j,i) exist — try both
             try:
                 idx = self.pairs.index(pair)
             except ValueError:
                 idx = self.pairs.index((pair[1], pair[0]))
 
-            # Reuse existing method — same formula as get_structure_factor()
             partial_sq = self.get_partial_structure_factor(
                 target_atoms=(pair[0], pair[1]), lorch=lorch
             )
@@ -400,10 +389,9 @@ class Scattering:
                 weight = multiplier * self.xray_timesby[idx] / denom
 
             w_sij = np.asarray(weight * partial_sq, dtype=float)
-            partials[label] = w_sij
-            total_sq += w_sij
+            weighted_partials[label] = w_sij
 
-        return partials, total_sq
+        return weighted_partials
 
 
     def get_structure_factor(self, type: str = "neutron", lorch: bool = False) -> np.ndarray:
