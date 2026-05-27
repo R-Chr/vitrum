@@ -1,7 +1,7 @@
 import numpy as np
 from vitrum.glass_Atoms import GlassAtoms
 import itertools
-from typing import List, Union, Optional, Tuple, Any
+from typing import List, Union, Optional, Tuple, Dict
 from ase import Atoms
 
 
@@ -56,11 +56,65 @@ class Coordination:
         angles = edges[1:] - 0.5 * (np.ptp(edges) / nbin)
         return angles, dist
 
-    def get_coordination_numbers(self, center_type: str, neigh_type: str, nbin: int = 70, cutoff: str = "Auto"):
-        """
-        Not implemented yet.
-        """
-        pass
+    def get_coordination_numbers(
+    self,
+    center_type: str,
+    neigh_type: str,
+    cutoff: Union[float, int, str] = "Auto"
+) -> Dict[int, float]:
+    """
+    Calculate the coordination number distribution over multiple frames.
 
+    Args:
+        center_type (str): The atomic symbol of the central atom.
+        neigh_type (str): The atomic symbol of the neighbor atoms.
+        cutoff (Union[float, int, str], optional): The cutoff distance.
+            If "Auto", determined once from the first frame's PDF and
+            applied consistently to all frames. Defaults to "Auto".
+
+    Returns:
+        Dict[int, float]: A dictionary mapping each coordination number
+            to its fraction. Returns an empty dict if atoms_list is empty
+            or if center_type / neigh_type is absent from the structure.
+
+    Raises:
+        ValueError: If center_type or neigh_type is not found in the structure.
+    """
+    if len(self.atoms_list) == 0:
+        return {}
+
+    species = np.unique(self.atoms_list[0].get_chemical_symbols())
+    if center_type not in species:
+        raise ValueError(
+            f"center_type '{center_type}' not found in structure. "
+            f"Available species: {list(species)}"
+        )
+    if neigh_type not in species:
+        raise ValueError(
+            f"neigh_type '{neigh_type}' not found in structure. "
+            f"Available species: {list(species)}"
+        )
+
+    if cutoff == "Auto":
+        from vitrum.utility import find_min_after_peak
+        pdf_r, pdf_g = self.atoms_list[0].get_pdf(
+            target_atoms=[center_type, neigh_type]
+        )
+        cutoff = float(pdf_r[find_min_after_peak(pdf_g)])
+
+    cn_all = []
+    for atoms in self.atoms_list:
+        cn = atoms.get_coordination_number(center_type, neigh_type, cutoff)
+        cn_all.extend(cn)
+
+    cn_all = np.array(cn_all)
+
+    if len(cn_all) == 0:
+        return {}
+
+    cn_values, counts = np.unique(cn_all, return_counts=True)
+    fractions = counts / counts.sum()
+    return dict(zip(cn_values.tolist(), fractions.tolist()))
+    
 # Alias for backward compatibility
 coordination = Coordination
