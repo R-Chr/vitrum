@@ -1,9 +1,11 @@
+from itertools import product
+from typing import Dict, List, Optional, Union
+
 import numpy as np
 from ase import Atoms
-from typing import List, Union, Optional, Tuple, Dict
-from vitrum.utility import pdf, find_min_after_peak
+
+from vitrum.utility import find_min_after_peak, pdf
 from vitrum.utility import get_dist_numba as dist
-from itertools import product
 
 
 class GlassAtoms(Atoms):
@@ -224,8 +226,8 @@ class GlassAtoms(Atoms):
             cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1])]
 
         num_of_bridges = []
-        for center in centers:
-            neighbors = np.where((dist_list[center, :] < cutoff) & (dist_list[center, :] > 0))[0]
+        for cen_ind, _ in enumerate(centers):
+            neighbors = np.where((dist_list[cen_ind, :] < cutoff) & (dist_list[cen_ind, :] > 0))[0]
             neighbors = [bridges[neighbor] for neighbor in neighbors]
             q_species = 0
             for neigh in neighbors:
@@ -245,5 +247,48 @@ class GlassAtoms(Atoms):
         """
         return (np.sum(self.get_masses()) / 6.02214076 * 10**-23) / (self.get_volume() * 10**-24)
 
+
+    def get_neighbors(self, center_type: str, cutoff: Union[float, int, dict]) -> List[int]:
+        """
+        Calculate the number of neighbors for each center atom of a given type.
+
+        Args:
+            center_type (str): The type of the center atoms.
+            cutoff (Union[float, int, dict]): The cutoff distance for considering a neighbor.
+                If a float or int, the cutoff is set to the specified value.
+                If a dictionary, it should map atom types to their respective cutoffs.
+
+        Returns:
+            List[int]: A list of the number of neighbors for each center atom.
+        """
+
+        types = np.array(self.get_chemical_symbols())
+        atom_types = np.unique(types)
+        distances = self.get_dist()
+
+        if center_type not in atom_types:
+            raise ValueError(f"The center type {center_type} is not in the list of species.")
+
+        index = {t: np.where(types == t)[0] for t in atom_types}
+
+        def get_cutoff(neigh_type, cutoff):
+            if isinstance(cutoff, dict):
+                if neigh_type not in cutoff:
+                    raise KeyError(f"No cutoff defined for atom type '{neigh_type}'")
+                return cutoff[neigh_type]
+            elif isinstance(cutoff, (float, int)):
+                return cutoff
+            else:
+                raise TypeError("Cutoff must be either a float, int, or a dictionary mapping atom types to cutoffs.")
+   
+        neighbors = {}
+        for neigh_type in atom_types:
+            c = get_cutoff(neigh_type, cutoff)
+            d = distances[np.ix_(index[neigh_type], index[center_type])]
+            mask = (d < c) & (d > 0)
+            neighbors[neigh_type] = [np.where(mask[:, i])[0] for i in range(len(index[center_type]))]
+
+        return neighbors
+    
 # Alias for backward compatibility
 glass_Atoms = GlassAtoms
