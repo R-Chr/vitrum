@@ -1,7 +1,7 @@
 import numpy as np
 from vitrum.glass_Atoms import GlassAtoms
 import itertools
-from typing import List, Union, Optional, Tuple, Any
+from typing import List, Union, Optional, Tuple, Dict
 from ase import Atoms
 
 
@@ -61,7 +61,7 @@ class Coordination:
     center_type: str,
     neigh_type: str,
     cutoff: Union[float, int, str] = "Auto"
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Dict[int, float]:
     """
     Calculate the coordination number distribution over multiple frames.
 
@@ -73,14 +73,15 @@ class Coordination:
             applied consistently to all frames. Defaults to "Auto".
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]:
-            - cn_values: An array of unique integer coordination number values.
-            - fractions: An array of fractions for each coordination number.
-            Returns (np.array([]), np.array([])) if atoms_list is empty,
+        Dict[int, float]: A dictionary mapping each coordination number
+            to its fraction. Returns an empty dict if atoms_list is empty
             or if center_type / neigh_type is absent from the structure.
+
+    Raises:
+        ValueError: If center_type or neigh_type is not found in the structure.
     """
     if len(self.atoms_list) == 0:
-        return np.array([]), np.array([])
+        return {}
 
     species = np.unique(self.atoms_list[0].get_chemical_symbols())
     if center_type not in species:
@@ -109,12 +110,11 @@ class Coordination:
     cn_all = np.array(cn_all)
 
     if len(cn_all) == 0:
-        return np.array([]), np.array([])
+        return {}
 
     cn_values, counts = np.unique(cn_all, return_counts=True)
     fractions = counts / counts.sum()
-
-    return cn_values, fractions
-
+    return dict(zip(cn_values.tolist(), fractions.tolist()))
+    
 # Alias for backward compatibility
 coordination = Coordination
