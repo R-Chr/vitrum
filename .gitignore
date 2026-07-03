@@ -3,3 +3,6 @@ test.ipynb
 /src/vitrum/__pycache__
 src/vitrum/visualization.py
 .DS_Store
+build/
+dist/
+*.egg-info/
