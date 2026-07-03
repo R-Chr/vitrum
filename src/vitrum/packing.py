@@ -93,9 +93,9 @@ def get_random_packed(
             # ds is the overlap
             ds = np.linalg.norm(rs, axis=1) - (radii[indices] + radii[i])
             if np.any(ds > 1.e-10):
-                print('Assertion failed: ds <= 0')
-                print(np.max(ds))
-                quit()
+                raise RuntimeError(
+                    f"Overlap relaxation invariant violated: max residual {np.max(ds):.3e} > 1e-10"
+                )
             # sum overlaps
             dsum += np.sum(ds)
             ds -= skin

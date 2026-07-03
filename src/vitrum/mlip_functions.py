@@ -42,7 +42,7 @@ def get_pred_energy_forces(atoms, calc):
     pred_energy = []
     pred_forces = []
     for a in atoms:
-        a.set_calculator(calc)
+        a.calc = calc
         pred_energy.append(a.get_potential_energy() / len(a))
         pred_forces.append(a.get_forces())
     pred_forces = np.vstack(pred_forces).flatten()

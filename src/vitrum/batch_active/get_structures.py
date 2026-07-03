@@ -1,11 +1,13 @@
-from ase.io import read
-import numpy as np
-from pathlib import Path
-from vitrum.utility import get_LAMMPS_dump_timesteps, correct_atom_types
-import subprocess
-from pymatgen.io.ase import AseAtomsAdaptor
-import pandas as pd
 import shutil
+import subprocess
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from ase.io import read
+from pymatgen.io.ase import AseAtomsAdaptor
+
+from vitrum.io_helpers import correct_atom_types, get_LAMMPS_dump_timesteps
 
 
 def get_wflow_id_from_run_uuid(lp, run_uuid):

@@ -15,7 +15,7 @@ def get_high_low_displacement_index(initial_state, current_state, target_atom, p
         list: A list of two elements, where the first element is the index of the atoms with the highest displacements
             and the second element is the index of the atoms with the lowest displacements.
     """
-    index = np.where(initial_state.get_chemical_symbols() == target_atom)[0]
+    index = np.where(np.array(initial_state.get_chemical_symbols()) == target_atom)[0]
     initial_positions = initial_state.get_positions()[index]
     current_positions = current_state.get_positions()[index]
     displacements = initial_positions - current_positions

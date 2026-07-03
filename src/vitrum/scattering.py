@@ -413,6 +413,8 @@ class Scattering:
             partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]), lorch=lorch)
             if type == "neutron":
                 S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
+            elif type == "approx_xray":
+                S_q_tot = S_q_tot + (self.approx_xray_timesby[ind] * partial_sq) / np.sum(self.approx_xray_timesby, axis=0)
             elif type == "xray":
                 S_q_tot = S_q_tot + (self.xray_timesby[ind] * partial_sq) / np.sum(self.xray_timesby, axis=0)
         return S_q_tot
@@ -455,6 +457,6 @@ class Scattering:
             np.ndarray: The running coordination number as a function of r.
         """
         pair_pdf = self.get_partial_pdf(pair)
-        n_v = len(np.where(self.chemical_symbols == pair[0])) / self.volume
+        n_v = np.sum(np.array(self.chemical_symbols) == pair[0]) / self.volume
         integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
         return integrate.cumulative_trapezoid(integrand, self.xval, initial=0.0)

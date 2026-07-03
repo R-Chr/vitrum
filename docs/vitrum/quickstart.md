@@ -101,9 +101,8 @@ from vitrum.io_helpers import get_LAMMPS_dump_timesteps
 timesteps = get_LAMMPS_dump_timesteps('md.lammpstrj')
 ```
 
-The diffusion class assumes that trajectories are unwrapped, and not wrapped according to PBC. To unwrap a trajectory one of the utility functions can be used:
+By default, `Diffusion` assumes the trajectory is PBC-wrapped and unwraps it internally before computing displacements. If you've already unwrapped it yourself (e.g. via `vitrum.trajectory.unwrap_trajectory`), pass `wrapped=False` to avoid unwrapping twice:
 
 ```
-from vitrum.trajectory import unwrap_trajectory
-atoms = unwrap_trajectory(atoms)
+diffusion_funcs = Diffusion(atoms, sample_times=timesteps, wrapped=False)
 ```
