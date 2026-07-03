@@ -10,18 +10,24 @@ Please see the `docs` folder for detailed documentation or check the [online doc
 
 ## 📦 Installation
 
-To install `vitrum`, you can clone the repository and install it in editable mode:
+`vitrum` is available on [PyPI](https://pypi.org/project/vitrum/):
 
 ```bash
-git clone https://github.com/R-Chr/vitrum.git
-cd vitrum
-pip install -e .
+pip install vitrum
 ```
 
 To install dependencies for simulation workflows (atomate2, fireworks, jobflow):
 
 ```bash
-pip install -e .[workflows]
+pip install vitrum[workflows]
+```
+
+For the latest development version, clone the repository and install it in editable mode instead:
+
+```bash
+git clone https://github.com/R-Chr/vitrum.git
+cd vitrum
+pip install -e .
 ```
 
 ## 🚀 Examples

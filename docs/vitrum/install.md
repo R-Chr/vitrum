@@ -7,14 +7,17 @@ conda create -n vitrum python=3.11
 conda activate vitrum
 ```
 ### Installation of vitrum
-To install vitrum:
+`vitrum` is available on [PyPI](https://pypi.org/project/vitrum/):
+```
+pip install vitrum
+```
 
-pip install directly  from this repository. (Make sure you have git installed)
+To install the latest development version directly from GitHub instead (make sure you have git installed):
 ```
 pip install "vitrum @ git+https://github.com/R-Chr/vitrum.git"
 ```
 
-To update package to the most current version
+To update the development version to the most current commit:
 ```
 pip install --force-reinstall --no-deps "vitrum @ git+https://github.com/R-Chr/vitrum.git"
 ```
@@ -22,19 +25,19 @@ pip install --force-reinstall --no-deps "vitrum @ git+https://github.com/R-Chr/v
 
 ### (optional) To install dependencies for batch_active (BALACE framework):
 ```
-pip install "vitrum[workflows] @ git+https://github.com/R-Chr/vitrum.git"
+pip install "vitrum[workflows]"
 ```
 
 ### (optional) To install dependencies for Materials Project volume/composition lookups:
 ```
-pip install "vitrum[volume_estimation] @ git+https://github.com/R-Chr/vitrum.git"
+pip install "vitrum[volume_estimation]"
 ```
 This is required for `vitrum.volume_estimation` (used internally by `get_random_packed`'s `"mp"`/`"icsd"`/`"convex_hull"` volume sources).
 
 ### (optional) Dionysus and Diode
 For persistent homology analsysis these packages are required.
 ```
-pip install "vitrum[persistent_homology] @ git+https://github.com/R-Chr/vitrum.git"
+pip install "vitrum[persistent_homology]"
 pip install git+https://github.com/mrzv/diode.git
 ```
 
