@@ -1,10 +1,21 @@
+"""
+NOTE: `LocalPD` and the standalone `get_local_persistence` below are currently
+broken and quarantined (raise NotImplementedError on use). Both were written
+against `neighborhood.get_persistence_diagram(...)` as a bound method on
+GlassAtoms/ASE Atoms, but that method was moved out into the standalone
+`get_persistence_diagram(atoms, ...)` function in this module and the call
+sites were never updated, so they fail with AttributeError. See
+docs/vitrum/known_issues.md. `get_persistence_diagram` itself is unaffected
+and works standalone.
+"""
+
+import diode
+import dionysus
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from sklearn.cluster import Birch
 from sklearn.neighbors import KernelDensity
-import dionysus
-import diode
+from tqdm import tqdm
 
 
 class LocalPD:  # Broken after moving persistence diagram functions out of glass_Atoms
@@ -17,6 +28,12 @@ class LocalPD:  # Broken after moving persistence diagram functions out of glass
         weights=None,
         birch_threshold=0.075,
     ):
+        raise NotImplementedError(
+            "LocalPD is currently broken: it calls neighborhood.get_persistence_diagram(...) "
+            "as a bound method, but that method was moved out into the standalone "
+            "get_persistence_diagram() function in this module and never updated here. "
+            "See docs/vitrum/known_issues.md."
+        )
         self.atom_list = glass_atoms_list
         self.center_atom = center_atom
         self.cutoff = cutoff
@@ -163,6 +180,13 @@ def get_local_persistence(atoms, center_id, cutoff):
     Returns:
         list: A list of pandas.DataFrame containing the persistence diagram of the local environment.
     """
+    raise NotImplementedError(
+        "get_local_persistence is currently broken: it calls neighborhood.center() "
+        "(which does not do minimum-image centering on an ASE Atoms object) and "
+        "neighborhood.get_persistence_diagram() (which does not exist as a bound method; "
+        "use the standalone get_persistence_diagram(atoms, ...) function instead). "
+        "See docs/vitrum/known_issues.md."
+    )
     persistence_diagrams = []
     if isinstance(center_id, str):
         types = atoms.get_chemical_symbols()
