@@ -1,5 +1,5 @@
 import numpy as np
-from vitrum.glass_Atoms import GlassAtoms
+from vitrum.glass_atoms import GlassAtoms
 from scipy.stats import linregress
 from typing import List, Union, Optional, Tuple
 from ase import Atoms
@@ -114,6 +114,3 @@ class Diffusion:
 
     def get_velocity_autocorrelation(self):
         pass
-
-# Alias for backward compatibility
-diffusion = Diffusion

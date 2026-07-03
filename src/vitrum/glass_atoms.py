@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from ase import Atoms
 
-from vitrum.utility import find_min_after_peak, pdf
-from vitrum.utility import get_dist_numba as dist
+from vitrum.geometry import find_min_after_peak, pdf
+from vitrum.geometry import get_dist_numba as dist
 
 
 class GlassAtoms(Atoms):
@@ -289,6 +289,3 @@ class GlassAtoms(Atoms):
             neighbors[neigh_type] = [np.where(mask[:, i])[0] for i in range(len(index[center_type]))]
 
         return neighbors
-    
-# Alias for backward compatibility
-glass_Atoms = GlassAtoms

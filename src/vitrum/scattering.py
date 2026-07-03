@@ -13,7 +13,7 @@ from scipy import integrate
 from scipy.stats import norm
 from tqdm import tqdm
 
-from vitrum.glass_Atoms import GlassAtoms
+from vitrum.glass_atoms import GlassAtoms
 
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
@@ -458,6 +458,3 @@ class Scattering:
         n_v = len(np.where(self.chemical_symbols == pair[0])) / self.volume
         integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
         return integrate.cumulative_trapezoid(integrand, self.xval, initial=0.0)
-
-# Alias for backward compatibility
-scattering = Scattering

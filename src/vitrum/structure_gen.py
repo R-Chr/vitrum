@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from vitrum.utility import get_random_packed
+from vitrum.packing import get_random_packed
 import math
 from pymatgen.core import Element
 import tqdm

@@ -22,11 +22,15 @@ setup(
         "scipy",
         "pymatgen",
         "ruamel-yaml==0.17.9",
-        "mp_api",
         "numba",
+        "matplotlib",
     ],
     extras_require={
         "workflows": ["fireworks", "jobflow", "atomate2"],
+        "volume_estimation": ["atomate2", "mp_api"],
+        # diode (used by persistent_homology.py) is not a normal PyPI package;
+        # see docs/vitrum/install.md for its manual install instructions.
+        "persistent_homology": ["dionysus"],
     },
     classifiers=[
         "Programming Language :: Python :: 3",

@@ -4,8 +4,8 @@ Class for coordination analysis, i.e. bond angle distributions, coordination num
 ## Example usage:
 
 ```
-from vitrum.coordination import coordination
-coord = coordination(atoms)
+from vitrum.coordination import Coordination
+coord = Coordination(atoms)
 angles, dist = coord.get_angle_distribution("Si", "O", cutoff=2)
 ```
 
