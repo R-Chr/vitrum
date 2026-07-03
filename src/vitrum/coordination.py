@@ -1,8 +1,11 @@
-import numpy as np
-from vitrum.glass_Atoms import GlassAtoms
 import itertools
-from typing import List, Union, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
 from ase import Atoms
+
+from vitrum.geometry import find_min_after_peak
+from vitrum.glass_atoms import GlassAtoms
 
 
 class Coordination:
@@ -109,7 +112,6 @@ class Coordination:
     
         # normalise cutoff to a list matching neigh_types
         if cutoff == "Auto":
-            from vitrum.utility import find_min_after_peak
             cutoffs = []
             for nt in neigh_types:
                 pdf_r, pdf_g = self.atoms_list[0].get_pdf(
@@ -144,6 +146,3 @@ class Coordination:
         cn_values, counts = np.unique(cn_all, return_counts=True)
         fractions = counts / counts.sum()
         return dict(zip(cn_values.tolist(), fractions.tolist()))
-    
-# Alias for backward compatibility
-coordination = Coordination

@@ -10,4 +10,14 @@ Included functions for ring objects:
 - Center
 - Size
 
+## Example usage:
+
+```python
+from vitrum.rings import RingAnalysis
+
+ring_funcs = RingAnalysis(atoms, included_atoms=["Si", "O"], bonding_dict=[("Si", "O")])
+rings = ring_funcs.calculate()
+sizes = ring_funcs.get_ring_size_distribution()
+```
+
 ::: vitrum.rings

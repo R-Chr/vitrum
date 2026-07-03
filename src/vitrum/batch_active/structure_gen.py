@@ -1,11 +1,12 @@
-import numpy as np
+import os
 from itertools import product
-from tqdm import tqdm
-from vitrum.utility import get_random_packed
-from vitrum.utility import apply_strain_to_structure
+
+import numpy as np
 from ase.io.lammpsdata import write_lammps_data
 from pymatgen.io.ase import AseAtomsAdaptor
-import os
+from tqdm import tqdm
+
+from vitrum.packing import apply_strain_to_structure, get_random_packed
 
 
 def gen_even_structures(

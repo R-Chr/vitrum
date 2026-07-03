@@ -1,17 +1,21 @@
-from vitrum.batch_active.structure_gen import gen_strained_structures
 import uuid
+
 from vitrum.batch_active.flows import md_flow, static_flow
+from vitrum.batch_active.structure_gen import gen_strained_structures
+
 try:
-    from jobflow.managers.fireworks import flow_to_workflow
-    from jobflow import Flow
     from fireworks import Firework, ScriptTask
     from fireworks.core.firework import Workflow
+    from jobflow import Flow
+    from jobflow.managers.fireworks import flow_to_workflow
 except ImportError:
     raise ImportError("jobflow and fireworks are required for batch_active workflows. Please install vitrum[batch_active].")
 import os
-from vitrum.batch_active.input_writer import ace_yaml_writer
-from vitrum.utility import get_random_packed, apply_strain_to_structure
+
 import numpy as np
+
+from vitrum.batch_active.input_writer import ace_yaml_writer
+from vitrum.packing import apply_strain_to_structure, get_random_packed
 
 
 def high_temp_run(structures, strain_params, incar_settings, high_temp_params):

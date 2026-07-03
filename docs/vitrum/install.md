@@ -22,14 +22,20 @@ pip install --force-reinstall --no-deps "vitrum @ git+https://github.com/R-Chr/v
 
 ### (optional) To install dependencies for batch_active (BALACE framework):
 ```
-pip install "vitrum[batch_active] @ git+https://github.com/R-Chr/vitrum.git"
+pip install "vitrum[workflows] @ git+https://github.com/R-Chr/vitrum.git"
 ```
+
+### (optional) To install dependencies for Materials Project volume/composition lookups:
+```
+pip install "vitrum[volume_estimation] @ git+https://github.com/R-Chr/vitrum.git"
+```
+This is required for `vitrum.volume_estimation` (used internally by `get_random_packed`'s `"mp"`/`"icsd"`/`"convex_hull"` volume sources).
 
 ### (optional) Dionysus and Diode
 For persistent homology analsysis these packages are required.
 ```
-pip install dionysus
+pip install "vitrum[persistent_homology] @ git+https://github.com/R-Chr/vitrum.git"
 pip install git+https://github.com/mrzv/diode.git
 ```
 
-DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology).
+DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology). Note: `LocalPD` and `get_local_persistence` in this module are currently non-functional — see [Known Issues](known_issues.md).

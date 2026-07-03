@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vitrum"
+description = "vitrum is a package for generating input data and analyzing simulation data of glass structures"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Rasmus Christensen", email = "rasmus.christensen.a1@tohoku.ac.jp" },
+]
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+    "numpy",
+    "ase",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "pymatgen",
+    "ruamel-yaml==0.17.9",
+    "numba",
+    "matplotlib",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+
+[project.urls]
+Homepage = "https://github.com/R-Chr/vitrum"
+Repository = "https://github.com/R-Chr/vitrum"
+Documentation = "https://vitrum.readthedocs.io/en/latest/"
+
+[project.optional-dependencies]
+workflows = ["fireworks", "jobflow", "atomate2"]
+volume_estimation = ["atomate2", "mp_api"]
+# diode (used by persistent_homology.py) is not a normal PyPI package;
+# see docs/vitrum/install.md for its manual install instructions.
+persistent_homology = ["dionysus"]
+
+[tool.setuptools.dynamic]
+version = { attr = "vitrum.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vitrum = ["scattering_lengths.csv", "x_ray_scattering_factor_coefficients.csv"]

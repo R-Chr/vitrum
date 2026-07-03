@@ -1,5 +1,6 @@
 import numpy as np
-from vitrum.glass_Atoms import GlassAtoms
+from vitrum.glass_atoms import GlassAtoms
+from vitrum.trajectory import unwrap_trajectory
 from scipy.stats import linregress
 from typing import List, Union, Optional, Tuple
 from ase import Atoms
@@ -9,15 +10,21 @@ class Diffusion:
     """
     Class for analyzing diffusion in glass structures.
     """
-    def __init__(self, trajectory: List[Atoms], sample_times: List[float]):
+    def __init__(self, trajectory: List[Atoms], sample_times: List[float], wrapped: bool = True):
         """
         Initializes a new instance of the class with the given a trajectory as a list of Atoms objects.
 
         Args:
             trajectory (List[Atoms]): A list of Atoms objects representing the trajectory.
             sample_times (List[float]): A list of sampled times.
+            wrapped (bool, optional): Whether `trajectory` positions are PBC-wrapped and need
+                unwrapping before computing displacements. Set to False if you've already
+                unwrapped the trajectory yourself (e.g. via `vitrum.trajectory.unwrap_trajectory`).
+                Defaults to True.
         """
 
+        if wrapped:
+            trajectory = unwrap_trajectory(trajectory)
         self.trajectory = [GlassAtoms(atom) for atom in trajectory]
         self.chemical_symbols = np.array(trajectory[0].get_chemical_symbols())
         self.species = np.unique(self.chemical_symbols)
@@ -101,7 +108,6 @@ class Diffusion:
         for start, end in zip(start_indicies, end_indicies):
             start_postions = self.trajectory[start].get_positions()[index]
             current_positions = self.trajectory[end].get_positions()[index]
-            cell = np.diagonal(self.trajectory[start].get_cell())[0]
             dif_pos = current_positions - start_postions
             distances = np.sqrt(np.sum(dif_pos**2, axis=1))
             hist, edges = np.histogram(distances, bins=10 ** np.linspace(np.log10(0.1), np.log10(100), nbin))
@@ -114,6 +120,3 @@ class Diffusion:
 
     def get_velocity_autocorrelation(self):
         pass
-
-# Alias for backward compatibility
-diffusion = Diffusion

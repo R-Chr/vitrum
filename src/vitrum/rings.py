@@ -1,14 +1,16 @@
-from vitrum.glass_Atoms import GlassAtoms
-import numpy as np
-from scipy.sparse import csr_array, coo_matrix
-from scipy.sparse.csgraph import dijkstra
-from ase.neighborlist import NeighborList
-from ase.data import covalent_radii
-from ase.symbols import symbols2numbers
-from ase.io import write
-from ase import Atoms
 from collections import Counter
-from typing import List, Dict, Optional, Tuple, Set, Union
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+from ase import Atoms
+from ase.data import covalent_radii
+from ase.io import write
+from ase.neighborlist import NeighborList
+from ase.symbols import symbols2numbers
+from scipy.sparse import csr_array
+from scipy.sparse.csgraph import dijkstra
+
+from vitrum.glass_atoms import GlassAtoms
 
 
 def check_ring_is_periodic(ring: List[int], offsets: Dict[Tuple[int, int], np.ndarray]) -> bool:
@@ -144,7 +146,7 @@ class Ring(object):
         self.ellipsoid_lengths = None
         self.atom_symbols = np.array(self.atoms.get_chemical_symbols())
         self.atom_types = np.unique(self.atom_symbols).tolist()
-        self.atom_ids = [np.where(self.atom_symbols == atom_type)[0] for atom_type in self.atom_types]
+        self.atom_ids = {atom_type: np.where(self.atom_symbols == atom_type)[0] for atom_type in self.atom_types}
 
     def center(self) -> np.ndarray:
         """
@@ -245,7 +247,7 @@ class RingAnalysis:
         ring_sizes = [len(r.atoms) for r in self.rings]
         return dict(Counter(ring_sizes))
     
-    def plot_ring_size_distribution(self, ax=None):
+    def plot_ring_size_distribution(self, ax=None, **plot_kwargs):
             """
             Plots the distribution of ring sizes using matplotlib.
             """
@@ -262,13 +264,10 @@ class RingAnalysis:
 
             if ax is None:
                 fig, ax = plt.subplots(figsize=(9, 6))
-                ax.set_xlabel('Ring Size', fontsize=12)
+                ax.set_xlabel('Ring Size (N$_{atoms}$)', fontsize=12)
                 ax.set_ylabel('Frequency', fontsize=12)
                 ax.set_xticks(sizes)  
 
-            ax.plot(sizes, frequency)
+            ax.plot(sizes, frequency, **plot_kwargs)
 
             return ax
-
-# Alias for backward compatibility
-RINGs = RingAnalysis
