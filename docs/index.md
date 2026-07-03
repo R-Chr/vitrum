@@ -5,6 +5,15 @@
 ## 🔴 Vitrum is a work in progress 🔴
 Nothing is sacred, and development is ongoing. APIs and functionality are subject to change at any time.
 
+## 📖 Documentation
+See the navigation on the left for detailed documentation, or the [GitHub repository](https://github.com/R-Chr/vitrum) for source code.
+
+## 📦 Installation
+See [Installation](vitrum/install.md) for full instructions, including optional dependency groups.
+
+## 🚀 Examples
+See the [`examples`](https://github.com/R-Chr/vitrum/tree/main/examples) folder on GitHub for runnable Jupyter notebooks demonstrating scattering/RDF analysis, Qn speciation, and random structure generation, among others.
+
 ## 🎯 Scope and Functionality
 
 `vitrum` offers:
@@ -19,12 +28,13 @@ Nothing is sacred, and development is ongoing. APIs and functionality are subjec
 *   **Diffusion Analysis**: Calculate Mean Squared Displacement (MSD), diffusion coefficients, and Van Hove correlation functions (`vitrum.diffusion`).
 
 ### 3. Machine Learning & Workflows
-*   **BALACE Framework**: A Batch Active Learning framework for Atomistic Simulations (`vitrum.batch_active`).
+*   **BALACE Framework**: A Batch Active Learning framework for Atomistic Simulations (`vitrum.batch_active`) (requires `workflows` dependencies).
     *   Automated workflow for training Machine Learning Interatomic Potentials (MLIPs) based on ACE .
     *   Integration with VASP and LAMMPS for data generation and active learning loops.
     *   Job management via Fireworks and Jobflow.
 
-## � Author
+
+## 👥 Author
 Rasmus Christensen (rasmusc@bio.aau.dk)
 
 ## ⭐ Acknowledgements

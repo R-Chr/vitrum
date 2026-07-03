@@ -7,6 +7,18 @@ from sklearn.metrics import root_mean_squared_error
 
 
 def get_dimer_radial_energy(calc, formula, cutoff=8, num_data_points=100):
+    """
+    Calculate the predicted energy of a dimer as a function of separation distance.
+
+    Args:
+        calc (ase.calculators.calculator.Calculator): The (MLIP) calculator to evaluate energies with.
+        formula (str): The two-atom chemical formula of the dimer, e.g. "OO".
+        cutoff (float, optional): Maximum separation distance to sample, in Angstrom. Defaults to 8.
+        num_data_points (int, optional): Number of distances to sample between 0.1 and cutoff. Defaults to 100.
+
+    Returns:
+        Tuple[np.ndarray, List[float]]: The sampled distances and the corresponding predicted energies.
+    """
     pred_energy = []
     distances = np.linspace(0.1, cutoff, num_data_points)
     for d in distances:
@@ -17,6 +29,16 @@ def get_dimer_radial_energy(calc, formula, cutoff=8, num_data_points=100):
 
 
 def get_pred_energy_forces(atoms, calc):
+    """
+    Calculate predicted per-atom energies and forces for a list of structures.
+
+    Args:
+        atoms (List[ase.Atoms]): The structures to evaluate.
+        calc (ase.calculators.calculator.Calculator): The (MLIP) calculator to evaluate energies/forces with.
+
+    Returns:
+        Tuple[List[float], np.ndarray]: Per-structure energy per atom, and a flattened array of all predicted forces.
+    """
     pred_energy = []
     pred_forces = []
     for a in atoms:
@@ -28,12 +50,33 @@ def get_pred_energy_forces(atoms, calc):
 
 
 def min_max_val(array1, array2):
+    """
+    Find the combined minimum and maximum value across two arrays.
+
+    Args:
+        array1 (array-like): The first array.
+        array2 (array-like): The second array.
+
+    Returns:
+        List[float]: A two-element list, [min_val, max_val].
+    """
     max_val = np.max([np.max(array1), np.max(array2)])
     min_val = np.min([np.min(array1), np.min(array2)])
     return [min_val, max_val]
 
 
 def eval_plot(reference_data, predicted_data, ax=None):
+    """
+    Plot a density-colored parity plot of predicted vs. reference data, annotated with RMSE.
+
+    Args:
+        reference_data (array-like): The reference (e.g. DFT) values.
+        predicted_data (array-like): The predicted (e.g. MLIP) values.
+        ax (matplotlib.axes.Axes, optional): Axes to plot on. Defaults to the current axes.
+
+    Returns:
+        matplotlib.collections.PathCollection: The scatter plot artist.
+    """
     if ax is None:
         ax = plt.gca()
     min_max = min_max_val(reference_data, predicted_data)

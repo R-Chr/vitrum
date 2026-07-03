@@ -24,6 +24,9 @@ To install dependencies for simulation workflows (atomate2, fireworks, jobflow):
 pip install -e .[workflows]
 ```
 
+## 🚀 Examples
+See the [`examples`](examples/) folder for runnable Jupyter notebooks demonstrating scattering/RDF analysis, Qn speciation, and random structure generation, among others.
+
 ## 🎯 Scope and Functionality
 
 `vitrum` offers:

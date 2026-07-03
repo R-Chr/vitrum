@@ -7,10 +7,31 @@ import tqdm
 
 
 def my_round(x):
+    """
+    Round a value to the nearest 0.01, returned with 3 decimal places of precision.
+
+    Args:
+        x (float): The value to round.
+
+    Returns:
+        float: The rounded value.
+    """
     return round(0.01 * round(x / 0.01), 3)
 
 
 def balance_charge(amounts, atoms, charges_dict, max_iter=1):
+    """
+    Adjust one atom's amount so the total ionic charge of a composition is closer to zero.
+
+    Args:
+        amounts (List[int]): The (scaled integer) amounts of each atom type.
+        atoms (List[str]): The chemical symbols corresponding to each entry in amounts.
+        charges_dict (dict): A mapping from chemical symbol to oxidation state.
+        max_iter (int, optional): Unused; retained for API compatibility. Defaults to 1.
+
+    Returns:
+        Tuple[List[int], float]: The (possibly adjusted) amounts, and the resulting total charge.
+    """
     total_charge = sum(a * charges_dict[atom] for a, atom in zip(amounts, atoms))
     candidates = [(i, charges_dict[atom]) for i, atom in enumerate(atoms)]
     valid_candidates = [c for c in candidates if is_multiple(c[1], total_charge)]
@@ -25,16 +46,46 @@ def balance_charge(amounts, atoms, charges_dict, max_iter=1):
 
 
 def is_multiple(c, total, tol=1e-9):
+    """
+    Check whether `total` is (approximately) an integer multiple of `c`.
+
+    Args:
+        c (float): The candidate divisor (e.g. an oxidation state).
+        total (float): The value to test.
+        tol (float, optional): Absolute tolerance for the closeness check. Defaults to 1e-9.
+
+    Returns:
+        bool: True if total/c is close to an integer.
+    """
     ratio = total / c
     return math.isclose(ratio, round(ratio), abs_tol=tol)
 
 
 def choose_count(weights):
+    """
+    Randomly choose an index (interpreted as a count) according to given weights.
+
+    Args:
+        weights (List[float]): Relative weights for each possible count, starting at 0.
+
+    Returns:
+        int: The chosen count.
+    """
     outcomes = list(range(len(weights)))
     return random.choices(outcomes, weights=weights, k=1)[0]
 
 
 def random_partition(x, total=10):
+    """
+    Randomly partition `total` into `x` positive parts, returned as fractions summing to 1.
+
+    Args:
+        x (int): The number of parts to partition into.
+        total (int, optional): The integer total to partition before normalizing. Defaults to 10.
+
+    Returns:
+        np.ndarray: An array of `x` fractions summing to 1.
+    """
     if x <= 1:
         return [1]
     cuts = np.sort(np.random.choice(range(1, total), x - 1, replace=False))

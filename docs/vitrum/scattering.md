@@ -23,7 +23,7 @@ Included functions: <br/>
     - $A_{ij}(Q) = 1 + \rho_{0} \int_{0}^{\infty} 4 \pi r^2 (g_{ij}(r) - 1) L(r) dr$ <br/>
     - Optional: Lorch function: $L(r) = \frac{\sin(\pi r / r_{max})}{\pi r / r_{max}}$. <br/>
 
-- Weighted partial structure factor: $W_{ij} A_{ij}(Q)$: `get_weighted_partial_structure_factor` <br/>
+- Weighted partial structure factor: $W_{ij} A_{ij}(Q)$: `get_weighted_partial_structure_factors` <br/>
 
 - Normalized total-scattering structure factor: $S(Q)$: `get_structure_factor` <br/>
     - $S(Q) = \frac{\sum_{i,j=1}^{n} W_{ij}A_{ij}(Q)}{(\sum_{i=1}^{n} c_{i} \bar b_{i})^2}$ <br/>

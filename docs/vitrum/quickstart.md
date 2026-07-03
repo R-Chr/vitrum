@@ -43,6 +43,43 @@ G_r = scattering_funcs.get_total_rdf(type="neutron")
 ```
 
 
+## Coordination analysis
+The `Coordination` class contains functions for calculating bond angle distributions and coordination numbers, as averaged over a list of Extended ASE Atoms objects.
+
+```
+from vitrum.coordination import Coordination
+coord_funcs = Coordination(atoms)
+```
+
+To calculate the Si-O bond angle distribution, the following line can be used:
+
+```
+angles, dist = coord_funcs.get_angle_distribution("Si", "O", cutoff=2)
+```
+
+To calculate the coordination number distribution of O around Si, the following line can be used:
+
+```
+coordination_numbers = coord_funcs.get_coordination_numbers("Si", "O")
+```
+
+
+## Ring analysis
+The `RingAnalysis` class finds and analyzes rings (Guttman-type) in a single structure.
+
+```
+from vitrum.rings import RingAnalysis
+ring_funcs = RingAnalysis(atoms[0], included_atoms=["Si", "O"], bonding_dict=[("Si", "O")])
+rings = ring_funcs.calculate()
+```
+
+To get the distribution of ring sizes, the following line can be used:
+
+```
+sizes = ring_funcs.get_ring_size_distribution()
+```
+
+
 ## Diffusion analysis
 The `Diffusion` class contains functions for calculating diffusion properties of materials, as averaged over a list of ASE Atoms objects.
 
