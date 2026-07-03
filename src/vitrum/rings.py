@@ -264,7 +264,7 @@ class RingAnalysis:
 
             if ax is None:
                 fig, ax = plt.subplots(figsize=(9, 6))
-                ax.set_xlabel('Ring Size (N$_atoms$)', fontsize=12)
+                ax.set_xlabel('Ring Size (N$_{atoms}$)', fontsize=12)
                 ax.set_ylabel('Frequency', fontsize=12)
                 ax.set_xticks(sizes)  
 

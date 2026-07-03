@@ -1,9 +1,11 @@
-import numpy as np
-from vitrum.glass_atoms import GlassAtoms
-from vitrum.geometry import find_min_after_peak
 import itertools
-from typing import List, Union, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
 from ase import Atoms
+
+from vitrum.geometry import find_min_after_peak
+from vitrum.glass_atoms import GlassAtoms
 
 
 class Coordination:

@@ -9,13 +9,13 @@ docs/vitrum/known_issues.md. `get_persistence_diagram` itself is unaffected
 and works standalone.
 """
 
+import diode
+import dionysus
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from sklearn.cluster import Birch
 from sklearn.neighbors import KernelDensity
-import dionysus
-import diode
+from tqdm import tqdm
 
 
 class LocalPD:  # Broken after moving persistence diagram functions out of glass_Atoms
