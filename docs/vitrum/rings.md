@@ -5,10 +5,16 @@ The implementation of rings is an adapted version of the code for calculating ri
 
 Currently supported ring types are:
 - Guttman
+- King
+- Primitive
 
 Included functions for ring objects:
 - Center
 - Size
+- Perimeter
+- Roundness
+- Roughness
+- Radius of gyration
 
 ## Example usage:
 
@@ -16,7 +22,7 @@ Included functions for ring objects:
 from vitrum.rings import RingAnalysis
 
 ring_funcs = RingAnalysis(atoms, included_atoms=["Si", "O"], bonding_dict=[("Si", "O")])
-rings = ring_funcs.calculate()
+rings = ring_funcs.calculate(criterion="guttman")  # or "king" / "primitive"
 sizes = ring_funcs.get_ring_size_distribution()
 ```
 
