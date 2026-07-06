@@ -42,3 +42,9 @@ pip install git+https://github.com/mrzv/diode.git
 ```
 
 DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology). Note: `LocalPD` and `get_local_persistence` in this module are currently non-functional — see [Known Issues](known_issues.md).
+
+### (optional) Plotly and scikit-image
+For the interactive 3D void visualization, `VoidAnalysis.plot_3d`:
+```
+pip install "vitrum[plotly]"
+```

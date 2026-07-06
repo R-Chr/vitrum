@@ -25,6 +25,7 @@ nav:
     - Coordination: vitrum/coordination.md
     - Diffusion analysis: vitrum/dynamics.md
     - Ring analysis: vitrum/rings.md
+    - Void analysis: vitrum/voids.md
     - Persistent homology: vitrum/persistent_homology.md
     - Structure generation: vitrum/structure_gen.md
     - MLIP evaluation: vitrum/mlip_functions.md

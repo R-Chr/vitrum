@@ -1,3 +1,7 @@
+[![Documentation Status](https://readthedocs.org/projects/vitrum/badge/?version=latest)](https://vitrum.readthedocs.io/en/latest/?badge=latest)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/vitrum)](https://pypi.org/project/vitrum/)
+[![PyPI](https://img.shields.io/pypi/v/vitrum.svg?style=flat)](https://pypi.org/project/vitrum/)
+
 # ⚗️ vitrum
 
 **vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a comprehensive suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
@@ -40,6 +44,7 @@ See the [`examples`](examples/) folder for runnable Jupyter notebooks demonstrat
 ### 1. Structural Characterization
 *   **Scattering Functions**: Calculate partial and total Radial Distribution Functions (RDF) and Structure Factors ($S(q)$) for both Neutron and X-ray scattering (`vitrum.scattering`).
 *   **Ring Analysis**: Analyze ring size distributions and statistics in network glasses (`vitrum.rings`).
+*   **Void/Cavity Analysis**: Quantify free volume fraction and discrete cavity size distributions via a grid/probe-accessible-volume method (`vitrum.voids`).
 *   **Topological Analysis**: Compute persistent homology to identify medium-range order and topological features (`vitrum.persistent_homology`).
 *   **Coordination & Angles**: Analyze bond angle distributions and coordination environments (`vitrum.coordination`).
 
