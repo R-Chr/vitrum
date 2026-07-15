@@ -1,7 +1,6 @@
 test.ipynb
 /src/vitrum.egg-info
 /src/vitrum/__pycache__
-src/vitrum/visualization.py
 .DS_Store
 build/
 dist/
