@@ -56,9 +56,8 @@ See the [`examples`](examples/) folder for runnable Jupyter notebooks demonstrat
 ## 📑 Citation
 If you use `vitrum` in your work, please cite it. Each GitHub release is archived on Zenodo with a version-specific DOI; see [`CITATION.cff`](CITATION.cff) for the citation metadata (GitHub's "Cite this repository" button uses this file automatically).
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21366368.svg)](https://doi.org/10.5281/zenodo.21366368)
 
-*(DOI badge above is a placeholder — update it with the DOI Zenodo mints for the next release.)*
 
 ## 👥 Author
 Rasmus Christensen (rasmusc@bio.aau.dk)

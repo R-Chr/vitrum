@@ -6,8 +6,7 @@ version: 1.0.1
 date-released: "2026-07-15"
 license: MIT
 repository-code: "https://github.com/R-Chr/vitrum"
-# Replace with the version-specific DOI Zenodo mints for this release.
-doi: 10.5281/zenodo.XXXXXXX
+doi: 10.5281/zenodo.21366368
 authors:
   - family-names: Christensen
     given-names: Rasmus
