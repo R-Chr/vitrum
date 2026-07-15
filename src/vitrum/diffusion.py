@@ -1,9 +1,11 @@
+from typing import List, Optional, Tuple
+
 import numpy as np
-from vitrum.glass_atoms import GlassAtoms
-from vitrum.trajectory import unwrap_trajectory
-from scipy.stats import linregress
-from typing import List, Union, Optional, Tuple
 from ase import Atoms
+from scipy.stats import linregress
+
+from vitrum.glass_atoms import GlassAtoms
+from vitrum.trajectory_tools import unwrap_trajectory
 
 
 class Diffusion:
@@ -24,6 +26,13 @@ class Diffusion:
         """
 
         if wrapped:
+            for atoms in trajectory:
+                scaled_positions = atoms.get_scaled_positions(wrap=False)
+                if np.any(scaled_positions < 0) or np.any(scaled_positions >= 1):
+                    raise ValueError(
+                        "wrapped=True but some atom coordinates lie outside the cell. "
+                        "Set wrapped=False if the trajectory is already unwrapped."
+                    )
             trajectory = unwrap_trajectory(trajectory)
         self.trajectory = [GlassAtoms(atom) for atom in trajectory]
         self.chemical_symbols = np.array(trajectory[0].get_chemical_symbols())
