@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "vitrum"
+type: software
+version: 1.0.1
+date-released: "2026-07-15"
+license: MIT
+repository-code: "https://github.com/R-Chr/vitrum"
+# Replace with the version-specific DOI Zenodo mints for this release.
+doi: 10.5281/zenodo.XXXXXXX
+authors:
+  - family-names: Christensen
+    given-names: Rasmus
+    email: rasmus.christensen.a1@tohoku.ac.jp

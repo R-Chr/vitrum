@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1]
+
+### Added
+- Zenodo archiving is now linked to GitHub releases, giving each release a
+  citable DOI. Added `CITATION.cff` and a citation section to the README and
+  docs.
+
+### Changed
+- Updated installation docs to reference the PyPI package.
+
 ## [1.0.0]
 
 First stable release, published to PyPI.
