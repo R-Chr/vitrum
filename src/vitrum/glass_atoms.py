@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from ase import Atoms
 
-from vitrum.geometry import find_min_after_peak, pdf
+from vitrum.geometry import find_min_after_peak, pdf, radial_bins, require_orthorhombic
 from vitrum.geometry import get_dist_numba as dist
 
 
@@ -22,8 +22,11 @@ class GlassAtoms(Atoms):
         Returns:
             np.ndarray: An array of shape (n_atoms, n_atoms) containing the distances
                 between each pair of atoms.
+
+        Raises:
+            NotImplementedError: If the cell is not orthorhombic.
         """
-        dim = np.diagonal(self.get_cell())
+        dim = require_orthorhombic(self.get_cell(), "GlassAtoms.get_dist")
         positions = self.get_positions()
         return dist(positions, dim)
 
@@ -73,14 +76,27 @@ class GlassAtoms(Atoms):
             distances = self.get_dist() # Needed if indicies are provided but distances not calculated locally
 
         if len(atom_1) == 0 or len(atom_2) == 0:
-             # Handle case where one species is missing to avoid errors in np.ix_
-             # Return zeros or meaningful empty result
-             edges = np.linspace(0, rrange, nbin + 1)
-             xval = edges[1:] - 0.5 * (rrange / nbin)
-             return xval, np.zeros(nbin)
+            # Handle case where one species is missing to avoid errors in np.ix_
+            xval, _ = radial_bins(rrange, nbin)
+            return xval, np.zeros(nbin)
+
+        # A like pair draws from the same index set, so the submatrix contains the zero-distance
+        # diagonal and each atom has only n - 1 distinct partners. A cross pair has neither.
+        like_pair = np.array_equal(atom_1, atom_2)
+        if like_pair:
+            n_pairs = len(atom_1) * (len(atom_1) - 1)
+        else:
+            n_pairs = len(atom_1) * len(atom_2)
 
         dist_list = distances[np.ix_(atom_1, atom_2)]
-        return pdf(dist_list, self.get_volume(), rrange, nbin)
+        return pdf(
+            dist_list,
+            self.get_volume(),
+            rrange,
+            nbin,
+            n_pairs=n_pairs,
+            exclude_self=like_pair,
+        )
 
     def get_all_angles(
         self,
@@ -248,9 +264,11 @@ class GlassAtoms(Atoms):
         return (np.sum(self.get_masses()) / 6.02214076 * 10**-23) / (self.get_volume() * 10**-24)
 
 
-    def get_neighbors(self, center_type: str, cutoff: Union[float, int, dict]) -> List[int]:
+    def get_neighbors(
+        self, center_type: str, cutoff: Union[float, int, dict]
+    ) -> Dict[str, List[np.ndarray]]:
         """
-        Calculate the number of neighbors for each center atom of a given type.
+        Find the neighbors of each center atom of a given type, grouped by neighbor species.
 
         Args:
             center_type (str): The type of the center atoms.
@@ -259,7 +277,15 @@ class GlassAtoms(Atoms):
                 If a dictionary, it should map atom types to their respective cutoffs.
 
         Returns:
-            List[int]: A list of the number of neighbors for each center atom.
+            Dict[str, List[np.ndarray]]: A dict mapping each neighbor species to a list with
+                one entry per center atom. Each entry is an array of positional indices into
+                that species' atoms (i.e. indices into ``np.where(types == neigh_type)[0]``),
+                not global atom indices.
+
+        Raises:
+            ValueError: If center_type is not present in the structure.
+            KeyError: If cutoff is a dict missing an entry for a species.
+            TypeError: If cutoff is not a float, int, or dict.
         """
 
         types = np.array(self.get_chemical_symbols())

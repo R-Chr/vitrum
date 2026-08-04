@@ -11,7 +11,14 @@ def r_chi(function_1, function_2, x_min=0, x_max=np.inf, steps=100):
         function_2 (dict): Dictionary with keys 'x' and 'y' representing the second function, usually from experimental meassurements.
 
     Returns:
-        rchi (float): Wright coefficient, a measure of similarity between the two functions.
+        Tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+            - rchi (float): Wright coefficient, a measure of similarity between the two functions.
+            - common_x (np.ndarray): The common x-axis over the overlapping range.
+            - y1 (np.ndarray): function_1 interpolated onto common_x.
+            - y2 (np.ndarray): function_2 interpolated onto common_x.
+
+    Raises:
+        ValueError: If the two functions have no overlapping x-range.
     """
     # Determine the overlapping x-range
     min_x_val = np.max([np.min(function_1["x"]), np.min(function_2["x"]), x_min])

@@ -42,7 +42,7 @@ def correct_atom_types(atoms_list, atom_to_type_map):
         atom_to_type_map (dict): A dictionary mapping atomic numbers to atom types.
 
     Returns:
-        atoms_list (list of Atoms objects): The corrected list of Atoms objects.
+        None: The Atoms objects are modified in place.
     """
     #Check if atoms_list is a list of Atoms objects
     if not isinstance(atoms_list, list):

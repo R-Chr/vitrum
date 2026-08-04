@@ -13,6 +13,7 @@ from scipy import integrate
 from scipy.stats import norm
 from tqdm import tqdm
 
+from vitrum.geometry import pdf, radial_bins, require_orthorhombic
 from vitrum.glass_atoms import GlassAtoms
 
 
@@ -78,7 +79,7 @@ class Scattering:
         self.atom_list = [GlassAtoms(atom) for atom in atom_list]
         script_dir = Path(__file__).parent
 
-        cell_lengths = np.diag(atom_list[0].get_cell())
+        cell_lengths = require_orthorhombic(atom_list[0].get_cell(), "Scattering")
         half_min_dim = np.min(cell_lengths) / 2
 
         if rrange:
@@ -93,17 +94,29 @@ class Scattering:
             self.rrange = half_min_dim
 
         self.nbin = nbin
-        edges = np.linspace(0, self.rrange, self.nbin + 1)
-        self.xval = (edges[:-1] + edges[1:]) / 2.0
-        self.volbin = (4 / 3) * np.pi * (edges[1:]**3 - edges[:-1]**3)
+        self.xval, self.volbin = radial_bins(self.rrange, self.nbin)
 
         self.qval = np.linspace(qmin, qmax, self.nbin)
         self.chemical_symbols = atom_list[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
         self.pairs = [pair for pair in itertools.product(self.species, repeat=2)]
         self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
-        self.volume = atom_list[0].get_volume()
-        self.aveden = len(atom_list[0]) / self.volume
+
+        # The composition is assumed constant across the trajectory: self.chemical_symbols,
+        # self.species, self.pairs and self.c are all derived from the first frame alone.
+        reference_composition = sorted(self.chemical_symbols)
+        for frame_ind, atom in enumerate(atom_list[1:], start=1):
+            if sorted(atom.get_chemical_symbols()) != reference_composition:
+                raise ValueError(
+                    f"Frame {frame_ind} has a different composition to frame 0. Scattering "
+                    "assumes a fixed composition across the trajectory."
+                )
+
+        # Trajectory averages, so that NPT runs with a varying cell are weighted consistently
+        # with the per-frame partial PDFs.
+        volumes = np.array([atom.get_volume() for atom in atom_list])
+        self.volume = float(volumes.mean())
+        self.aveden = float(np.mean([len(atom) / vol for atom, vol in zip(atom_list, volumes)]))
         self.atomic_numbers = [Atom(atom).number for atom in self.species]
         self.disable_progress = disable_progress
 
@@ -168,9 +181,6 @@ class Scattering:
         Returns:
             np.ndarray: Array of partial PDFs.
         """
-        edges = np.linspace(0, self.rrange, self.nbin + 1)
-        volbin = (4 / 3) * np.pi * (edges[1:]**3 - edges[:-1]**3)
-
         pdf_sum = np.zeros((len(self.pairs), self.nbin))
         n_frames = len(self.atom_list)
 
@@ -178,16 +188,25 @@ class Scattering:
             distances = atom.get_dist()
             symbols = np.array(atom.get_chemical_symbols())
             volume = atom.get_volume()
-            
+
             for pair_ind, pair in enumerate(self.pairs):
                 idx_1 = np.flatnonzero(symbols == pair[0])
-                idx_2 = np.flatnonzero(symbols == pair[1])           
+                idx_2 = np.flatnonzero(symbols == pair[1])
+                like_pair = pair[0] == pair[1]
+                if like_pair:
+                    # Exclude self-pairs: N_a atoms each have N_a - 1 distinct partners.
+                    n_pairs = len(idx_1) * (len(idx_1) - 1)
+                else:
+                    n_pairs = len(idx_1) * len(idx_2)
                 dist_list = distances[np.ix_(idx_1, idx_2)]
-                h, _ = np.histogram(dist_list, bins=self.nbin, range=(0, self.rrange))
-                if pair[0] == pair[1]:
-                    h[0] = 0
-                number_density_factor = (len(idx_1) * len(idx_2)) / volume
-                current_pdf = (h / volbin) / number_density_factor
+                _, current_pdf = pdf(
+                    dist_list,
+                    volume,
+                    self.rrange,
+                    self.nbin,
+                    n_pairs=n_pairs,
+                    exclude_self=like_pair,
+                )
                 pdf_sum[pair_ind, :] += current_pdf
         return pdf_sum / n_frames
 
@@ -199,30 +218,37 @@ class Scattering:
         Returns:
             np.ndarray: Array of partial PDFs.
         """
-        all_frame_data = defaultdict(list)
+        all_frame_data = {pair: [] for pair in self.pairs}
         for atom in tqdm(self.atom_list, disable=self.disable_progress):
-            symbols = np.array(self.chemical_symbols)
-            volume = self.volume
+            symbols = np.array(atom.get_chemical_symbols())
+            volume = atom.get_volume()
             i_list, j_list, d_list = neighbor_list("ijd", a=atom, cutoff=self.rrange)
             pair_distances = defaultdict(list)
             for i_idx, j_idx, d in zip(i_list, j_list, d_list):
                 pair_key = tuple(sorted((symbols[i_idx], symbols[j_idx])))
                 pair_distances[pair_key].append(d)
-                
+
             for pair in self.pairs:
                 el1, el2 = pair
-                distances = pair_distances.get(pair, [])
-                h, _ = np.histogram(distances, bins=self.nbin, range=(0, self.rrange))
-                n1 = np.sum(symbols == el1)
-                n2 = np.sum(symbols == el2)
-                if n1 == 0 or n2 == 0:
-                    current_pdf = np.zeros(self.nbin)
+                # Distances are keyed by a sorted element tuple, so the lookup key must be
+                # sorted too; g_ij == g_ji, so both orderings of a cross pair share a key.
+                distances = pair_distances.get(tuple(sorted(pair)), [])
+                n1 = int(np.sum(symbols == el1))
+                n2 = int(np.sum(symbols == el2))
+                # `neighbor_list` reports both (i, j) and (j, i), so a cross pair's distances
+                # appear twice. A like pair's n1 * (n1 - 1) ordered pairs already account for it.
+                if el1 == el2:
+                    n_pairs = n1 * (n1 - 1)
                 else:
-                    if el1 == el2:
-                        norm_factor = (n1 * (n1 - 1)) / (2.0 * volume)
-                    else:
-                        norm_factor = (n1 * n2) / volume
-                    current_pdf = (h / self.volbin) / (norm_factor * 2)
+                    n_pairs = 2 * n1 * n2
+                _, current_pdf = pdf(
+                    distances,
+                    volume,
+                    self.rrange,
+                    self.nbin,
+                    n_pairs=n_pairs,
+                    exclude_self=False,  # a neighbour list never contains self-distances
+                )
                 all_frame_data[pair].append(current_pdf)
         pdfs = np.zeros((len(self.pairs), self.nbin))
 
@@ -260,6 +286,7 @@ class Scattering:
             
         Raises:
             ValueError: If type is invalid or broaden is invalid.
+            NotImplementedError: If type is "xray"; use "approx_xray" instead.
         """
         if type not in {"neutron", "xray", "approx_xray"}:
             raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
@@ -272,18 +299,11 @@ class Scattering:
             elif type == "approx_xray":
                 gr_tot = gr_tot + (self.approx_xray_timesby[ind] * pdf_val) / np.sum(self.approx_xray_timesby, axis=0)
             elif type == "xray":
-#                denom_Q = np.sum(self.xray_cb)**2
-#                for ind, pair in enumerate(self.pairs):
-#                    numerator_Q = self.xray_timesby[ind]
-#                    w_ij_Q = np.divide(numerator_Q, denom_Q, 
-#                                    out=np.zeros_like(numerator_Q), 
-#                                    where=denom_Q != 0)
-#                    w_ij_eff = np.trapezoid(w_ij_Q, self.qval) / (self.qval[-1] - self.qval[0])
-#                    gr_tot += w_ij_eff * pdf
-                print(
-                    " X-ray RDF using Fourier transform of xray scattering function f_ij(Q) is not implemented yet."
+                raise NotImplementedError(
+                    "X-ray RDF using the Fourier transform of the x-ray scattering function "
+                    "f_ij(Q) is not implemented. Use type='approx_xray' for the Q-independent "
+                    "atomic-number approximation, or type='neutron'."
                 )
-                break
         if broaden:
             if isinstance(broaden, (int, float)) and not isinstance(broaden, bool): 
                 # bool check needed because bool is subclass of int in Python
@@ -331,7 +351,7 @@ class Scattering:
         self,
         type: str = "neutron",
         lorch: bool = False,
-    ) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+    ) -> Dict[str, np.ndarray]:
         """
         Calculate weighted partial structure factors W_ij * S_ij(Q) for all
         unique element pairs.
@@ -343,7 +363,7 @@ class Scattering:
         Cross terms (i != j) are merged: S_ij = S_ji, so their weights are
         multiplied by 2 and only one label (e.g. "Si-O") is returned.
 
-        The sum of all weighted partials equals get_structure_factor(type=type).
+        Summing the returned values gives get_structure_factor(type=type).
 
         Args:
             type (str): Weighting scheme, "neutron" or "xray". Defaults to "neutron".
@@ -352,12 +372,11 @@ class Scattering:
                 Defaults to False.
 
         Returns:
-            Tuple[Dict[str, np.ndarray], np.ndarray]:
-                - partials: dict mapping pair label (e.g. "Si-O") to
-                  W_ij * S_ij(Q), shape (nbin,).
-                - total_sq: sum of all weighted partials, shape (nbin,).
-                  Equivalent to get_structure_factor(type=type).
+            Dict[str, np.ndarray]: Dict mapping pair label (e.g. "Si-O") to
+                W_ij * S_ij(Q), each of shape (nbin,).
 
+        Raises:
+            ValueError: If type is not "neutron" or "xray".
         """
         if type == "neutron":
             denom = sum(self.timesby)
@@ -457,6 +476,9 @@ class Scattering:
             np.ndarray: The running coordination number as a function of r.
         """
         pair_pdf = self.get_partial_pdf(pair)
-        n_v = np.sum(np.array(self.chemical_symbols) == pair[0]) / self.volume
+        # rho_j is the density of the neighbour species, pair[1]. Expressed as concentration x
+        # average density so it holds for NPT trajectories.
+        c_j = self.c[list(self.species).index(pair[1])]
+        n_v = c_j * self.aveden
         integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
         return integrate.cumulative_trapezoid(integrand, self.xval, initial=0.0)

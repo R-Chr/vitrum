@@ -6,15 +6,15 @@ from vitrum.scattering import Scattering
 from vitrum.structure_gen import Compositions, GlassGenerator
 from vitrum.voids import VoidAnalysis
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 __all__ = [
-    "GlassAtoms",
+    "Compositions",
     "Coordination",
     "Diffusion",
+    "GlassAtoms",
+    "GlassGenerator",
     "RingAnalysis",
     "Scattering",
     "VoidAnalysis",
-    "GlassGenerator",
-    "Compositions",
 ]

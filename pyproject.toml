@@ -47,6 +47,10 @@ volume_estimation = ["atomate2", "mp_api"]
 # see docs/vitrum/install.md for its manual install instructions.
 persistent_homology = ["dionysus"]
 visualization = ["plotly", "scikit-image", "ovito", "ipywidgets"]
+test = ["pytest", "pytest-cov"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.setuptools.dynamic]
 version = { attr = "vitrum.__version__" }

@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from ase import Atoms
 from scipy.interpolate import interpn
 import matplotlib.pyplot as plt

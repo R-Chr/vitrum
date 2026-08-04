@@ -127,7 +127,12 @@ class Coordination:
                     f"neigh_type list length ({len(neigh_types)})."
                 )
             cutoffs = [float(c) for c in cutoff]
-    
+        else:
+            raise ValueError(
+                f"Invalid cutoff {cutoff!r}. Expected the string 'Auto', a float or int, "
+                "or a list of floats matching the length of neigh_type."
+            )
+
         cn_all = []
         for atoms in self.atoms_list:
             # sum coordination numbers across all neigh_types per center atom

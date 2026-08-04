@@ -11,6 +11,8 @@ from sklearn.cluster import Birch
 from sklearn.neighbors import KernelDensity
 from tqdm import tqdm
 
+from vitrum.geometry import require_orthorhombic
+
 
 class PersistenceDiagram:
     """
@@ -640,7 +642,7 @@ class LocalPD:  # Broken after moving persistence diagram functions out of glass
         return np.vstack(features)
 
     def center_atoms(self, atoms, center_atom):
-        dim = np.diagonal(atoms.get_cell())
+        dim = require_orthorhombic(atoms.get_cell(), "center_atoms")
         positions = atoms.get_positions()
         x_dif = positions[:, 0] - positions[center_atom, 0]
         y_dif = positions[:, 1] - positions[center_atom, 1]

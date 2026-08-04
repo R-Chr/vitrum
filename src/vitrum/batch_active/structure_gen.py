@@ -3,9 +3,8 @@ import os
 import numpy as np
 from ase.io.lammpsdata import write_lammps_data
 from pymatgen.io.ase import AseAtomsAdaptor
-from tqdm import tqdm
 
-from vitrum.packing import apply_strain_to_structure, get_random_packed
+from vitrum.packing import apply_strain_to_structure
 from vitrum.structure_gen import GlassGenerator
 
 

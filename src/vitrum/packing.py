@@ -2,18 +2,16 @@ import warnings
 
 import numpy as np
 from ase import Atoms
-from ase.data import covalent_radii
 from ase.neighborlist import NeighborList
-from ase.symbols import symbols2numbers
 from pymatgen.alchemy.materials import TransformedStructure
-from pymatgen.core import Composition, Element, Species, Structure
+from pymatgen.core import Composition, Structure
 from pymatgen.transformations.standard_transformations import (
     DeformStructureTransformation,
 )
 from scipy.stats import qmc
 
 from vitrum.io_helpers import parse_composition
-from vitrum.volume_estimation import get_volume
+from vitrum.volume_estimation import get_packing_radii, get_volume
 
 
 def get_random_packed(
@@ -23,7 +21,7 @@ def get_random_packed(
     radii_source: str = "ionic",
     radii_scaling: float = 1.0,
     volume_scaling: float = 1.0,
-    vol_per_atom_source: float | str = "mp",
+    vol_per_atom_source: float | str = "ionic_radius",
     datatype: str = "ase",
     db_kwargs: dict | None = None,
     density: float | None = None,
@@ -38,16 +36,19 @@ def get_random_packed(
     Parameters:
         composition (str, dict or pymatgen.core.Composition): The composition of the structure.
         density (float, optional): The target density of the structure (in g/cm^3). If not provided, the volume per atom
-                                   is estimated using the Materials Project API.
+                                   is estimated using `vol_per_atom_source`.
         target_atoms (int, optional): The target number of atoms in the structure. Defaults to 100.
         min_distance (float, optional): Minimum distance between atoms in the structure. If not provided, no minimum distance is enforced.
         radii_source (str, optional): The source for the atomic radii. Can be "covalent", "atomic", or "ionic". Defaults to "ionic".
         radii_scaling (float, optional): Scaling factor for the covalent radii of the atoms. Defaults to 1.0.
         volume_scaling (float, optional): Scaling factor for the volume of the structure. Defaults to 1.0.
         vol_per_atom_source (float or str, optional): The source for the volume per atom. Can be a float value or one of the following strings:
-                                                    "mp" (Materials Project), "icsd" (Inorganic Crystal Structure Database),
-                                                     "density" (use provided density), "covalent_radius" (estimate from covalent radii),
-                                                     or "convex_hull" (estimate from convex hull). Defaults to "mp".
+                                                     "ionic_radius" (estimate from ionic radii; needs no network access or optional
+                                                     dependencies, calibrated on oxides), "mp" (Materials Project),
+                                                     "icsd" (Inorganic Crystal Structure Database), "density" (use provided density),
+                                                     "covalent_radius" (estimate from covalent radii; poorly calibrated for ionic systems),
+                                                     or "convex_hull" (estimate from convex hull). Defaults to "ionic_radius".
+                                                     See `vitrum.volume_estimation.get_volume` for details.
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
         db_kwargs (dict, optional): Additional keyword arguments for database access. Defaults to None.
@@ -76,7 +77,7 @@ def get_random_packed(
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])
     cell = np.diag(cell)
 
-    radii = _get_packing_radii(elements, composition, source=radii_source) * radii_scaling
+    radii = get_packing_radii(elements, composition, source=radii_source) * radii_scaling
 
     if min_distance:
         radii = np.maximum(radii, min_distance / 2)
@@ -116,7 +117,9 @@ def get_random_packed(
         if dsum >= -1.0e-5:
             break
     else:
-        print(f'Cell packing not converged after 100 iterations, final overlap sum {dsum:.3e}')
+        warnings.warn(
+            f'Cell packing not converged after 500 iterations, final overlap sum {dsum:.3e}'
+        )
 
     ats.wrap()
     if datatype == "pymatgen":
@@ -131,64 +134,6 @@ def get_random_packed(
         structure = ats
     return structure
 
-
-def _get_packing_radii(elements, composition, source="covalent"):
-    """Per-atom radii in Å. source: 'covalent' | 'atomic' | 'ionic'."""
-    if source == "covalent":
-        return covalent_radii[symbols2numbers(elements)].copy()
-
-    if source == "atomic":
-        return np.array([
-            Element(el).atomic_radius
-            or covalent_radii[symbols2numbers([el])[0]]   # fallback: covalent
-            for el in elements
-        ])
-
-    if source == "ionic":
-        oxi = _guess_oxi_states(composition)
-        if not oxi:
-            return covalent_radii[symbols2numbers(elements)].copy()
-        radii = []
-        for el in elements:
-            state = round(oxi[el])
-            try:
-                r = Species(el, state).ionic_radius
-            except (KeyError, ValueError):
-                r = None
-            radii.append(r or Element(el).atomic_radius
-                         or covalent_radii[symbols2numbers([el])[0]])
-        return np.array(radii)
-
-    raise ValueError(f"unknown radii source: {source}")
-
-def _guess_oxi_states(composition, max_exact_atoms=100, totals=(40, 60, 100)):
-    """Guess oxidation states, rounding the composition first only if it's large.
-    Returns {element: state} or None."""
-    comp = composition.reduced_composition
-
-    if comp.num_atoms <= max_exact_atoms:
-        guesses = comp.oxi_state_guesses(max_sites=-1)
-        if guesses:
-            return {el: round(v) for el, v in guesses[0].items()}
-        warnings.warn(
-            f"No charge-balanced oxidation states for {comp.reduced_formula}; "
-            f"using covalent radii."
-        )
-        return None
-
-    amts = comp.element_composition.get_el_amt_dict()
-    n = sum(amts.values())
-    for total in totals:
-        approx = Composition({el: max(1, round(a / n * total))
-                              for el, a in amts.items()})
-        guesses = approx.oxi_state_guesses(max_sites=-1)
-        if guesses:
-            return {el: round(v) for el, v in guesses[0].items()}
-    warnings.warn(
-        f"Could not assign oxidation states for {comp.reduced_formula} "
-        f"(rounded compositions not charge-balanceable); using covalent radii."
-    )
-    return None
 
 def apply_strain_to_structure(structure, deformations: list) -> list:
     """

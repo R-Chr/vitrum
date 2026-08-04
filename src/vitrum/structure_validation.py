@@ -2,6 +2,8 @@ from itertools import product
 
 import numpy as np
 
+from vitrum.geometry import require_orthorhombic
+
 
 def homogeneity_checker(
     atoms,
@@ -38,7 +40,7 @@ def homogeneity_checker(
     if len(species) == 0:
         raise ValueError("No species found in the atoms object.")
 
-    cell_lengths = np.array(atoms.get_cell()).diagonal()
+    cell_lengths = require_orthorhombic(atoms.get_cell(), "homogeneity_checker")
     num_boxes = np.prod(grid_density)
 
     x_edges = np.linspace(0, cell_lengths[0], grid_density[0] + 1)
@@ -74,9 +76,10 @@ def homogeneity_checker(
             y_idx = np.digitize(positions[:, 1], y_slide) - 1
             z_idx = np.digitize(positions[:, 2], z_slide) - 1
 
-            x_idx[x_idx == -1] = 2
-            y_idx[y_idx == -1] = 2
-            z_idx[z_idx == -1] = 2
+            # Atoms below the slid lower edge wrap into the last box by periodicity
+            x_idx[x_idx == -1] = grid_density[0] - 1
+            y_idx[y_idx == -1] = grid_density[1] - 1
+            z_idx[z_idx == -1] = grid_density[2] - 1
 
             counts = np.zeros(grid_density, dtype=int)
             for xi, yi, zi in zip(x_idx, y_idx, z_idx):
@@ -115,10 +118,11 @@ def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
         spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
         if len(spec_atoms) < 2:
             continue
-        spec_positions = spec_atoms.get_positions()
-        distances = np.linalg.norm(spec_positions[:, np.newaxis] - spec_positions, axis=-1)
+        # mic=True so dimers spanning a periodic boundary are found
+        distances = spec_atoms.get_all_distances(mic=True)
         np.fill_diagonal(distances, np.inf)  # Ignore self-distances
-        num_dimers = np.sum(distances < bond_length)
+        # The distance matrix is symmetric, so each dimer is counted twice
+        num_dimers = int(np.sum(distances < bond_length) // 2)
         if num_dimers > num_allowed:  # Adjust threshold as needed
             return True
     return False

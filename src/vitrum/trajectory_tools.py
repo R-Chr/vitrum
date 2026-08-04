@@ -1,5 +1,7 @@
 import numpy as np
 
+from vitrum.geometry import require_orthorhombic
+
 
 def get_high_low_displacement_index(initial_state, current_state, target_atom, percentage=0.25):
     """
@@ -39,7 +41,7 @@ def unwrap_trajectory(atoms_list):
 
     if not atoms_list or len(atoms_list) == 0:
         raise ValueError("The input atoms_list must be a non-empty list of ASE Atom objects.")
-    cell = np.diagonal(atoms_list[0].get_cell())
+    cell = require_orthorhombic(atoms_list[0].get_cell(), "unwrap_trajectory")
     n_atoms = len(atoms_list[0])
     unwrapped_atoms_list = [atoms.copy() for atoms in atoms_list]
 

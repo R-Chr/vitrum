@@ -5,3 +5,4 @@ test.ipynb
 build/
 dist/
 *.egg-info/
+*.pyc

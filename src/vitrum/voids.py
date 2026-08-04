@@ -1,3 +1,4 @@
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -10,6 +11,7 @@ from scipy.sparse import csr_array
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
+from vitrum.geometry import require_orthorhombic
 from vitrum.glass_atoms import GlassAtoms
 
 
@@ -48,7 +50,7 @@ def compute_occupancy_grid(
     '''
     atoms = atoms.copy()
     atoms.wrap()
-    cell_lengths = np.diagonal(atoms.get_cell())
+    cell_lengths = require_orthorhombic(atoms.get_cell(), "build_void_grid")
 
     symbols = np.array(atoms.get_chemical_symbols())
     base_radii = covalent_radii[symbols2numbers(symbols)].astype(float)
@@ -58,8 +60,8 @@ def compute_occupancy_grid(
     final_radii = base_radii * radii_scaling + probe_radius
 
     if np.any(final_radii > cell_lengths.min() / 2):
-        print(
-            "WARNING: at least one exclusion radius exceeds half the smallest cell "
+        warnings.warn(
+            "At least one exclusion radius exceeds half the smallest cell "
             "length; periodic nearest-neighbor queries may be ambiguous."
         )
 
@@ -67,8 +69,8 @@ def compute_occupancy_grid(
     spacing = cell_lengths / n
 
     if np.prod(n, dtype=np.int64) > 20_000_000:
-        print(
-            f"WARNING: occupancy grid has {np.prod(n, dtype=np.int64):,} points "
+        warnings.warn(
+            f"Occupancy grid has {np.prod(n, dtype=np.int64):,} points "
             f"(grid_spacing={grid_spacing}); consider a coarser grid_spacing for "
             "faster analysis."
         )
@@ -603,7 +605,7 @@ class VoidAnalysis:
         if fig is None:
             fig = go.Figure()
 
-        cell_lengths = np.diagonal(self.atoms.get_cell())
+        cell_lengths = require_orthorhombic(self.atoms.get_cell(), "VoidAnalysis.plot")
         _add_cell_edges_trace(fig, cell_lengths)
 
         if show_atoms:

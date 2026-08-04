@@ -1,5 +1,5 @@
+import warnings
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from ase import Atoms
@@ -14,7 +14,7 @@ from scipy.sparse.csgraph import dijkstra
 from vitrum.glass_atoms import GlassAtoms
 
 
-def check_ring_is_periodic(ring: List[int], offsets: Dict[Tuple[int, int], np.ndarray]) -> bool:
+def check_ring_is_periodic(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
     ''' 
     Check if the ring wraps around the period cell, i.e., is not a true ring.
     
@@ -32,7 +32,7 @@ def check_ring_is_periodic(ring: List[int], offsets: Dict[Tuple[int, int], np.nd
     return np.all(total_offset == 0)
 
 
-def _walk_path(predecessors: np.ndarray, source: int, target: int) -> List[int]:
+def _walk_path(predecessors: np.ndarray, source: int, target: int) -> list[int]:
     '''
     Reconstruct a dijkstra shortest path from `source` to `target`.
 
@@ -57,20 +57,24 @@ def _find_guttman_rings(
     len_ats: int,
     d: csr_array,
     limit: float,
-) -> List[List[int]]:
+) -> list[list[int]]:
     '''
     Find raw Guttman ring candidates (before periodicity check and remapping to the primary cell).
 
     For each bond (i, j), remove that edge and find the shortest path between i and j in the
     remaining graph. The path plus the removed edge forms the ring.
+
+    `eliminate_zeros` is required after zeroing an edge: `dijkstra` traverses explicit zeros
+    left in a CSR `data` array as if they were real edges.
     '''
     raw_rings = []
     for i in range(len_ats):
         neighbors = d.indices[d.indptr[i]:d.indptr[i + 1]]
         for j in neighbors:
             d_tmp = d.copy()
-            d_tmp[i, j] = 0
-            d_tmp[j, i] = 0
+            for row, col in ((i, j), (j, i)):
+                lo, hi = d_tmp.indptr[row], d_tmp.indptr[row + 1]
+                d_tmp.data[lo + np.flatnonzero(d_tmp.indices[lo:hi] == col)] = 0
             d_tmp.eliminate_zeros()
             dist_matrix, predecessors = dijkstra(
                 d_tmp, indices=i, return_predecessors=True, directed=False, unweighted=True, limit=limit
@@ -84,7 +88,7 @@ def _find_king_candidate_rings(
     len_ats: int,
     d: csr_array,
     limit: float,
-) -> List[List[int]]:
+) -> list[list[int]]:
     '''
     Find raw King's ring candidates (before periodicity check and remapping to the primary cell).
 
@@ -99,8 +103,8 @@ def _find_king_candidate_rings(
             continue
 
         d_tmp = d.copy()
-        d_tmp[c, :] = 0
-        d_tmp[:, c] = 0
+        d_tmp.data[d_tmp.indptr[c]:d_tmp.indptr[c + 1]] = 0   # row c
+        d_tmp.data[d_tmp.indices == c] = 0                    # column c
         d_tmp.eliminate_zeros()
 
         # One multi-source search from all of c's neighbors covers every pair at once,
@@ -119,7 +123,7 @@ def _find_primitive_rings(
     len_ats: int,
     d: csr_array,
     limit: float,
-) -> List[List[int]]:
+) -> list[list[int]]:
     '''
     Find raw primitive rings (before periodicity check and remapping to the primary cell).
 
@@ -152,11 +156,11 @@ def _find_primitive_rings(
 def find_rings(
     ats: Atoms,
     radii_factor: float = 1.3,
-    repeat: Tuple[int, int, int] = (1, 1, 1),
-    bonds: Optional[List[Tuple[str, str]]] = None,
+    repeat: tuple[int, int, int] = (1, 1, 1),
+    bonds: list[tuple[str, str]] | None = None,
     limit: float = np.inf,
     criterion: str = "guttman",
-) -> List[List[int]]:
+) -> list[list[int]]:
     '''
     Find rings in the unit cell.
 
@@ -213,8 +217,8 @@ def find_rings(
         rs = pos[indices, :] + offsets @ lat - pos[i, :]
         ds = np.linalg.norm(rs, axis=1)
         for j, r, o in zip(indices, ds, offsets):
-            # Ignore bonds that are not included
-            if ((els[i], els[j]) in bonds or (els[j], els[i]) in bonds):
+            # Ignore bonds that are not included; bonds=None allows all bonds
+            if bonds is None or (els[i], els[j]) in bonds or (els[j], els[i]) in bonds:
                 d_idx.append((i, j))
                 d_val.append(r)
                 d_idx.append((j, i))
@@ -235,22 +239,29 @@ def find_rings(
         raw_rings = _find_primitive_rings(len(ats), d, limit)
 
     rings = {}
+    n_wrapping = 0
     for ring in raw_rings:
         if not check_ring_is_periodic(ring, all_offsets):
-            print('WARNING: ring is wrapping around periodic cell! Consider increasing `repeat`.')
+            n_wrapping += 1
             continue
 
         ring = [x % len(ats) for x in ring]  # take it back to primary cell
         rings[tuple(sorted(ring))] = ring
 
+    if n_wrapping:
+        warnings.warn(
+            f'{n_wrapping} of {len(raw_rings)} candidate rings wrap around the periodic cell '
+            'and were discarded. Consider increasing `repeat`.'
+        )
+
     return list(rings.values())
 
-class Ring(object):
+class Ring:
     """
     A class representing a ring in a atomistic system.
     """
 
-    def __init__(self, atoms: Atoms, indexes: Optional[List[int]] = None):
+    def __init__(self, atoms: Atoms, indexes: list[int] | None = None):
         """
         Initialize a Ring object.
 
@@ -378,7 +389,7 @@ class RingAnalysis:
     A class for calculating and analyzing rings in atomistic systems.
     """
 
-    def __init__(self, atoms: Atoms, included_atoms: List[str], bonding_dict: Optional[List[Tuple[str, str]]] = None):
+    def __init__(self, atoms: Atoms, included_atoms: list[str], bonding_dict: list[tuple[str, str]] | None = None):
         """
         Initialize the RingAnalysis class.
 
@@ -401,10 +412,10 @@ class RingAnalysis:
     def calculate(
         self,
         radii_factor: float = 1.3,
-        repeat: Tuple[int, int, int] = (1, 1, 1),
+        repeat: tuple[int, int, int] = (1, 1, 1),
         max_size: float = np.inf,
         criterion: str = "guttman",
-    ) -> List[Ring]:
+    ) -> list[Ring]:
         """
         Calculate the rings in the system.
 
@@ -439,7 +450,7 @@ class RingAnalysis:
             raise ValueError("Rings have not been calculated yet.")
         write(filename, [r.atoms for r in self.rings], format=format)
     
-    def get_ring_size_distribution(self) -> Dict[int, int]:
+    def get_ring_size_distribution(self) -> dict[int, int]:
         """
         Get the distribution of ring sizes.
 
@@ -452,26 +463,26 @@ class RingAnalysis:
         return dict(Counter(ring_sizes))
     
     def plot_ring_size_distribution(self, ax=None, **plot_kwargs):
-            """
-            Plots the distribution of ring sizes using matplotlib.
-            """
-            import matplotlib.pyplot as plt
-            
-            dist = self.get_ring_size_distribution()
-            if not dist:
-                print("No rings found. Ensure you have run .calculate() first.")
-                return
+        """
+        Plots the distribution of ring sizes using matplotlib.
+        """
+        import matplotlib.pyplot as plt
+        
+        dist = self.get_ring_size_distribution()
+        if not dist:
+            print("No rings found. Ensure you have run .calculate() first.")
+            return
 
-            sizes = sorted(dist.keys())
-            counts = np.array([dist[size] for size in sizes])
-            frequency = counts / self.atoms.get_volume()  # Normalize by volume to get frequency
+        sizes = sorted(dist.keys())
+        counts = np.array([dist[size] for size in sizes])
+        frequency = counts / self.atoms.get_volume()  # Normalize by volume to get frequency
 
-            if ax is None:
-                fig, ax = plt.subplots(figsize=(9, 6))
-                ax.set_xlabel('Ring Size (N$_{atoms}$)', fontsize=12)
-                ax.set_ylabel('Ring Frequency [N$_{rings}$ / V] (Å$^{-3}$)', fontsize=12)
-                ax.set_xticks(sizes)  
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(9, 6))
+            ax.set_xlabel('Ring Size (N$_{atoms}$)', fontsize=12)
+            ax.set_ylabel('Ring Frequency [N$_{rings}$ / V] (Å$^{-3}$)', fontsize=12)
+            ax.set_xticks(sizes)  
 
-            ax.plot(sizes, frequency, **plot_kwargs)
+        ax.plot(sizes, frequency, **plot_kwargs)
 
-            return ax
+        return ax

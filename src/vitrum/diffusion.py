@@ -34,6 +34,11 @@ class Diffusion:
                         "Set wrapped=False if the trajectory is already unwrapped."
                     )
             trajectory = unwrap_trajectory(trajectory)
+        if len(sample_times) != len(trajectory):
+            raise ValueError(
+                f"sample_times has {len(sample_times)} entries but the trajectory has "
+                f"{len(trajectory)} frames; they must correspond one-to-one."
+            )
         self.trajectory = [GlassAtoms(atom) for atom in trajectory]
         self.chemical_symbols = np.array(trajectory[0].get_chemical_symbols())
         self.species = np.unique(self.chemical_symbols)
@@ -43,8 +48,14 @@ class Diffusion:
         """
         Calculates the mean square displacement for each atom in the trajectory.
 
+        Note:
+            Displacements are measured from a **single time origin** (the first frame) rather
+            than averaged over multiple origins. This is noisier than the standard windowed
+            multi-origin estimator, particularly at long lag times where few independent
+            samples remain. See `docs/vitrum/known_issues.md`.
+
         Returns:
-            np.ndarray: An array of mean square displacements. 
+            np.ndarray: An array of mean square displacements.
                 Rows correspond to:
                 0: Total MSD
                 1+: MSD for each species in self.species order.
@@ -76,7 +87,17 @@ class Diffusion:
 
         Returns:
             np.ndarray: Array of diffusion coefficients.
+
+        Raises:
+            ValueError: If `skip_first` leaves fewer than 3 frames to fit.
         """
+        n_frames = len(self.sample_times)
+        if n_frames - skip_first < 3:
+            raise ValueError(
+                f"skip_first={skip_first} leaves {max(n_frames - skip_first, 0)} of {n_frames} "
+                "frames; need at least 3 points for a linear fit. Lower skip_first or use a "
+                "longer trajectory."
+            )
         if msds is None:
             msds = self.get_mean_square_displacements()
         D = []
