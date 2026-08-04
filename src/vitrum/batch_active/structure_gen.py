@@ -1,5 +1,4 @@
 import os
-from itertools import product
 
 import numpy as np
 from ase.io.lammpsdata import write_lammps_data
@@ -7,6 +6,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from tqdm import tqdm
 
 from vitrum.packing import apply_strain_to_structure, get_random_packed
+from vitrum.structure_gen import GlassGenerator
 
 
 def gen_even_structures(
@@ -19,9 +19,14 @@ def gen_even_structures(
 ) -> list:
     """
     Generate a list of structures with compositions spaced evenly between 0 and 100
-    percent of each species in self.units.
+    percent of each unit.
+
+    Thin wrapper around ``GlassGenerator(units=...).sample("grid")`` followed by
+    packing. New code should use :class:`vitrum.structure_gen.GlassGenerator` directly.
 
     Parameters:
+        units: list
+            Composition units (e.g. oxide formulas) to grid over.
         spacing: int, optional
             Spacing between each composition point, by default 10
         datatype: str, optional
@@ -33,21 +38,14 @@ def gen_even_structures(
         structures: list
             List of structures with evenly spaced compositions
     """
-    lists = [np.int32(np.linspace(0, 100, int(100 / spacing + 1))) for i in range(len(units))]
-    all_combinations = product(*lists)
-    valid_combinations = [combo for combo in all_combinations if sum(combo) == 100]
-    structures = []
-    for comb in tqdm(valid_combinations):
-        atoms_dict = {str(units[i]): comb[i] for i in range(len(units))}
-        structures.append(
-            get_random_packed(
-                atoms_dict,
-                target_atoms=target_atoms,
-                minAllowDis=minAllowDis,
-                datatype=datatype,
-            )
-        )
-    return structures
+    generator = GlassGenerator(units=units)
+    comps = generator.sample("grid", spacing=spacing)
+    return comps.get_structures(
+        target_atoms=target_atoms,
+        datatype=datatype,
+        min_distance=minAllowDis,
+        **kwargs,
+    )
 
 
 def gen_strained_structures(structure, max_strain=0.2, num_strains=3):

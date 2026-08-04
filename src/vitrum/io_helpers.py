@@ -4,6 +4,9 @@ from fractions import Fraction
 from functools import reduce
 from math import gcd
 
+from pymatgen.core import Composition
+from scipy.constants import Avogadro
+
 
 def get_LAMMPS_dump_timesteps(filename: str):
     """
@@ -48,6 +51,53 @@ def correct_atom_types(atoms_list, atom_to_type_map):
     for atoms in atoms_list:
         corr_symbols = [atom_to_type_map[i] for i in atoms.get_atomic_numbers()]
         atoms.set_chemical_symbols(corr_symbols)
+
+
+def parse_composition(composition: str | dict | Composition) -> Composition:
+    """Normalize a composition into a pymatgen Composition.
+
+    Args:
+        composition (str, dict or pymatgen.core.Composition): A chemical formula string (e.g. "SiO2"),
+            a dict mapping element symbols to relative amounts (e.g. {"Si": 1, "O": 2}), or an existing
+            pymatgen Composition.
+
+    Returns:
+        pymatgen.core.Composition: The parsed composition.
+    """
+    return composition if isinstance(composition, Composition) else Composition(composition)
+
+
+def mass_density_to_number_density(composition: str | dict | Composition, density: float) -> float:
+    """Convert a mass density to an atomic number density for a given composition.
+
+    Args:
+        composition (str, dict or pymatgen.core.Composition): Same accepted formats as
+            vitrum.packing.get_random_packed.
+        density (float): Mass density in g/cm^3.
+
+    Returns:
+        float: Atomic number density in atoms/Angstrom^3.
+    """
+    composition = parse_composition(composition)
+    mass_per_atom = float(composition.weight) / composition.num_atoms  # g/mol per atom
+    return (density / mass_per_atom) * Avogadro * 1e-24
+
+
+def number_density_to_mass_density(composition: str | dict | Composition, number_density: float) -> float:
+    """Convert an atomic number density to a mass density for a given composition.
+
+    Args:
+        composition (str, dict or pymatgen.core.Composition): Same accepted formats as
+            vitrum.packing.get_random_packed.
+        number_density (float): Atomic number density in atoms/Angstrom^3.
+
+    Returns:
+        float: Mass density in g/cm^3.
+    """
+    composition = parse_composition(composition)
+    mass_per_atom = float(composition.weight) / composition.num_atoms  # g/mol per atom
+    return number_density * 1e24 * mass_per_atom / Avogadro
+
 
 def _parse_oxide(formula):
     """'Al2O3' -> {'Al': Fraction(2), 'O': Fraction(3)} (no parentheses support)."""

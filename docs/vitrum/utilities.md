@@ -44,6 +44,13 @@ volume = get_volume("SiO2", {"Si": 1, "O": 2}, vol_per_atom_source="covalent_rad
 
 See [Quick start](quickstart.md) for worked `correct_atom_types`/`get_LAMMPS_dump_timesteps` examples.
 
+```python
+from vitrum.io_helpers import mass_density_to_number_density, number_density_to_mass_density
+
+number_density = mass_density_to_number_density("SiO2", density=2.2)  # atoms/Angstrom^3
+density = number_density_to_mass_density("SiO2", number_density)      # g/cm^3, round-trips
+```
+
 ::: vitrum.io_helpers
 
 ## Structure validation

@@ -178,7 +178,7 @@ class balace:
     def generate_structures(self):
         if self.struc_gen_params["scheme"] == "even":
             structures = gen_even_structures(
-                units=self.self.struc_gen_params["units"],
+                units=self.struc_gen_params["units"],
                 target_atoms=self.struc_gen_params["target_atoms"],
                 **self.composition_params,
             )
