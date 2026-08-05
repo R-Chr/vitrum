@@ -36,6 +36,9 @@ def find_min_after_peak(padf, context: str = ""):
     Find the index of the first local minimum after the first peak in a function.
     Useful for determining cutoffs from PDFs.
 
+    The first peak is located as the first local maximum, so the empty bins below the
+    closest approach are skipped however they are distributed.
+
     Args:
         padf (np.ndarray): The probability density function or similar array.
         context (str, optional): Description of what is being analysed (e.g. the atom
@@ -48,14 +51,15 @@ def find_min_after_peak(padf, context: str = ""):
         ValueError: If the function has no local minimum after a first peak
     """
     padf = np.asarray(padf)
+    peaks = argrelextrema(padf, np.greater, order=4)[0]
     mins = argrelextrema(padf, np.less_equal, order=4)[0]
-    after_peak = [i for ind, i in enumerate(mins) if i != ind]
-    if not after_peak:
+    after_peak = mins[mins > peaks[0]] if peaks.size else np.array([], dtype=int)
+    if after_peak.size == 0:
         raise ValueError(
             f"Could not determine an automatic cutoff{f' for {context}' if context else ''}: "
             "the distribution has no local minimum after a first peak. Pass an explicit `cutoff` instead."
         )
-    return after_peak[0]
+    return int(after_peak[0])
 
 
 def radial_bins(rrange=10, nbin=100):
@@ -124,6 +128,9 @@ def get_dist_numba(pos, cell):
     """
     Calculate the distance matrix between atoms using Numba for performance.
 
+    Positions need not be wrapped into the cell: the minimum image is taken by
+    subtracting a whole number of cell lengths.
+
     Args:
         pos (np.ndarray): Array of atomic positions (N x 3).
         cell (np.ndarray): Cell dimensions (3,). Assumes an orthorhombic cell (lx, ly, lz).
@@ -137,18 +144,17 @@ def get_dist_numba(pos, cell):
 
     # Extract cell dimensions for faster access
     lx, ly, lz = cell[0], cell[1], cell[2]
-    half_lx, half_ly, half_lz = lx / 2.0, ly / 2.0, lz / 2.0
 
     for i in prange(n):
         for j in range(i + 1, n):  # Only calculate the upper triangle
-            dx = abs(pos[i, 0] - pos[j, 0])
-            dy = abs(pos[i, 1] - pos[j, 1])
-            dz = abs(pos[i, 2] - pos[j, 2])
+            dx = pos[i, 0] - pos[j, 0]
+            dy = pos[i, 1] - pos[j, 1]
+            dz = pos[i, 2] - pos[j, 2]
 
             # Apply Periodic Boundary Conditions (Minimum Image Convention)
-            if dx > half_lx: dx -= lx
-            if dy > half_ly: dy -= ly
-            if dz > half_lz: dz -= lz
+            if lx > 0.0: dx -= lx * np.rint(dx / lx)
+            if ly > 0.0: dy -= ly * np.rint(dy / ly)
+            if lz > 0.0: dz -= lz * np.rint(dz / lz)
 
             d = np.sqrt(dx**2 + dy**2 + dz**2)
 
@@ -166,6 +172,9 @@ def get_dist(list, cell):
     Kept as a plain-numpy (non-numba) reference implementation for backward
     compatibility; get_dist_numba is the version used internally by GlassAtoms.
 
+    Positions need not be wrapped into the cell: the minimum image is taken by
+    subtracting a whole number of cell lengths.
+
     Args:
         list (np.ndarray): Atomic positions (N x 3).
         cell (np.ndarray): Cell dimensions (3,). Assumes an orthorhombic cell.
@@ -173,11 +182,8 @@ def get_dist(list, cell):
     Returns:
         np.ndarray: Symmetric distance matrix (N x N) containing distances between all atom pairs.
     """
-    dim = [cell[0], cell[1], cell[2]]
-    x_dif = np.abs(list[:, 0][np.newaxis, :] - list[:, 0][:, np.newaxis])
-    y_dif = np.abs(list[:, 1][np.newaxis, :] - list[:, 1][:, np.newaxis])
-    z_dif = np.abs(list[:, 2][np.newaxis, :] - list[:, 2][:, np.newaxis])
-    x_dif = np.where(x_dif > 0.5 * dim[0], np.abs(x_dif - dim[0]), x_dif)
-    y_dif = np.where(y_dif > 0.5 * dim[1], np.abs(y_dif - dim[1]), y_dif)
-    z_dif = np.where(z_dif > 0.5 * dim[2], np.abs(z_dif - dim[2]), z_dif)
-    return np.sqrt(x_dif**2 + y_dif**2 + z_dif**2)
+    dim = np.asarray([cell[0], cell[1], cell[2]], dtype=float)
+    diff = np.asarray(list, dtype=float)[np.newaxis, :, :] - np.asarray(list, dtype=float)[:, np.newaxis, :]
+    lengths = np.where(dim > 0.0, dim, 1.0)
+    diff -= np.where(dim > 0.0, lengths * np.rint(diff / lengths), 0.0)
+    return np.sqrt(np.sum(diff**2, axis=-1))

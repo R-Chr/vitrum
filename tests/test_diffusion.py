@@ -10,6 +10,46 @@ import pytest
 from ase import Atoms
 
 from vitrum.diffusion import Diffusion
+from vitrum.trajectory_tools import unwrap_trajectory
+
+
+def test_unwrap_follows_an_atom_across_a_boundary():
+    """An atom drifting steadily must unwrap to a straight line, not fold back."""
+    box = 4.0
+    frames = [
+        Atoms("Ar", positions=[[x, 0.0, 0.0]], cell=[box] * 3, pbc=True)
+        for x in (3.5, 0.1, 0.7, 1.3)
+    ]
+    unwrapped = [a.get_positions()[0, 0] for a in unwrap_trajectory(frames)]
+    np.testing.assert_allclose(unwrapped, [3.5, 4.1, 4.7, 5.3], atol=1e-9)
+
+
+def test_unwrap_ignores_a_pure_cell_rescaling():
+    """Under NPT the cell breathes; an atom fixed in the cell has not diffused.
+
+    Its Cartesian position changes with the cell, so a step measured in Cartesian
+    coordinates would report motion that never happened.
+    """
+    frames = [
+        Atoms("Ar", positions=[[0.1 * box, 0.0, 0.0]], cell=[box] * 3, pbc=True)
+        for box in (10.0, 9.0, 8.0)
+    ]
+    unwrapped = [a.get_positions()[0] for a in unwrap_trajectory(frames)]
+    np.testing.assert_allclose(unwrapped, [unwrapped[0]] * 3, atol=1e-9)
+
+
+def test_unwrap_measures_a_boundary_crossing_in_the_current_cell():
+    """A crossing under a changing cell must be measured against the cell it happened in.
+
+    The atom sits at fractional 0.95, then at 0.0333 after the cell has shrunk to 6 A:
+    it stepped forward by 0.0833 of a cell, i.e. 0.5 A, through the boundary.
+    """
+    frames = [
+        Atoms("Ar", positions=[[9.5, 0.0, 0.0]], cell=[10.0] * 3, pbc=True),
+        Atoms("Ar", positions=[[0.2, 0.0, 0.0]], cell=[6.0] * 3, pbc=True),
+    ]
+    displacement = np.diff([a.get_positions()[0, 0] for a in unwrap_trajectory(frames)])
+    assert displacement[0] == pytest.approx(0.5)
 
 
 @pytest.fixture

@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from ase import Atoms
 
 from vitrum.geometry import require_orthorhombic
 from vitrum.glass_atoms import GlassAtoms
@@ -15,6 +16,46 @@ def test_get_dist_matches_ase_minimum_image(silicon_small):
     np.testing.assert_allclose(
         atoms.get_dist(), atoms.get_all_distances(mic=True), atol=1e-8
     )
+
+
+@pytest.mark.parametrize("x", [12.0, 21.5, 25.0, -3.0, -18.0])
+def test_get_dist_matches_ase_for_positions_outside_the_cell(x):
+    """Unwrapped coordinates must give the same distance as wrapped ones.
+
+    Trajectory formats such as LAMMPS dumps routinely store positions several cell
+    lengths outside the box, so the minimum image has to hold for separations beyond one
+    cell length, not just within it.
+    """
+    box = 10.0
+    atoms = GlassAtoms(Atoms("H2", positions=[[0.5, 0, 0], [x, 0, 0]], cell=[box] * 3, pbc=True))
+    assert atoms.get_dist()[0, 1] == pytest.approx(atoms.get_distance(0, 1, mic=True))
+
+
+def test_get_dist_is_unchanged_by_wrapping(silicon_small):
+    """Wrapping the structure into the cell must not move any distance."""
+    unwrapped = silicon_small.copy()
+    unwrapped.positions += unwrapped.get_cell().lengths() * np.array([1.0, -2.0, 3.0])
+    wrapped = unwrapped.copy()
+    wrapped.wrap()
+    np.testing.assert_allclose(
+        GlassAtoms(unwrapped).get_dist(), GlassAtoms(wrapped).get_dist(), atol=1e-8
+    )
+
+
+def test_get_all_angles_requires_exactly_two_neighbour_types(silicon_small):
+    """An angle spans two neighbours, so a third species cannot be silently dropped."""
+    atoms = GlassAtoms(silicon_small)
+    with pytest.raises(ValueError, match="exactly two"):
+        atoms.get_all_angles("Si", ["Si", "Si", "Si"], cutoff=SI_FIRST_SHELL_CUTOFF)
+
+
+def test_get_pdf_accepts_numpy_integer_atomic_numbers(silicon_small):
+    """Atomic numbers taken from ASE arrive as numpy integers, not Python ints."""
+    atoms = GlassAtoms(silicon_small)
+    numbers = np.unique(atoms.get_atomic_numbers())
+    from_numpy = atoms.get_pdf(target_atoms=[numbers[0], numbers[0]])
+    from_symbol = atoms.get_pdf(target_atoms=["Si", "Si"])
+    np.testing.assert_allclose(from_numpy[1], from_symbol[1])
 
 
 def test_get_dist_is_symmetric(silicon_small):

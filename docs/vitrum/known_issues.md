@@ -32,7 +32,7 @@ Use `type="approx_xray"` for the Q-independent atomic-number approximation, or
 
 Distance calculations, trajectory unwrapping, void grids and ring centres all
 apply the minimum image convention using only the cell diagonal, so they are
-valid only for orthorhombic cells.
+valid only for orthorhombic cells. Positions need not be wrapped into the cell.
 
 As of 1.1.0 this is checked rather than assumed: passing a triclinic cell raises
 `NotImplementedError` via `vitrum.geometry.require_orthorhombic` instead of
@@ -48,10 +48,8 @@ module has no test coverage beyond its input guards.
   origin** (the first frame) rather than averaging over multiple origins. This is
   noisier than the standard windowed estimator, especially at long lag times where
   the single-origin estimate rests on one sample per atom.
-- `get_van_hove_self_correlation` normalises by the total atom count rather than by
-  the number of atoms of the target species, so the histogram it returns is scaled
-  down by the target species' concentration. Its `t_window` is used as both the
-  stride and the window, so time origins never overlap.
+- `get_van_hove_self_correlation` uses its `t_window` as both the stride and the
+  window, so time origins never overlap.
 - `get_van_hove_dist_correlation` and `get_velocity_autocorrelation` are stubs that
   return `None`.
 

@@ -1,7 +1,6 @@
 import itertools
 import logging
 import math
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -19,7 +18,14 @@ from vitrum.glass_atoms import GlassAtoms
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
     """
-    Broaden the RDF using a Gaussian convolution.
+    Broaden the RDF to the resolution of a diffraction measurement truncated at Q_max.
+
+    Truncating the Fourier transform at Q_max convolutes the *odd* correlation function
+    r*g(r) with a Gaussian of FWHM 5.437 / Q_max, the odd kernel G(r - r') - G(r + r')
+    enforcing that oddness. The broadening is therefore applied to r'*g(r') and divided
+    by r to return to g(r):
+
+        g_broad(r) = (1 / r) * Integral[ r' g(r') (G(r - r') - G(r + r')) dr' ]
 
     Args:
         g_r (np.ndarray): The RDF values.
@@ -33,8 +39,8 @@ def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndar
     sum_r = r[np.newaxis, :] + r[:, np.newaxis]
     FWHM = 5.437 / Q_max
     sigma = FWHM / 2.355
-    foubroad = g_r * (norm.pdf(delta_r, 0, sigma) - norm.pdf(sum_r, 0, sigma))
-    dist_broad = np.trapezoid(foubroad, r)
+    foubroad = r * g_r * (norm.pdf(delta_r, 0, sigma) - norm.pdf(sum_r, 0, sigma))
+    dist_broad = np.trapezoid(foubroad, r) / r
     return dist_broad
 
 
@@ -79,8 +85,11 @@ class Scattering:
         self.atom_list = [GlassAtoms(atom) for atom in atom_list]
         script_dir = Path(__file__).parent
 
-        cell_lengths = require_orthorhombic(atom_list[0].get_cell(), "Scattering")
-        half_min_dim = np.min(cell_lengths) / 2
+        # Every frame is binned with the same rrange, so every frame has to support it.
+        half_min_dims = [
+            np.min(require_orthorhombic(atom.get_cell(), "Scattering")) / 2 for atom in atom_list
+        ]
+        half_min_dim = float(np.min(half_min_dims))
 
         if rrange:
             if rrange > half_min_dim:
@@ -90,7 +99,7 @@ class Scattering:
                 )
             self.rrange = rrange
         else:
-            # Default to half the shortest cell dimension
+            # Default to half the shortest cell dimension over the trajectory
             self.rrange = half_min_dim
 
         self.nbin = nbin
@@ -99,6 +108,7 @@ class Scattering:
         self.qval = np.linspace(qmin, qmax, self.nbin)
         self.chemical_symbols = atom_list[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
+        self.species_code = {symbol: code for code, symbol in enumerate(self.species)}
         self.pairs = [pair for pair in itertools.product(self.species, repeat=2)]
         self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
 
@@ -123,6 +133,14 @@ class Scattering:
         # Neutron
         if neutron_scattering_coef is None:
             self.scattering_lengths = pd.read_csv(script_dir / "scattering_lengths.csv", sep=";", decimal=",")
+            tabulated = set(self.scattering_lengths["Isotope"])
+            untabulated = [i for i in self.species if i not in tabulated]
+            if untabulated:
+                raise ValueError(
+                    f"No tabulated neutron scattering length for {untabulated}. "
+                    "Pass neutron_scattering_coef explicitly, one value per species in "
+                    f"{list(self.species)}."
+                )
             self.b = np.array(
                 [self.scattering_lengths[self.scattering_lengths["Isotope"] == i]["b"] for i in self.species]
             ).flatten()
@@ -175,9 +193,14 @@ class Scattering:
 
     def calculate_partial_pdfs(self) -> np.ndarray:
         """
-        Calculate partial PDFs for all pairs from full distance matrix. 
-        Scales as O(N^2) with number of atoms, so may be slow for large systems, can be more efficient when using large cutoffs.
-        
+        Calculate partial PDFs for all pairs from the full distance matrix.
+
+        Builds an N x N distance matrix per frame, so time and memory both scale as
+        O(N^2) regardless of `rrange`. This is the faster backend at the default
+        `rrange` of half the shortest cell length, where a neighbour list holds nearly
+        every pair anyway; see `calculate_partial_pdfs_neighborhood` for the small-cutoff
+        alternative.
+
         Returns:
             np.ndarray: Array of partial PDFs.
         """
@@ -213,26 +236,34 @@ class Scattering:
 
     def calculate_partial_pdfs_neighborhood(self):
         """
-        Calculate partial PDFs using O(N) neighbor lists
+        Calculate partial PDFs from a neighbour list, avoiding the full distance matrix.
+
+        Cost scales with the number of pairs within `rrange` rather than with N^2, so this
+        wins only when `rrange` is small compared with the cell: at the default `rrange` of
+        half the shortest cell length the neighbour sphere covers much of the cell and this
+        is slower than `calculate_partial_pdfs`. It is the memory-frugal option either way,
+        since no N x N matrix is built.
 
         Returns:
             np.ndarray: Array of partial PDFs.
         """
         all_frame_data = {pair: [] for pair in self.pairs}
+        n_species = len(self.species)
         for atom in tqdm(self.atom_list, disable=self.disable_progress):
             symbols = np.array(atom.get_chemical_symbols())
             volume = atom.get_volume()
             i_list, j_list, d_list = neighbor_list("ijd", a=atom, cutoff=self.rrange)
-            pair_distances = defaultdict(list)
-            for i_idx, j_idx, d in zip(i_list, j_list, d_list):
-                pair_key = tuple(sorted((symbols[i_idx], symbols[j_idx])))
-                pair_distances[pair_key].append(d)
+            # Label each neighbour pair by an unordered pair of species codes, so the frame
+            # splits into per-pair distance arrays with one boolean mask each.
+            codes = np.array([self.species_code[s] for s in symbols])
+            code_i, code_j = codes[i_list], codes[j_list]
+            pair_keys = np.minimum(code_i, code_j) * n_species + np.maximum(code_i, code_j)
 
             for pair in self.pairs:
                 el1, el2 = pair
-                # Distances are keyed by a sorted element tuple, so the lookup key must be
-                # sorted too; g_ij == g_ji, so both orderings of a cross pair share a key.
-                distances = pair_distances.get(tuple(sorted(pair)), [])
+                # g_ij == g_ji, so both orderings of a cross pair share a key.
+                low, high = sorted((self.species_code[el1], self.species_code[el2]))
+                distances = d_list[pair_keys == low * n_species + high]
                 n1 = int(np.sum(symbols == el1))
                 n2 = int(np.sum(symbols == el2))
                 # `neighbor_list` reports both (i, j) and (j, i), so a cross pair's distances
@@ -425,11 +456,19 @@ class Scattering:
             np.ndarray: An array of shape (nbin,) containing the total structure factor.
         """
         if type not in {"neutron", "xray", "approx_xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron', 'xray'")
+            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
 
+        # S_ij == S_ji, so each unordered pair is transformed once and reused for both
+        # orderings.
+        transforms = {}
         S_q_tot = np.zeros(self.nbin)
         for ind, pair in enumerate(self.pairs):
-            partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]), lorch=lorch)
+            key = tuple(sorted((self.species_code[pair[0]], self.species_code[pair[1]])))
+            if key not in transforms:
+                transforms[key] = self.get_partial_structure_factor(
+                    target_atoms=(pair[0], pair[1]), lorch=lorch
+                )
+            partial_sq = transforms[key]
             if type == "neutron":
                 S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
             elif type == "approx_xray":

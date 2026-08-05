@@ -26,7 +26,7 @@ def get_random_packed(
     db_kwargs: dict | None = None,
     density: float | None = None,
     seed: int | None = None,
-    side_ratios: list = [1, 1, 1],
+    side_ratios: list | None = None,
     algorithm: str = "sobol",
     **kwargs,
 ):
@@ -53,7 +53,7 @@ def get_random_packed(
                                   for pymatgen format. Defaults to "ase".
         db_kwargs (dict, optional): Additional keyword arguments for database access. Defaults to None.
         seed (int, optional): The seed for random number generation. Defaults to None.
-        side_ratios (list, optional): The side ratios for the lattice. Defaults to [1, 1, 1].
+        side_ratios (list, optional): The side ratios for the lattice. Defaults to None, i.e. a cubic cell.
         algorithm (str, optional): How to place the initial points, "sobol" or "random".
                                    Defaults to "sobol".
 
@@ -61,6 +61,7 @@ def get_random_packed(
         data (ase.Atoms or pymatgen.core.Structure): The generated random packed structure.
     """
 
+    side_ratios = [1, 1, 1] if side_ratios is None else side_ratios
     composition = parse_composition(composition)
     elements, factor = composition.get_integer_formula_and_factor()
     integer_composition = Composition(elements)
@@ -113,6 +114,10 @@ def get_random_packed(
                 continue
             rs = pos[indices] + offsets @ cell - pos[i]
             d = np.linalg.norm(rs, axis=1)
+            coincident = d < 1e-12
+            if np.any(coincident):
+                rs[coincident] = rng.normal(size=(int(coincident.sum()), 3))
+                d[coincident] = np.linalg.norm(rs[coincident], axis=1)
             ds_true = d - (radii[indices] + radii[i])
             dsum += ds_true[ds_true < 0].sum()
             ds_eff = np.minimum(ds_true - skin, 0.0)

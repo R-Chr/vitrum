@@ -7,7 +7,36 @@ backends must agree, since they are two implementations of the same quantity.
 import numpy as np
 import pytest
 
-from vitrum.scattering import Scattering
+from vitrum.scattering import Scattering, gaussian_broadening
+
+
+def test_broadening_conserves_the_area_of_a_shell():
+    """Q_max broadening blurs a coordination shell; it must not create or destroy atoms.
+
+    The kernel is the truncation broadening of the odd function r*g(r), so applying it to
+    g(r) directly would leave a Q_max-dependent error in the coordination integral.
+    """
+    r = np.linspace(0.01, 10, 2000)
+    shell = np.exp(-((r - 1.6) ** 2) / (2 * 0.03**2))
+    reference = np.trapezoid(r**2 * shell, r)
+    for q_max in (30.0, 15.0, 8.0, 5.0):
+        broadened = np.trapezoid(r**2 * gaussian_broadening(shell, r, q_max), r)
+        assert broadened == pytest.approx(reference, rel=1e-3)
+
+
+def test_broadening_leaves_the_asymptote_alone():
+    """g(r) -> 1 away from the origin, and broadening must not shift that baseline."""
+    r = np.linspace(0.01, 10, 500)
+    broadened = gaussian_broadening(np.ones_like(r), r, 20.0)
+    np.testing.assert_allclose(np.interp([2.0, 5.0, 9.0], r, broadened), 1.0, atol=1e-6)
+
+
+def test_untabulated_neutron_scattering_length_names_the_element(random_gas):
+    """A missing scattering length must say which element, not fail inside numpy."""
+    thorium = random_gas.copy()
+    thorium.symbols = ["Th"] * len(thorium)
+    with pytest.raises(ValueError, match="Th"):
+        Scattering(thorium, disable_progress=True)
 
 
 @pytest.fixture(scope="module")

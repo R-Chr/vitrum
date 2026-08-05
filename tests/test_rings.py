@@ -314,6 +314,47 @@ def test_topology_is_unaffected_by_the_periodic_boundary():
         assert getattr(straddling, metric)() == pytest.approx(getattr(inside, metric)(), abs=1e-6)
 
 
+@pytest.mark.parametrize("n,radius", [(12, 4.5), (8, 4.2)])
+def test_topology_of_a_ring_wider_than_half_the_cell(n, radius):
+    """A ring wider than L/2 must still measure as the polygon it is.
+
+    The ring here sits entirely inside the cell and touches no face, but spans more than
+    half of it, so each atom's minimum image taken from the first atom lands on the wrong
+    side. Unwrapping bond by bond is what keeps the metrics exact.
+    """
+    box = 12.0
+    ring = ring_from(regular_polygon(n, radius), cell=box)
+    assert ring.perimeter() == pytest.approx(n * 2 * radius * np.sin(np.pi / n))
+    assert ring.area() == pytest.approx(0.5 * n * radius**2 * np.sin(2 * np.pi / n))
+    assert ring.radius_of_gyration() == pytest.approx(radius)
+    assert ring.roundness() == pytest.approx(1.0)
+    assert ring.planeness() == pytest.approx(0.0, abs=1e-9)
+
+
+def test_wide_ring_topology_is_unaffected_by_the_periodic_boundary():
+    """The L/2-spanning ring must also measure the same when moved across a cell face."""
+    box = 12.0
+    polygon = regular_polygon(12, 4.5)
+    inside = Ring(Atoms("Si12", positions=polygon + box / 2, cell=[box] * 3, pbc=True))
+    straddling = Ring(Atoms("Si12", positions=(polygon + 0.3) % box, cell=[box] * 3, pbc=True))
+    for metric in ("area", "perimeter", "roundness", "planeness", "radius_of_gyration"):
+        assert getattr(straddling, metric)() == pytest.approx(getattr(inside, metric)(), abs=1e-6)
+
+
+@pytest.mark.parametrize("criterion", ["guttman", "king", "primitive"])
+def test_rings_folding_onto_their_own_image_are_rejected(criterion):
+    """A ring larger than the primary cell cannot be expressed in its indices.
+
+    One atom per cell means every ring found in the repeated cell folds back onto index 0
+    repeatedly, which is not a ring of the primary cell and must be dropped rather than
+    reported as an N-ring through a single atom.
+    """
+    cell = Atoms("Si", positions=[[0.0, 0.0, 0.0]], cell=[2.4] * 3, pbc=True)
+    with pytest.warns(UserWarning, match="more than one periodic image"):
+        rings = find_rings(cell, repeat=(3, 3, 3), criterion=criterion, limit=6)
+    assert all(len(set(ring)) == len(ring) for ring in rings)
+
+
 def test_topology_metrics_on_rings_from_a_real_structure(silicon_small):
     """Every metric must return a finite, sensible number for real six-membered rings.
 

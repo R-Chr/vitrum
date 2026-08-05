@@ -1,4 +1,5 @@
 from itertools import product
+from numbers import Integral
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -84,11 +85,11 @@ class GlassAtoms(Atoms):
         if indicies is None:
             if isinstance(target_atoms[0], str):
                 types = self.get_chemical_symbols()
-            elif isinstance(target_atoms[0], int):
+            elif isinstance(target_atoms[0], Integral):
                 types = self.get_atomic_numbers()
             else:
                 raise TypeError("target_atoms must contain strings or integers.")
-                
+
             types = np.array(types)
             distances = self.get_dist()
             atom_1 = np.where(types == target_atoms[0])[0]
@@ -130,20 +131,32 @@ class GlassAtoms(Atoms):
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
 
+        The angle is measured between two neighbours of the central atom, so exactly two
+        neighbour species define it: `neigh_types=["O", "Na"]` gives O-center-Na angles. A
+        single string is taken to mean both arms of the angle.
+
         Args:
             center_type (str): The atomic symbol of the central atom.
-            neigh_types (Union[str, List[str]]): The atomic symbols of the neighbor atoms.
+            neigh_types (Union[str, List[str]]): The atomic symbol(s) of the neighbor atoms,
+                either one symbol or a list of exactly two.
             cutoff (Union[float, int, List[float], str], optional): Range within which to calculate the angular distribution.
-                Defaults to "Auto". Can be a list of cutoffs for each neighbor type, or a specific cutoff for all.
+                Defaults to "Auto". Can be a list of one cutoff per neighbor type, or a single cutoff for both.
 
         Returns:
             List[np.ndarray]: A list of arrays containing the angular distribution values.
 
         Raises:
-            ValueError: If center_type or neigh_types are not present in the structure.
+            ValueError: If center_type or neigh_types are not present in the structure, or
+                if neigh_types or an explicit cutoff list does not have exactly two entries.
         """
         if isinstance(neigh_types, str):
             neigh_types = [neigh_types, neigh_types]
+        elif len(neigh_types) != 2:
+            raise ValueError(
+                f"neigh_types must be a single symbol or exactly two, got {list(neigh_types)}. "
+                "An angle is defined by the two neighbours it spans; call this once per pair "
+                "of neighbour species."
+            )
 
         types = self._require_species(center_type, *neigh_types)
 
@@ -160,6 +173,10 @@ class GlassAtoms(Atoms):
             ]
         elif isinstance(cutoff, (float, int)):
             cutoff = [cutoff, cutoff]
+        elif len(cutoff) != 2:
+            raise ValueError(
+                f"cutoff must be a single value or one per neighbour type (two), got {list(cutoff)}."
+            )
 
         angles = []
 

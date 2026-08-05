@@ -5,9 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [1.1.0] - 2026-08-05
 
 This release corrects several bugs that produced silently wrong numbers.
-**Ring statistics, running coordination numbers, partial PDFs for like pairs, and
-anything computed with `Scattering(use_neighborhood=True)` or on an NPT trajectory
-should be recomputed.**
+**Ring statistics and topology metrics, running coordination numbers, partial PDFs for like
+pairs, broadened RDFs, anything computed with `Scattering(use_neighborhood=True)`, on an NPT
+trajectory, or on a structure whose positions were not wrapped into the cell, should be
+recomputed.**
 
 ### Added
 
@@ -55,6 +56,18 @@ Each of the following changes the numbers the package returns.
 - Rejected wrapping rings, `get_random_packed` non-convergence and the `VoidAnalysis` grid
   problems are reported once through `warnings.warn` rather than per-item `print`, so they
   can be filtered and captured.
+- **`GlassAtoms.get_all_angles` now requires exactly two neighbour types.** An angle is
+  spanned by two neighbours, but a longer `neigh_types` list was accepted and everything
+  past the second entry silently ignored, so `["O", "Na", "F"]` returned only O–centre–Na
+  angles. This also applies to `Coordination.get_angle_distribution`.
+- `rings.check_ring_is_periodic` is renamed `ring_closes_in_cell`, which is what it
+  returns; the old name stated the opposite of its behaviour.
+- `Compositions.get_structures(max_atoms=...)` and `gen_random_glasses` now check the cell
+  size before packing rather than after, so rejected compositions cost nothing.
+  `gen_random_glasses` takes its previously hardcoded 200-atom ceiling as `max_atoms`.
+- `Scattering` raises naming the element when a species has no tabulated neutron scattering
+  length, instead of failing inside NumPy with an unrelated shape error. `Coordination`
+  rejects an empty `atoms_list` rather than raising `IndexError` on first use.
 
 ### Fixed
 
@@ -81,6 +94,18 @@ changes.
   skipped.
 - `find_rings(bonds=None)` raised `TypeError` despite the documented behaviour of allowing
   all bonds; an empty bond graph raised a scipy `ValueError` instead of returning no rings.
+- Ring topology metrics were wrong for any ring spanning more than half the cell. Positions
+  were unwrapped by taking each atom's minimum image from the *first* ring atom, which
+  picks the wrong image once the ring is wider than that. A planar 12-ring of radius 4.5 Å
+  in a 12 Å cell — sitting entirely inside it, touching no face — measured a perimeter of
+  42.8 Å against a true 27.95 Å, and a roundness of 0.937 rather than 1. Rings are now
+  unwrapped bond by bond along the ring, which holds at any ring size, and every metric on
+  `Ring` is exact for the case above.
+- Rings larger than the primary cell folded onto their own periodic image when their
+  indices were mapped back, producing "rings" that pass through the same atom several
+  times: a one-atom cell searched with `repeat=(3, 3, 3)` returned `[0, 0, 0, 0]` and
+  reported it as a 4-ring of zero area. These are now discarded with a warning to increase
+  `repeat`.
 
 **Scattering and PDFs**
 
@@ -97,6 +122,23 @@ changes.
   rejected rather than analysed with the first frame's counts.
 - `GlassAtoms.get_pdf` blanked the first histogram bin for every pair, discarding real
   cross-pair contacts; only like pairs have self-distances to remove.
+- The minimum image convention subtracted at most one cell length, so any structure whose
+  positions lie further outside the cell than that — routine in unwrapped LAMMPS or extxyz
+  trajectories — got silently wrong distances, and with them wrong `g(r)`, coordination
+  numbers, Qₙ speciation, bond angles and structure factors. Two atoms 1.0 Å apart in a
+  10 Å cell were reported 11.0 Å apart. Distances no longer depend on whether the input was
+  wrapped.
+- `gaussian_broadening` applied the truncation kernel `G(r−r′) − G(r+r′)` directly to
+  `g(r)`. That kernel broadens the odd function `r·g(r)`, so the `r′/r` weight was missing
+  and a coordination shell's `∫r²g dr` grew with the broadening: 8.3% at `Q_max = 5 Å⁻¹`,
+  0.9% at 15 Å⁻¹. The shell area is now conserved.
+- `Scattering` took its orthorhombic check and default `rrange` from the first frame alone,
+  so a later frame of an NPT run could be binned past its own half-cell length, or be
+  triclinic, without being caught. Every frame is now checked.
+- `unwrap_trajectory` used the first frame's cell for the whole trajectory. Steps are now
+  taken in fractional coordinates and converted with the current frame's cell, so an atom
+  held at fixed fractional coordinates through an NPT cell rescaling no longer registers as
+  having diffused.
 
 **Structure generation and validation**
 

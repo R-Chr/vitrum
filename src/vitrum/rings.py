@@ -14,16 +14,19 @@ from scipy.sparse.csgraph import dijkstra
 from vitrum.glass_atoms import GlassAtoms
 
 
-def check_ring_is_periodic(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
-    ''' 
-    Check if the ring wraps around the period cell, i.e., is not a true ring.
-    
+def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
+    '''
+    Check whether a closed path is a true ring rather than one winding around the cell.
+
+    The bond vectors of a true ring sum to zero; a path that returns to its starting atom
+    only via a periodic image sums to a non-zero number of cell vectors.
+
     Args:
         ring (List[int]): Atom indices of the ring.
         offsets (Dict[Tuple[int, int], np.ndarray]): Unit cell offsets for all atoms pairs.
 
     Returns:
-        bool: True if the ring is periodic (wraps around), False otherwise (contained within cell without wrapping sum).
+        bool: True if the ring closes within the cell, False if it wraps around it.
     '''
     total_offset = np.zeros(3)
     for i in range(len(ring) - 1):
@@ -222,7 +225,7 @@ def _shortest_valid_rings(
     '''
     The shortest rings closing `source` to `target` that do not wrap around the cell.
     A closed path whose bond vectors do not sum to zero winds around the periodic cell and
-    is not a ring (see `check_ring_is_periodic`).
+    is not a ring (see `ring_closes_in_cell`).
 
     Args:
         adj (List[np.ndarray]): Adjacency lists, from `_adjacency_lists`.
@@ -257,7 +260,7 @@ def _shortest_valid_rings(
         flags["deepened"] = int(length > shortest)
         flags["truncated"] = int(capped)
         rings = [path + tail for path in paths]
-        valid = [ring for ring in rings if check_ring_is_periodic(ring, offsets)]
+        valid = [ring for ring in rings if ring_closes_in_cell(ring, offsets)]
         if valid:
             return valid, flags
         if capped:
@@ -409,7 +412,7 @@ def _find_primitive_rings(
     for ring in candidates.values():
         if not _is_shortcut_free(ring, d):
             continue
-        if not check_ring_is_periodic(ring, offsets):
+        if not ring_closes_in_cell(ring, offsets):
             stats["wrapped"] += 1
             continue
         rings.append(ring)
@@ -538,10 +541,22 @@ def find_rings(
         raw_rings, stats = _find_primitive_rings(len(ats), d, all_offsets, limit)
 
     rings = {}
+    n_self_overlapping = 0
     for ring in raw_rings:
         ring = [x % len(ats) for x in ring]  # take it back to primary cell
+        # A ring wider than the primary cell folds onto its own periodic image, so the
+        # same atom appears twice and the folded index list is not a ring of the cell.
+        if len(set(ring)) != len(ring):
+            n_self_overlapping += 1
+            continue
         rings[tuple(sorted(ring))] = ring
 
+    if n_self_overlapping:
+        warnings.warn(
+            f'{n_self_overlapping} ring(s) passed through more than one periodic image of the '
+            'same atom and were discarded. The ring is larger than the primary cell — '
+            'increase `repeat`.'
+        )
     if stats["deepened"]:
         warnings.warn(
             f'{stats["deepened"]} ring search(es) had to look past a candidate that wraps '
@@ -657,17 +672,21 @@ class Ring:
         """
         Ring atom positions with periodic-boundary jumps removed.
 
-        Rings are only ever kept by `find_rings` if they don't wind around the periodic
-        cell (see `check_ring_is_periodic`), so every atom has a single well-defined
-        position relative to the first ring atom: its minimum-image displacement from it.
+        The ring is traversed bond by bond: each step is the minimum-image displacement
+        between consecutive ring atoms, and the positions are the running sum of those
+        steps from the first atom. Consecutive ring atoms are bonded, so each step is
+        short compared with the cell and its minimum image is unambiguous. This holds
+        however large the ring is, whereas taking each atom's minimum image directly
+        from the first one is only valid for rings narrower than half the cell.
 
         Returns:
             np.ndarray: An array of shape (size(), 3) of PBC-unwrapped Cartesian positions.
         """
         if self._unwrapped_positions_cache is None:
             positions = self.atoms.get_positions()
-            displacements, _ = find_mic(positions - positions[0], self.atoms.get_cell(), self.atoms.get_pbc())
-            self._unwrapped_positions_cache = positions[0] + displacements
+            bonds, _ = find_mic(np.diff(positions, axis=0), self.atoms.get_cell(), self.atoms.get_pbc())
+            steps = np.vstack((np.zeros((1, 3)), bonds))
+            self._unwrapped_positions_cache = positions[0] + np.cumsum(steps, axis=0)
         return self._unwrapped_positions_cache
 
     def center(self) -> np.ndarray:

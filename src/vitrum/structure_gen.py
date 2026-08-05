@@ -132,7 +132,8 @@ class Compositions:
         Args:
             target_atoms (int): Target number of atoms per structure. Defaults to 100.
             datatype (str): ``"ase"`` or ``"pymatgen"``. Defaults to ``"ase"``.
-            max_atoms (int, optional): Skip structures with more than this many atoms.
+            max_atoms (int, optional): Skip compositions whose packed cell would hold more
+                than this many atoms. Checked before packing, which is the expensive step.
             **packing_kwargs: Forwarded to :func:`vitrum.packing.get_random_packed`.
 
         Returns:
@@ -140,12 +141,11 @@ class Compositions:
         """
         structures = []
         for comp in self.to_pymatgen():
-            atoms = get_random_packed(
-                comp, target_atoms=target_atoms, datatype=datatype, **packing_kwargs
-            )
-            if max_atoms is not None and len(atoms) > max_atoms:
+            if max_atoms is not None and _packed_cell_size(comp, target_atoms) > max_atoms:
                 continue
-            structures.append(atoms)
+            structures.append(
+                get_random_packed(comp, target_atoms=target_atoms, datatype=datatype, **packing_kwargs)
+            )
         return structures
 
 
@@ -387,7 +387,11 @@ class GlassGenerator:
         largest_order = max(len(sub) for sub in pool)
         if largest_order * self.x_min > 1.0:
             raise ValueError(
-                f"x_min={self.x_min} cannot be satisfied for a {largest_order}-component")
+                f"x_min={self.x_min} cannot be satisfied for a {largest_order}-component "
+                f"subsystem: {largest_order} components each need at least x_min, which "
+                f"sums to {largest_order * self.x_min:.3f} > 1. Lower x_min to at most "
+                f"{1.0 / largest_order:.3f}, or restrict order_weights to smaller subsystems."
+            )
         weights = np.array(weights)
         weights /= weights.sum()
 
@@ -507,7 +511,8 @@ class GlassGenerator:
 # Backwards-compatible wrapper
 # ---------------------------------------------------------------------------
 
-def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30, target_atoms=100, **kwargs):
+def gen_random_glasses(modifiers, formers, anions, weights=None, num_structures=30, target_atoms=100,
+                       max_atoms=200, **kwargs):
     """Generate random glass structures from given modifiers, formers and anions.
 
     Thin wrapper around ``GlassGenerator(...).sample("random")`` followed by
@@ -518,9 +523,11 @@ def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30
         modifiers (list): Chemical symbols of the modifiers.
         formers (list): Chemical symbols of the network formers.
         anions (list): Chemical symbols of the anions.
-        weights (dict): Weights for the number of modifiers, formers and anions.
+        weights (dict, optional): Weights for the number of modifiers, formers and anions.
         num_structures (int, optional): Number of structures to generate. Defaults to 30.
         target_atoms (int, optional): Target number of atoms in each structure. Defaults to 100.
+        max_atoms (int, optional): Skip compositions whose packed cell would exceed this many
+            atoms. Defaults to 200.
         **kwargs: Additional keyword arguments passed to ``get_random_packed``.
 
     Returns:
@@ -536,16 +543,16 @@ def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30
     attempts, max_attempts = 0, num_structures * 1000 + 1000
     while len(structures) < num_structures and attempts < max_attempts:
         attempts += 1
-        comps = generator.sample("random", n=1, weights=weights, dedup=False)
+        comps = generator.sample("random", n=1, weights=weights or {}, dedup=False)
         comp = comps.to_pymatgen()[0]
         formula = comp.reduced_formula
         if formula in seen:
             continue
         seen.add(formula)
 
-        rand_atoms = get_random_packed(comp, target_atoms=target_atoms, **kwargs)
-        if len(rand_atoms) > 200:
+        if _packed_cell_size(comp, target_atoms) > max_atoms:
             continue
+        rand_atoms = get_random_packed(comp, target_atoms=target_atoms, **kwargs)
 
         structures.append(rand_atoms)
         pbar.n = len(structures)
@@ -563,6 +570,17 @@ def gen_random_glasses(modifiers, formers, anions, weights={}, num_structures=30
 # ---------------------------------------------------------------------------
 # Private sampling helpers
 # ---------------------------------------------------------------------------
+
+def _packed_cell_size(composition, target_atoms):
+    """Number of atoms :func:`vitrum.packing.get_random_packed` would build for a composition.
+
+    It packs whole formula units, so the cell holds the smallest multiple of the integer
+    formula that reaches ``target_atoms``. Mirrors the sizing in ``get_random_packed`` so
+    callers can filter on size without paying for the packing.
+    """
+    integer_composition = Composition(parse_composition(composition).get_integer_formula_and_factor()[0])
+    return int(integer_composition.num_atoms * math.ceil(target_atoms / integer_composition.num_atoms))
+
 
 def _my_round(x):
     """Round a value to the nearest 0.01, with 3 decimal places of precision."""

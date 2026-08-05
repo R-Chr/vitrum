@@ -18,7 +18,12 @@ class Coordination:
 
         Args:
             atoms_list (List[Atoms]): A list of atoms to be used for the coordination analysis.
+
+        Raises:
+            ValueError: If atoms_list is empty.
         """
+        if len(atoms_list) == 0:
+            raise ValueError("atoms_list must contain at least one Atoms object.")
 
         self.atoms_list = [GlassAtoms(atom) for atom in atoms_list]
         self.chemical_symbols = atoms_list[0].get_chemical_symbols()
@@ -80,16 +85,13 @@ class Coordination:
     
         Returns:
             Dict[int, float]: A dictionary mapping each coordination number
-                to its fraction. Returns an empty dict if atoms_list is empty
-                or if center_type / neigh_type is absent from the structure.
-    
+                to its fraction. Returns an empty dict if the structures hold no
+                atoms of center_type.
+
         Raises:
             ValueError: If center_type or any neigh_type is not found in the
                 structure, or if cutoff list length does not match neigh_type.
         """
-        if len(self.atoms_list) == 0:
-            return {}
-    
         # normalise neigh_type to always be a list
         if isinstance(neigh_type, str):
             neigh_types = [neigh_type]

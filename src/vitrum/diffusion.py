@@ -121,11 +121,19 @@ class Diffusion:
             nbin (int, optional): Number of bins for histogram. Defaults to 70.
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: 
+            Tuple[np.ndarray, np.ndarray]:
                 - edges: Bin edges (distance).
-                - hist: Histogram values (probability).
+                - hist: Histogram values, normalised per atom of `target_atom`.
+
+        Raises:
+            ValueError: If `target_atom` is not present in the trajectory.
         """
         index = np.where(self.chemical_symbols == target_atom)[0]
+        if index.size == 0:
+            raise ValueError(
+                f"target_atom '{target_atom}' not present in the trajectory. "
+                f"Available species: {list(self.species)}."
+            )
 
         if t_window is None:
             start_indicies = [0]
@@ -143,7 +151,8 @@ class Diffusion:
             hist, edges = np.histogram(distances, bins=10 ** np.linspace(np.log10(0.1), np.log10(100), nbin))
             hist_all.append(hist)
         hist = np.mean(np.array(hist_all), axis=0)
-        return edges[:-1], hist / len(self.chemical_symbols)
+        # Only atoms of the target species are histogrammed, so they are what normalises it.
+        return edges[:-1], hist / len(index)
 
     def get_van_hove_dist_correlation(self):
         pass

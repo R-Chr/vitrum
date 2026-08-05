@@ -10,6 +10,7 @@ from pymatgen.core import Composition, Element, Species
 from scipy.constants import Avogadro
 
 IONIC_PACKING_FRACTION = 0.48
+COVALENT_PACKING_FRACTION = 1 / 3
 
 _EXTRA_HINT = (
     "requires the optional volume_estimation extra: pip install vitrum[volume_estimation]"
@@ -177,7 +178,7 @@ def get_volume(
         all_radii = np.hstack(
             [np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure]
         )
-        cell_vol = np.sum(4 / 3 * np.pi * all_radii**3) * 3
+        cell_vol = float(np.sum(4 / 3 * np.pi * all_radii**3)) / COVALENT_PACKING_FRACTION
 
     elif struct_db == "convex_hull":
         try:
@@ -192,7 +193,7 @@ def get_volume(
     else:
         raise ValueError(f"Unknown volume per atom source: {vol_per_atom_source}.")
 
-    if not cell_vol:
+    if cell_vol is None:
         cell_vol = vol_per_atom * sum(structure.values())
 
     return cell_vol
