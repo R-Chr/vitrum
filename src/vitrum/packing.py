@@ -52,8 +52,10 @@ def get_random_packed(
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
         db_kwargs (dict, optional): Additional keyword arguments for database access. Defaults to None.
-        seed (int, optional): The seed for random number generation. Defaults to 0.
+        seed (int, optional): The seed for random number generation. Defaults to None.
         side_ratios (list, optional): The side ratios for the lattice. Defaults to [1, 1, 1].
+        algorithm (str, optional): How to place the initial points, "sobol" or "random".
+                                   Defaults to "sobol".
 
     Returns:
         data (ase.Atoms or pymatgen.core.Structure): The generated random packed structure.
@@ -68,7 +70,7 @@ def get_random_packed(
     for el in full_cell_composition:
         structure[str(el)] = int(full_cell_composition.element_composition.get(el))
     elements = sum([[i] * structure[i] for i in structure], [])
-    np.random.seed(seed)
+    rng = np.random.default_rng(seed)
 
     cell_vol = get_volume(composition, structure, vol_per_atom_source, db_kwargs, density, **kwargs)
 
@@ -87,7 +89,9 @@ def get_random_packed(
         frac = qmc.Sobol(d=3, seed=seed).random(nat)
         pos = frac @ cell
     elif algorithm == "random":
-        pos = np.random.rand(nat, 3) @ cell
+        pos = rng.random((nat, 3)) @ cell
+    else:
+        raise ValueError(f"Unknown algorithm {algorithm!r}; choose 'sobol' or 'random'.")
 
     ats = Atoms(elements, cell=cell, pbc=True, positions=pos)
     skin_init = 0.2        # Å of extra buffer at the start (~10% of a typical radius)

@@ -3,11 +3,11 @@
 import warnings
 
 import numpy as np
-from ase import Atoms
-from ase.data import atomic_numbers, covalent_radii
+from ase.data import atomic_masses, atomic_numbers, covalent_radii
 from ase.symbols import symbols2numbers
 from pymatgen.analysis.phase_diagram import PhaseDiagram
 from pymatgen.core import Composition, Element, Species
+from scipy.constants import Avogadro
 
 IONIC_PACKING_FRACTION = 0.48
 
@@ -138,13 +138,26 @@ def get_volume(
     db_kwargs = db_kwargs or ({"use_cached": True} if struct_db == "mp" else {})
     cell_vol = None
 
-    if density:
-        if not isinstance(density, (float, int)):
+    if density is not None:
+        if not isinstance(density, (float, int)) or isinstance(density, bool):
             raise ValueError("Density must be a float or int.")
 
+        if vol_per_atom_source not in ("density", "ionic_radius"):
+            raise ValueError(
+                f"Got both density={density} and vol_per_atom_source={vol_per_atom_source!r}, "
+                "which are two different ways of setting the cell volume. Pass only one "
+                "(omit vol_per_atom_source to estimate the volume from the density)."
+            )
         struct_db = "density"
 
-    if isinstance(vol_per_atom_source, float | int):
+    if struct_db == "density":
+        if density is None:
+            raise ValueError("vol_per_atom_source='density' requires a density (in g/cm^3).")
+        # Total cell mass in g/mol -> grams -> cm^3 -> Angstrom^3.
+        mass = float(np.sum([atomic_masses[atomic_numbers[el]] * count for el, count in structure.items()]))
+        cell_vol = (mass / Avogadro / density) * 1e24
+
+    elif isinstance(vol_per_atom_source, float | int):
         vol_per_atom = vol_per_atom_source
 
     elif struct_db == "mp":
@@ -154,10 +167,6 @@ def get_volume(
     elif struct_db == "icsd":
         get_average_volume_from_db_cached, _ = _import_atomate2_volume_helpers()
         vol_per_atom = get_average_volume_from_db_cached(composition, db_name="icsd", **db_kwargs)
-
-    elif struct_db == "density":
-        mass = np.sum([Atoms(f"{i}").get_masses()[0] * structure[i] for i in structure])
-        cell_vol = ((mass / (6.0221 * (10**23))) / density) * (10**24)
 
     elif struct_db == "ionic_radius":
         elements = sum([[key] * structure[key] for key in structure], [])

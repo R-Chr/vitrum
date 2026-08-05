@@ -91,6 +91,63 @@ def random_gas():
     )
 
 
+@pytest.fixture(scope="session")
+def silicon_cubic_cell():
+    """Crystalline silicon, a single cubic 8-atom cell.
+
+    Small enough that the minimum-image bond graph contains 4-cycles that wind around
+    the cell, so the ring search has to look past them to reach the real 6-rings.
+    """
+    return bulk("Si", "diamond", a=SI_LATTICE_CONSTANT, cubic=True)
+
+
+@pytest.fixture(scope="session")
+def simple_cubic():
+    """A simple-cubic lattice, 3x3x3 of the one-atom cell (27 atoms).
+
+    Ground truth from brute-force enumeration of every non-wrapping cycle of six atoms
+    or fewer, filtered by Franzblau's criterion: 81 primitive 4-rings and 108 primitive
+    6-rings. The 6-rings are the ones that run around a lattice cube, and every atom on
+    one has a two-hop shortcut between its two ring neighbours, so no ring criterion
+    based on shortest paths through a single atom can find them.
+    """
+    return bulk("Po", "sc", a=3.0).repeat(3)
+
+
+@pytest.fixture(scope="session")
+def cube_graph():
+    """Eight atoms on the corners of a 2.2 A cube, isolated (no periodicity).
+
+    The bond graph is the cube graph Q3: edges bond (2.2 A), face diagonals do not
+    (3.11 A, against a 2.89 A cutoff). Ground truth by brute force: 6 primitive 4-rings
+    (the faces) and 4 primitive 6-rings.
+    """
+    positions = [(x, y, z) for x in (0.0, 2.2) for y in (0.0, 2.2) for z in (0.0, 2.2)]
+    return Atoms("Si8", positions=positions, cell=[30.0] * 3, pbc=False)
+
+
+@pytest.fixture(scope="session")
+def random_network():
+    """90 atoms placed at random in a 16 A cube with a 2.35 A exclusion.
+
+    A disordered network rather than a crystal, so the ring criteria disagree with each
+    other and the counts are sensitive to how each one is defined.
+    """
+    rng = np.random.default_rng(7)
+    box = 16.0
+    min_sep = 2.35
+    points = []
+    while len(points) < 90:
+        candidate = rng.random(3) * box
+        if points:
+            delta = np.array(points) - candidate
+            delta -= box * np.round(delta / box)  # minimum image
+            if np.min(np.linalg.norm(delta, axis=1)) < min_sep:
+                continue
+        points.append(candidate)
+    return Atoms(f"Si{len(points)}", positions=points, cell=[box] * 3, pbc=True)
+
+
 @pytest.fixture
 def triclinic_atoms():
     """A structure with a genuinely triclinic cell, for the orthorhombic guard."""

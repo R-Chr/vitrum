@@ -384,6 +384,10 @@ class GlassGenerator:
             raise ValueError(
                 "No valid subsystems to sample. Check units, order weights, and require_former."
             )
+        largest_order = max(len(sub) for sub in pool)
+        if largest_order * self.x_min > 1.0:
+            raise ValueError(
+                f"x_min={self.x_min} cannot be satisfied for a {largest_order}-component")
         weights = np.array(weights)
         weights /= weights.sum()
 
@@ -406,8 +410,7 @@ class GlassGenerator:
                 simplex_points[pos] = pts[k]
 
         for draw_i, sub in enumerate(chosen_subs):
-            comp_sub = np.clip(simplex_points[draw_i], self.x_min, 1.0)
-            comp_sub = comp_sub / comp_sub.sum()
+            comp_sub = simplex_points[draw_i] * (1.0 - len(sub) * self.x_min) + self.x_min
 
             full = np.zeros(n_dim)
             for j, gidx in enumerate(sub):
@@ -475,7 +478,7 @@ class GlassGenerator:
                 amounts.extend([_my_round(r * cation_anion_ratio) for r in anion_ratio])
 
             atoms = list(chosen_mods) + list(chosen_formers) + list(chosen_anions)
-            int_amounts = (np.array(amounts) * 100).astype(int)
+            int_amounts = np.rint(np.array(amounts) * 100).astype(int)
             total_charge = sum(a * charges[at] for a, at in zip(int_amounts, atoms))
             if total_charge != 0:
                 balanced, final_charge = _balance_charge(int_amounts.tolist(), atoms, charges)

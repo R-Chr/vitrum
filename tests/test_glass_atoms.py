@@ -62,8 +62,27 @@ def test_get_neighbors_returns_dict_keyed_by_species(silicon_small):
 
 
 def test_get_neighbors_rejects_unknown_center(silicon_small):
-    with pytest.raises(ValueError, match="not in the list of species"):
+    with pytest.raises(ValueError, match="not present in the structure"):
         GlassAtoms(silicon_small).get_neighbors("Ge", 3.0)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda a: a.get_neighbors("Ge", 3.0),
+        lambda a: a.get_all_angles("Ge", "Si"),
+        lambda a: a.get_coordination_number("Ge", "Si"),
+        lambda a: a.get_bridging_analysis("Ge", "Si"),
+    ],
+)
+def test_absent_species_is_rejected_consistently(silicon_small, call):
+    """All four species-taking methods must reject an absent species the same way.
+
+    get_coordination_number and get_bridging_analysis previously returned [] or died
+    inside find_min_after_peak instead of raising.
+    """
+    with pytest.raises(ValueError, match="not present in the structure"):
+        call(GlassAtoms(silicon_small))
 
 
 def test_get_neighbors_rejects_bad_cutoff_type(silicon_small):

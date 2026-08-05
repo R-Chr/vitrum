@@ -18,6 +18,22 @@ class PersistenceDiagram:
     """
     Persistence diagrams of an atomistic structure, computed via a weighted
     (power) alpha-shape filtration.
+
+    Warning:
+        **The filtration is not periodic.** The atom positions are passed to the
+        alpha-shape construction as a finite point cloud, with no periodic images
+        and no use of the cell. Every atom near a cell face therefore contributes
+        loops and voids that exist only because the structure was truncated there,
+        rather than because they are features of the material.
+
+        The artifact is a surface effect, so it grows with the surface-to-volume
+        ratio of the cell: it is severe for the few-hundred-atom cells typical of
+        ab-initio glass models and less so for large classical cells. Diagrams
+        computed this way are best compared against each other at fixed cell size
+        and shape, and should not be read as absolute loop/void statistics of the
+        bulk material.
+
+        See `docs/vitrum/known_issues.md`.
     """
 
     def __init__(
@@ -87,6 +103,11 @@ class PersistenceDiagram:
         and persistence is read off simultaneously for every requested
         dimension, so asking for both dimensions 1 and 2 costs virtually the
         same as computing just one.
+
+        Note:
+            The filtration is built on the atoms as a finite point cloud, with no
+            periodic images, so the diagram includes cell-surface artifacts. See the
+            warning on this class.
 
         Args:
             dimensions (Tuple[int, ...]): Homology dimensions to compute

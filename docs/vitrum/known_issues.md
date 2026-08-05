@@ -5,7 +5,19 @@ have not yet been fixed.
 
 ## `persistent_homology.py` — `LocalPD` and `get_local_persistence`
 
-Quarantined: both raise `NotImplementedError`
+Quarantined: both raise `NotImplementedError` 
+
+## `PersistenceDiagram` — the filtration is not periodic
+
+`PersistenceDiagram.calculate` passes the atom positions to the weighted alpha-shape
+construction as a finite point cloud. It uses no periodic images and no cell
+information, so every atom near a cell face contributes loops and voids that exist
+only because the structure was truncated there.
+
+This is a surface effect and scales with the surface-to-volume ratio of the cell: it
+is worst for the few-hundred-atom cells typical of ab-initio glass models. Treat the
+diagrams as comparable to each other at fixed cell size and shape, not as absolute
+loop/void statistics of the bulk.
 
 ## `Scattering.get_total_rdf(type="xray")`
 

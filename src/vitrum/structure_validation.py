@@ -34,8 +34,15 @@ def homogeneity_checker(
     Raises:
         ValueError: If no species are found in the atoms object.
     """
+    atoms = atoms.copy()
     atoms.wrap()
-    species = np.unique(atoms.get_chemical_symbols()) if target_species == "all" else [target_species]
+
+    if isinstance(target_species, str) and target_species == "all":
+        species = np.unique(atoms.get_chemical_symbols())
+    elif isinstance(target_species, str):
+        species = [target_species]
+    else:
+        species = list(target_species)
 
     if len(species) == 0:
         raise ValueError("No species found in the atoms object.")
@@ -51,6 +58,8 @@ def homogeneity_checker(
 
     phase_seperated_species = 0
 
+    checked_species = 0
+
     for spec in species:
         spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
         num_atoms = len(spec_atoms)
@@ -58,6 +67,7 @@ def homogeneity_checker(
 
         if avg_atoms_per_box < 2:
             continue
+        checked_species += 1
 
         positions = spec_atoms.get_positions()
 
@@ -92,10 +102,9 @@ def homogeneity_checker(
         if np.sum(out_of_bounds_boxes) > num_boxes * slide_steps**3 * box_threshold:
             phase_seperated_species += 1
 
-    if phase_seperated_species > separated_species_threshold * len(species):
-        return False
-    else:
+    if checked_species == 0:
         return True
+    return phase_seperated_species <= separated_species_threshold * checked_species
 
 
 def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
@@ -110,18 +119,19 @@ def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
     Returns:
         bool: True if the number of dimers exceeds `num_allowed`, False otherwise.
     """
+    atoms = atoms.copy()
     atoms.wrap()
-    species = ["O", "N", "F", "Cl", "Br", "I"]
-    for spec in species:
-        if spec not in atoms.get_chemical_symbols():
+    symbols = np.array(atoms.get_chemical_symbols())
+    for spec in ["O", "N", "F", "Cl", "Br", "I"]:
+        if spec not in symbols:
             continue
-        spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
+        spec_atoms = atoms[symbols == spec]
         if len(spec_atoms) < 2:
             continue
-        # mic=True so dimers spanning a periodic boundary are found
+
         distances = spec_atoms.get_all_distances(mic=True)
         np.fill_diagonal(distances, np.inf)  # Ignore self-distances
-        # The distance matrix is symmetric, so each dimer is counted twice
+
         num_dimers = int(np.sum(distances < bond_length) // 2)
         if num_dimers > num_allowed:  # Adjust threshold as needed
             return True

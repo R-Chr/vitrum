@@ -117,7 +117,7 @@ class Coordination:
                 pdf_r, pdf_g = self.atoms_list[0].get_pdf(
                     target_atoms=[center_type, nt]
                 )
-                cutoffs.append(float(pdf_r[find_min_after_peak(pdf_g)]))
+                cutoffs.append(float(pdf_r[find_min_after_peak(pdf_g, f"{center_type}-{nt}")]))
         elif isinstance(cutoff, (float, int)):
             cutoffs = [float(cutoff)] * len(neigh_types)
         elif isinstance(cutoff, list):

@@ -30,6 +30,29 @@ class GlassAtoms(Atoms):
         positions = self.get_positions()
         return dist(positions, dim)
 
+    def _require_species(self, *symbols: str) -> np.ndarray:
+        """
+        Check that every given chemical symbol is present, and return the symbol array.
+
+        Args:
+            *symbols (str): Chemical symbols that must be present in the structure.
+
+        Returns:
+            np.ndarray: The structure's chemical symbols, as an array.
+
+        Raises:
+            ValueError: If any requested symbol is absent.
+        """
+        types = np.array(self.get_chemical_symbols())
+        present = set(np.unique(types).tolist())
+        missing = [s for s in symbols if s not in present]
+        if missing:
+            raise ValueError(
+                f"Species {missing} not present in the structure. "
+                f"Available species: {sorted(present)}."
+            )
+        return types
+
     def set_new_chemical_symbols(self, symbol_map: Dict[int, str]):
         """
         Set new chemical symbols for the atoms in the object.
@@ -119,16 +142,10 @@ class GlassAtoms(Atoms):
         Raises:
             ValueError: If center_type or neigh_types are not present in the structure.
         """
-        types = np.array(self.get_chemical_symbols())
-        species = np.unique(types)
-
         if isinstance(neigh_types, str):
             neigh_types = [neigh_types, neigh_types]
 
-        if center_type not in species:
-            raise ValueError(f"The center type {center_type} is not in the list of species.")
-        if neigh_types[0] not in species or neigh_types[1] not in species:
-            raise ValueError(f"The neighbor types {neigh_types[0]} or {neigh_types[1]} is not in the list of species.")
+        types = self._require_species(center_type, *neigh_types)
 
         distances = self.get_dist()
 
@@ -137,7 +154,10 @@ class GlassAtoms(Atoms):
 
         if cutoff == "Auto":
             pdf_vals = [self.get_pdf(target_atoms=[center_type, neigh_type]) for neigh_type in neigh_types]
-            cutoff = [pdf_vals[i][0][find_min_after_peak(pdf_vals[i][1])] for i in range(len(neigh_types))]
+            cutoff = [
+                pdf_vals[i][0][find_min_after_peak(pdf_vals[i][1], f"{center_type}-{neigh_types[i]}")]
+                for i in range(len(neigh_types))
+            ]
         elif isinstance(cutoff, (float, int)):
             cutoff = [cutoff, cutoff]
 
@@ -184,17 +204,19 @@ class GlassAtoms(Atoms):
 
         Returns:
             List[int]: A list containing the coordination numbers for each center atom.
-        """
 
+        Raises:
+            ValueError: If center_type or neigh_type is not present in the structure.
+        """
+        types = self._require_species(center_type, neigh_type)
         distances = self.get_dist()
-        types = np.array(self.get_chemical_symbols())
         atom_1 = np.where(types == center_type)[0]
         atom_2 = np.where(types == neigh_type)[0]
         dist_list = distances[np.ix_(atom_1, atom_2)]
 
         if cutoff == "Auto":
             pdf_vals = self.get_pdf(target_atoms=[center_type, neigh_type])
-            cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1])]
+            cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1], f"{center_type}-{neigh_type}")]
 
         coordination_numbers = []
         for center in range(len(atom_1)):
@@ -223,9 +245,13 @@ class GlassAtoms(Atoms):
 
         Returns:
             List[int]: A list of the number of bridges for each center atom.
+
+        Raises:
+            ValueError: If center_type, bridge_type or any former_type is absent.
+            TypeError: If former_types is neither None nor a list.
         """
+        types = self._require_species(center_type, bridge_type, *(former_types or []))
         distances = self.get_dist()
-        types = np.array(self.get_chemical_symbols())
         centers = np.where(types == center_type)[0]
         bridges = np.where(types == bridge_type)[0]
         dist_list = distances[np.ix_(centers, bridges)]
@@ -239,7 +265,7 @@ class GlassAtoms(Atoms):
 
         if cutoff == "Auto":
             pdf_vals = self.get_pdf(target_atoms=[center_type, bridge_type])
-            cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1])]
+            cutoff = pdf_vals[0][find_min_after_peak(pdf_vals[1], f"{center_type}-{bridge_type}")]
 
         num_of_bridges = []
         for cen_ind, _ in enumerate(centers):
@@ -288,12 +314,9 @@ class GlassAtoms(Atoms):
             TypeError: If cutoff is not a float, int, or dict.
         """
 
-        types = np.array(self.get_chemical_symbols())
+        types = self._require_species(center_type)
         atom_types = np.unique(types)
         distances = self.get_dist()
-
-        if center_type not in atom_types:
-            raise ValueError(f"The center type {center_type} is not in the list of species.")
 
         index = {t: np.where(types == t)[0] for t in atom_types}
 

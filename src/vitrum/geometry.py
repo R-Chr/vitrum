@@ -31,20 +31,31 @@ def require_orthorhombic(cell, caller: str = "") -> np.ndarray:
     return np.diagonal(c).copy()
 
 
-def find_min_after_peak(padf):
+def find_min_after_peak(padf, context: str = ""):
     """
     Find the index of the first local minimum after the first peak in a function.
     Useful for determining cutoffs from PDFs.
 
     Args:
         padf (np.ndarray): The probability density function or similar array.
+        context (str, optional): Description of what is being analysed (e.g. the atom
+            pair), used to make the error message actionable.
 
     Returns:
         int: The index of the minimum.
+
+    Raises:
+        ValueError: If the function has no local minimum after a first peak
     """
+    padf = np.asarray(padf)
     mins = argrelextrema(padf, np.less_equal, order=4)[0]
-    second_min = [i for ind, i in enumerate(mins) if i != ind][0]
-    return second_min
+    after_peak = [i for ind, i in enumerate(mins) if i != ind]
+    if not after_peak:
+        raise ValueError(
+            f"Could not determine an automatic cutoff{f' for {context}' if context else ''}: "
+            "the distribution has no local minimum after a first peak. Pass an explicit `cutoff` instead."
+        )
+    return after_peak[0]
 
 
 def radial_bins(rrange=10, nbin=100):
