@@ -1,4 +1,7 @@
-# ⏳ vitrum
+<div class="vitrum-hero">
+  <img alt="vitrum — glass structure analysis" src="vitrum.png#only-light">
+  <img alt="vitrum — glass structure analysis" src="vitrum_light.png#only-dark">
+</div>
 
 **vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
 

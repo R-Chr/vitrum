@@ -1,8 +1,16 @@
-[![Documentation Status](https://readthedocs.org/projects/vitrum/badge/?version=latest)](https://vitrum.readthedocs.io/en/latest/?badge=latest)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/vitrum)](https://pypi.org/project/vitrum/)
-[![PyPI](https://img.shields.io/pypi/v/vitrum.svg?style=flat)](https://pypi.org/project/vitrum/)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/vitrum_light.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/vitrum.png">
+    <img alt="vitrum — glass structure analysis" src="docs/vitrum.png" width="520">
+  </picture>
+</p>
 
-# ⚗️ vitrum
+<p align="center">
+  <a href="https://vitrum.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/vitrum/badge/?version=latest"></a>
+  <a href="https://pypi.org/project/vitrum/"><img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/vitrum"></a>
+  <a href="https://pypi.org/project/vitrum/"><img alt="PyPI" src="https://img.shields.io/pypi/v/vitrum.svg?style=flat"></a>
+</p>
 
 **vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a comprehensive suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
 
