@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from vitrum.comparison import r_chi
-from vitrum.io_helpers import correct_atom_types
+from vitrum.io_helpers import correct_atom_types, get_density
 from vitrum.scattering import Scattering
 
 
@@ -45,6 +45,13 @@ def test_correct_atom_types_mutates_in_place_and_returns_none(silicon_small):
     result = correct_atom_types([atoms], {14: "Ge"})
     assert result is None
     assert set(atoms.get_chemical_symbols()) == {"Ge"}
+
+
+def test_get_density_returns_a_float_in_g_per_cm3(silicon_small):
+    """Crystalline silicon has a density of 2.329 g/cm^3."""
+    density = get_density(silicon_small)
+    assert isinstance(density, float)
+    assert density == pytest.approx(2.329, abs=0.01)
 
 
 def test_r_chi_returns_four_tuple():

@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from vitrum.rings import Ring, _fit_ellipse_axes, find_rings
+from vitrum.rings import Ring, RingAnalysis, _fit_ellipse_axes, find_rings
 
 
 def sizes(rings):
@@ -46,6 +46,58 @@ def test_bonds_none_matches_explicit_bonds(silicon_small):
     from_none = find_rings(silicon_small, bonds=None, limit=8)
     from_explicit = find_rings(silicon_small, bonds=[("Si", "Si")], limit=8)
     assert sorted(sorted(r) for r in from_none) == sorted(sorted(r) for r in from_explicit)
+
+
+# --- the `cutoff` parameter: a bond graph from vitrum.bonds instead of covalent radii ------
+
+
+def test_cutoff_none_matches_the_undecorated_default_call(silicon_small):
+    """cutoff=None, the default, must be byte-identical to not passing it at all."""
+    default = find_rings(silicon_small, bonds=None, limit=6)
+    explicit_none = find_rings(silicon_small, bonds=None, limit=6, cutoff=None)
+    assert sorted(sorted(r) for r in default) == sorted(sorted(r) for r in explicit_none)
+
+
+def test_cutoff_dict_reproduces_the_radii_based_ring_graph(silicon_small):
+    """A dict cutoff tuned to the same effective bond length must reproduce the same rings.
+
+    Both build the same Si-Si bond graph here: the covalent-radii search finds the 2.3517 A
+    nearest neighbours and nothing until the 3.84 A second shell, and a 3.0 A dict cutoff
+    sits in the same gap. The ring *set*, not just the sizes, must match exactly.
+    """
+    from_radii = find_rings(silicon_small, bonds=None, limit=6)
+    from_cutoff = find_rings(silicon_small, bonds=None, limit=6, cutoff={("Si", "Si"): 3.0})
+    assert sorted(sorted(r) for r in from_radii) == sorted(sorted(r) for r in from_cutoff)
+
+
+def test_cutoff_number_and_species_shorthand_agree_with_the_pair_dict(silicon_small):
+    """The cutoff grammar's other spellings must resolve to the same graph as the pair dict."""
+    by_pair = find_rings(silicon_small, bonds=None, limit=6, cutoff={("Si", "Si"): 3.0})
+    by_number = find_rings(silicon_small, bonds=None, limit=6, cutoff=3.0)
+    by_species = find_rings(silicon_small, bonds=None, limit=6, cutoff={"Si": 3.0})
+    assert sizes(by_pair) == sizes(by_number) == sizes(by_species) == {6: 128}
+
+
+def test_cutoff_auto_runs_end_to_end(silicon_small):
+    """cutoff="Auto" must resolve on its own and reproduce diamond's known ring statistics."""
+    rings = find_rings(silicon_small, bonds=None, limit=6, cutoff="Auto")
+    assert sizes(rings) == {6: 128}
+
+
+def test_cutoff_dict_restricts_to_the_named_bonds(silicon_small):
+    """`bonds` still selects which species pairs enter the graph when `cutoff` is a dict."""
+    rings = find_rings(
+        silicon_small, bonds=[("Si", "Si")], limit=6, cutoff={("Si", "Si"): 3.0}
+    )
+    assert sizes(rings) == {6: 128}
+
+
+def test_ring_analysis_calculate_passes_cutoff_through(silicon_small):
+    """RingAnalysis.calculate's cutoff must reach find_rings, not just be accepted."""
+    analysis = RingAnalysis(silicon_small, included_atoms=["Si"])
+    from_dict = analysis.calculate(max_size=6, cutoff={("Si", "Si"): 3.0})
+    from_default = RingAnalysis(silicon_small, included_atoms=["Si"]).calculate(max_size=6)
+    assert sizes([r.indexes for r in from_dict]) == sizes([r.indexes for r in from_default])
 
 
 def test_silicon_rings_are_six_membered(silicon_small):

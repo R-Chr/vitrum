@@ -46,7 +46,7 @@ nav:
     - MLIP evaluation: vitrum/mlip_functions.md
     - BALACE: vitrum/balace.md
     - Utilities: vitrum/utilities.md
-    - Extended ASE Atoms: vitrum/glass_atoms.md
+    - Migrating from GlassAtoms: vitrum/glass_atoms.md
     - Known issues: vitrum/known_issues.md
 
 #    - FAQs: pacemaker/faq.md

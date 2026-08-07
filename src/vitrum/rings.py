@@ -1,3 +1,4 @@
+import itertools
 import warnings
 from collections import Counter
 
@@ -11,7 +12,8 @@ from ase.symbols import symbols2numbers
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import dijkstra
 
-from vitrum.glass_atoms import GlassAtoms
+from vitrum.bonds import _Frame, graph_edges
+from vitrum.coordination import Cutoff, _resolve_cutoffs
 
 
 def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
@@ -426,6 +428,7 @@ def find_rings(
     bonds: list[tuple[str, str]] | None = None,
     limit: float = np.inf,
     criterion: str = "guttman",
+    cutoff: Cutoff | None = None,
 ) -> list[list[int]]:
     '''
     Find rings in the unit cell.
@@ -461,6 +464,13 @@ def find_rings(
             this are not returned, for every criterion. Defaults to no limit; setting it is
             strongly recommended for `criterion="primitive"`.
         criterion (str): Ring criterion to use, one of "guttman", "king", or "primitive".
+        cutoff (Optional[Cutoff]): How to decide a bond, in place of covalent radii. `None`
+            (the default) searches with `radii_factor` as before. Otherwise this is the same
+            cutoff grammar `Coordination` accepts -- `"Auto"`, a number for every bond, or a
+            dict keyed by species pair (`{("Si", "O"): 1.6}`) or by a single species as
+            shorthand -- resolved once against the bonds named in `bonds`, or every species
+            pair present in `ats` if `bonds` is None. `radii_factor` is ignored in this case.
+            Works for any cell, including a triclinic one.
 
     Returns:
         List[List[int]]: A list of rings, where each ring is a list of atom indices.
@@ -481,16 +491,6 @@ def find_rings(
     nat = len(s)
     lat = s.get_cell()
     els = s.get_chemical_symbols()
-    radii = covalent_radii[symbols2numbers(els)]
-
-    if bonds is not None:
-        # Don't need to find neighbors for elements not included in bonds
-        elements = set().union(*bonds)
-        radii = [x if el in elements else 0. for el, x in zip(els, radii)]
-        radii = np.array(radii, dtype=float)
-           
-    nl = NeighborList(radii * radii_factor, self_interaction=False, bothways=False, skin=0.)
-    nl.update(s)
 
     d_idx = []
     d_val = []
@@ -499,26 +499,54 @@ def find_rings(
 
     n_ambiguous = 0
 
-    for i in range(nat):
-        indices, offsets = nl.get_neighbors(i)
+    if cutoff is None:
+        radii = covalent_radii[symbols2numbers(els)]
 
-        rs = pos[indices, :] + offsets @ lat - pos[i, :]
-        ds = np.linalg.norm(rs, axis=1)
-        for j, r, o in zip(indices, ds, offsets):
-            j = int(j)
-            # Ignore bonds that are not included; bonds=None allows all bonds
-            if bonds is None or (els[i], els[j]) in bonds or (els[j], els[i]) in bonds:
-                # A bond to a periodic image of the atom itself, or a second image of a pair
-                # already bonded, cannot be represented: the graph holds one edge per pair.
-                if i == j or (i, j) in all_offsets:
-                    n_ambiguous += 1
-                    continue
-                d_idx.append((i, j))
-                d_val.append(r)
-                d_idx.append((j, i))
-                d_val.append(r)
-                all_offsets[(i, j)] = o
-                all_offsets[(j, i)] = -o
+        if bonds is not None:
+            elements = set().union(*bonds)
+            radii = [x if el in elements else 0. for el, x in zip(els, radii)]
+            radii = np.array(radii, dtype=float)
+
+        nl = NeighborList(radii * radii_factor, self_interaction=False, bothways=False, skin=0.)
+        nl.update(s)
+
+        for i in range(nat):
+            indices, offsets = nl.get_neighbors(i)
+
+            rs = pos[indices, :] + offsets @ lat - pos[i, :]
+            ds = np.linalg.norm(rs, axis=1)
+            for j, r, o in zip(indices, ds, offsets):
+                j = int(j)
+                # Ignore bonds that are not included; bonds=None allows all bonds
+                if bonds is None or (els[i], els[j]) in bonds or (els[j], els[i]) in bonds:
+                    # A bond to a periodic image of the atom itself, or a second image of a
+                    # pair already bonded, cannot be represented: the graph holds one edge
+                    # per pair.
+                    if i == j or (i, j) in all_offsets:
+                        n_ambiguous += 1
+                        continue
+                    d_idx.append((i, j))
+                    d_val.append(r)
+                    d_idx.append((j, i))
+                    d_val.append(r)
+                    all_offsets[(i, j)] = o
+                    all_offsets[(j, i)] = -o
+    else:
+        frame = _Frame(ats)
+        pairs = list(bonds) if bonds is not None else list(
+            itertools.combinations_with_replacement(frame.species.tolist(), 2)
+        )
+        resolved = _resolve_cutoffs(frame, pairs, cutoff, positional=False)
+        pair_cutoffs = dict(zip(pairs, resolved))
+
+        i_arr, j_arr, d_arr, s_arr = graph_edges(s, pair_cutoffs)
+        for i, j, r, o in zip(i_arr.tolist(), j_arr.tolist(), d_arr.tolist(), s_arr):
+            if i == j or (i, j) in all_offsets:
+                n_ambiguous += 1
+                continue
+            d_idx.append((i, j))
+            d_val.append(r)
+            all_offsets[(i, j)] = o
 
     if n_ambiguous:
         warnings.warn(
@@ -891,7 +919,7 @@ class RingAnalysis:
         super().__init__()
         self.bonding_dict = bonding_dict
         atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
-        self.atoms = GlassAtoms(atoms)
+        self.atoms = atoms
         self.num_atoms = len(self.atoms)
         self.atom_symbols = np.array(self.atoms.get_chemical_symbols())
         self.atom_types = np.unique(self.atom_symbols).tolist()
@@ -905,18 +933,26 @@ class RingAnalysis:
         repeat: tuple[int, int, int] | None = None,
         max_size: float = np.inf,
         criterion: str = "guttman",
+        cutoff: Cutoff | None = None,
     ) -> list[Ring]:
         """
         Calculate the rings in the system.
 
         Args:
             radii_factor (float): Factor to multiply covalent radii for neighbor search.
+                Ignored if `cutoff` is given.
             repeat (Optional[Tuple[int, int, int]]): Repeat unit cell. Defaults to (1, 1, 1),
                 or (3, 3, 3) for `criterion="primitive"` on a periodic cell.
             max_size (float): Maximum ring size, in number of atoms. Applies identically
                 to every criterion. Defaults to no limit.
             criterion (str): Ring criterion to use, one of "guttman", "king", or "primitive".
                 See `vitrum.rings.find_rings` for details on each criterion.
+            cutoff (Optional[Cutoff]): How to decide a bond, in place of covalent radii.
+                `None` (the default) searches with `radii_factor` as before. Otherwise this
+                is the same cutoff grammar `Coordination` accepts -- `"Auto"`, a number, or a
+                dict keyed by species pair or by a single species as shorthand -- resolved
+                once against `bonding_dict`, or every species pair present if it is None.
+                Works for any cell, including a triclinic one. See `vitrum.rings.find_rings`.
 
         Returns:
             List[Ring]: A list of Ring objects representing the rings in the system.
@@ -930,6 +966,7 @@ class RingAnalysis:
             bonds=bonds,
             limit=max_size,
             criterion=criterion,
+            cutoff=cutoff,
         )
 
         self.rings = [Ring(self.atoms[list(r)], list(r)) for r in rings]

@@ -4,7 +4,6 @@ import numpy as np
 from ase import Atoms
 from scipy.stats import linregress
 
-from vitrum.glass_atoms import GlassAtoms
 from vitrum.trajectory_tools import unwrap_trajectory
 
 
@@ -39,7 +38,7 @@ class Diffusion:
                 f"sample_times has {len(sample_times)} entries but the trajectory has "
                 f"{len(trajectory)} frames; they must correspond one-to-one."
             )
-        self.trajectory = [GlassAtoms(atom) for atom in trajectory]
+        self.trajectory = list(trajectory)
         self.chemical_symbols = np.array(trajectory[0].get_chemical_symbols())
         self.species = np.unique(self.chemical_symbols)
         self.sample_times = sample_times

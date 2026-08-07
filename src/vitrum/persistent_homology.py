@@ -11,7 +11,7 @@ from sklearn.cluster import Birch
 from sklearn.neighbors import KernelDensity
 from tqdm import tqdm
 
-from vitrum.geometry import require_orthorhombic
+from vitrum.geometry import distance_matrix, require_orthorhombic
 
 
 class PersistenceDiagram:
@@ -709,7 +709,7 @@ class LocalPD:  # Broken after moving persistence diagram functions out of glass
             types = atom.get_atomic_numbers()
         centers = np.where(np.array(types) == center_id)[0]
         for i in tqdm(centers):
-            neighbors = np.where(atom.get_dist()[i, :] < cutoff)[0]
+            neighbors = np.where(distance_matrix(atom)[i, :] < cutoff)[0]
             neighborhood = atom[neighbors]
             center_index = np.where(neighbors == i)
             neighborhood.set_positions(self.center_atoms(neighborhood, center_index))
@@ -759,7 +759,7 @@ def get_local_persistence(atoms, center_id, cutoff):
         types = atoms.get_atomic_numbers()
     centers = np.where(types == center_id)[0]
     for i in centers:
-        neighbors = np.where(atoms.get_dist()[i, :] < cutoff)[0]
+        neighbors = np.where(distance_matrix(atoms)[i, :] < cutoff)[0]
         neighborhood = atoms[neighbors]
         neighborhood.center()
         persistence_diagrams.append(neighborhood.get_persistence_diagram())

@@ -85,8 +85,9 @@ def pdf(dist_list, volume, rrange=10, nbin=100, n_pairs=None, exclude_self=True)
     Calculate the pair distribution function (PDF) of a list of distances.
 
     This is the single normalisation primitive used by every PDF backend in the package
-    (``GlassAtoms.get_pdf`` and both ``Scattering`` backends), so that the definition of
-    g(r) lives in exactly one place.
+    (``partial_pdf``, which the dense ``Scattering`` backend and ``Coordination``'s
+    automatic cutoff both go through, and ``Scattering``'s neighbour-list backend), so that
+    the definition of g(r) lives in exactly one place.
 
     Parameters:
         dist_list (np.ndarray): An array of distances (any shape; it is flattened).
@@ -121,6 +122,57 @@ def pdf(dist_list, volume, rrange=10, nbin=100, n_pairs=None, exclude_self=True)
         # Species absent, or a single atom of a like pair: no pairs to bin.
         return xval, np.zeros(nbin)
     return xval, (h / volbin) / (n_pairs / volume)
+
+
+def partial_pdf(distances, symbols, volume, pair, rrange=10, nbin=100, indices=None):
+    """
+    Partial pair distribution function g_ab(r) from a precomputed distance matrix.
+
+    Args:
+        distances (np.ndarray): Symmetric N x N distance matrix, e.g. from ``distance_matrix``.
+        symbols (array_like): Per-atom labels to match ``pair`` against, e.g. chemical symbols
+            from ``atoms.get_chemical_symbols()`` or atomic numbers. Ignored if ``indices``
+            is given.
+        volume (float): The volume of the system.
+        pair (Sequence): The two species to correlate, matched against ``symbols``.
+        rrange (float, optional): The range of the PDF. Defaults to 10.
+        nbin (int, optional): The number of bins. Defaults to 100.
+        indices (Optional[Sequence[np.ndarray]], optional): Two arrays of atom indices, used
+            in place of selecting on ``symbols``. Overrides ``pair``. Defaults to None.
+
+    Returns:
+        xval (np.ndarray): Bin centres, shape (nbin,).
+        pdf (np.ndarray): g_ab(r), shape (nbin,).
+    """
+    if indices is None:
+        symbols = np.asarray(symbols)
+        atom_1 = np.flatnonzero(symbols == pair[0])
+        atom_2 = np.flatnonzero(symbols == pair[1])
+    else:
+        atom_1, atom_2 = np.asarray(indices[0]), np.asarray(indices[1])
+
+    if len(atom_1) == 0 or len(atom_2) == 0:
+        # One species is absent; np.ix_ on an empty set would give an empty block anyway.
+        xval, _ = radial_bins(rrange, nbin)
+        return xval, np.zeros(nbin)
+
+    # A like pair draws from the same index set, so the submatrix contains the zero-distance
+    # diagonal and each atom has only n - 1 distinct partners. A cross pair has neither.
+    like_pair = np.array_equal(atom_1, atom_2)
+    if like_pair:
+        n_pairs = len(atom_1) * (len(atom_1) - 1)
+    else:
+        n_pairs = len(atom_1) * len(atom_2)
+
+    dist_list = distances[np.ix_(atom_1, atom_2)]
+    return pdf(
+        dist_list,
+        volume,
+        rrange,
+        nbin,
+        n_pairs=n_pairs,
+        exclude_self=like_pair,
+    )
 
 
 @njit(parallel=True)
@@ -165,12 +217,32 @@ def get_dist_numba(pos, cell):
     return dist_matrix
 
 
+def distance_matrix(atoms, caller: str = "") -> np.ndarray:
+    """
+    Minimum-image distance matrix between all pairs of atoms in a structure.
+    Positions need not be wrapped into the cell.
+
+    Args:
+        atoms (Atoms): An ASE Atoms object.
+        caller (str, optional): Name of the calling routine, used in the error message.
+
+    Returns:
+        np.ndarray: Symmetric distance matrix (N x N).
+
+    Raises:
+        NotImplementedError: If the cell is not orthorhombic.
+    """
+    dim = require_orthorhombic(atoms.get_cell(), caller or "distance_matrix")
+    return get_dist_numba(atoms.get_positions(), dim)
+
+
 def get_dist(list, cell):
     """
     Calculate the pairwise distance matrix for atoms in a periodic simulation box.
 
     Kept as a plain-numpy (non-numba) reference implementation for backward
-    compatibility; get_dist_numba is the version used internally by GlassAtoms.
+    compatibility; `distance_matrix` is what the analysis classes use, and it takes an
+    `Atoms` object rather than positions and a cell diagonal.
 
     Positions need not be wrapped into the cell: the minimum image is taken by
     subtracting a whole number of cell lengths.

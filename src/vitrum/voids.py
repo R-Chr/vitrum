@@ -12,7 +12,6 @@ from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
 from vitrum.geometry import require_orthorhombic
-from vitrum.glass_atoms import GlassAtoms
 
 
 def compute_occupancy_grid(
@@ -404,7 +403,7 @@ class VoidAnalysis:
         Raises:
             ValueError: If the cell is not orthorhombic.
         """
-        self.atoms = GlassAtoms(atoms.copy())
+        self.atoms = atoms.copy()
         self.atoms.wrap()
         self._validate_orthorhombic()
         self.radii_scaling = radii_scaling

@@ -53,6 +53,20 @@ def correct_atom_types(atoms_list, atom_to_type_map):
         atoms.set_chemical_symbols(corr_symbols)
 
 
+def get_density(atoms) -> float:
+    """
+    Calculate the mass density of a structure.
+
+    Parameters:
+        atoms (Atoms): An ASE Atoms object with a defined cell.
+
+    Returns:
+        float: Density in g/cm^3.
+    """
+    # 1e-24 converts the cell volume from Angstrom^3 to cm^3.
+    return (sum(atoms.get_masses()) / Avogadro) / (atoms.get_volume() * 1e-24)
+
+
 def parse_composition(composition: str | dict | Composition) -> Composition:
     """Normalize a composition into a pymatgen Composition.
 

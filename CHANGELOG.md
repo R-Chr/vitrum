@@ -24,6 +24,45 @@ recomputed.**
   (crystalline silicon's coordination, bond angles and ring statistics; ideal-gas g(r) and
   S(Q) asymptotics). Install with `pip install -e .[test]`. A GitHub Actions workflow runs
   it on Python 3.10–3.13.
+- `Coordination.get_bridging_analysis`, `get_angles` and `get_neighbors`, the
+  trajectory-aware replacements for the corresponding `GlassAtoms` methods (see Deprecated
+  below). `get_bridging_analysis` returns the Q^n fractions aggregated over the trajectory.
+- A `per_atom=True` flag on `get_coordination_numbers`, `get_bridging_analysis` and
+  `get_angles`. It means the same thing on all three: one entry per frame, holding the raw
+  per-centre-atom values instead of the trajectory-wide summary.
+- `Coordination.get_neighbors` accepts `cutoff="Auto"`, which every other method already
+  did, and resolves one cutoff per neighbour species.
+- **A cutoff can be given per bond, as `cutoff={("Si", "O"): 1.6, ("B", "O"): 1.4}`.** A
+  cutoff is a property of a bond rather than of an atom, so this is now the primary
+  spelling; a bare species key such as `{"O": 1.6}` remains as shorthand for the bond from
+  the centre to that species, and the explicit pair wins where both could apply. Key order
+  is irrelevant — `("O", "Si")` and `("Si", "O")` are the same bond.
+- **`get_bridging_analysis` judges each network former at its own cutoff.** Previously one
+  cutoff, taken from the centre-bridge pair, decided every bond including the
+  former-bridge ones, so a borosilicate measured B-O against the Si-O bond length. It can
+  now be given `cutoff={("Si", "O"): 1.9, ("B", "O"): 1.6}`, and `"Auto"` resolves each
+  former's bond from its own partial PDF. A single number behaves exactly as before.
+- `Coordination` accepts a single `Atoms` object, or any iterable of frames, in place of a
+  list. 
+- **`vitrum.bonds.Bonds` and `Coordination.get_bonds`.** Coordination numbers, neighbour
+  lists, bond angles and Q^n speciation are all reductions of one object: which atoms of a
+  centre selection lie within a cutoff of which atoms of a neighbour selection. That object
+  is now named, and `get_bonds` returns it, so quantities the package does not ship — which
+  polyhedra share an edge rather than a corner, custom speciation rules — can be derived
+  without reaching into internals. `counts()` gives coordination numbers, `degrees()` the
+  mirror count per neighbour, `lists()` the neighbours of each centre as global atom
+  indices, and `select_neighs()` filters on a per-neighbour test. Either selection may name
+  several species.
+- `vitrum.geometry.distance_matrix` and `vitrum.geometry.partial_pdf`. `partial_pdf` is now
+  the single definition of a partial g(r) for the dense backend, shared by `Scattering` and
+  by automatic cutoff resolution in `Coordination`, which previously held separate copies of
+  the pair-counting convention.
+- `vitrum.io_helpers.get_density`, for the mass density of a built structure.
+- **`find_rings` and `RingAnalysis.calculate` accept `cutoff`**, building the bond graph from
+  a distance instead of covalent radii, in the same grammar `Coordination` uses — `"Auto"`, a
+  number, or a dict keyed by species pair or by a single species as shorthand. Resolved once
+  against `bonds`/`bonding_dict`, or every species pair present if that is None. `cutoff=None`
+  (the default) keeps the previous covalent-radii `NeighborList` search unchanged.
 
 ### Changed
 
@@ -60,6 +99,63 @@ Each of the following changes the numbers the package returns.
   spanned by two neighbours, but a longer `neigh_types` list was accepted and everything
   past the second entry silently ignored, so `["O", "Na", "F"]` returned only O–centre–Na
   angles. This also applies to `Coordination.get_angle_distribution`.
+- **`cutoff="Auto"` is now resolved once from the first frame in every `Coordination`
+  method.** `get_coordination_numbers` already did this; `get_angle_distribution`,
+- **`Coordination.get_neighbors` returns global atom indices**, so an entry indexes straight
+  into the frame. It previously returned indices into each species' own atoms, which callers
+  had to map back by hand — as `get_bridging_analysis` did internally. The deprecated
+  `GlassAtoms.get_neighbors` keeps the old species-relative convention.
+- **`Coordination.get_angles` returns one flat array of angles per frame**, matching the
+  other raw accessors. It previously returned one array per centre atom with the frames
+  merged together, so per-frame results could not be recovered. The per-centre grouping is
+  now `get_angles(..., per_atom=True)`.
+- Only the exact string `"Auto"` is accepted as a cutoff. `cutoff="auto"` previously
+  reported a confusing list-length error from `get_angles`, and died inside NumPy comparing
+  a float array against a string from `get_coordination_numbers`. A boolean cutoff is
+  rejected rather than read as 1 A, and NumPy scalars such as `np.int64` are accepted.
+- **Every method validates a cutoff the same way**, through one shared resolver rather than
+  each method's own branch. An unusable *type* raises `TypeError` (which is what
+  `get_neighbors` already did, and what the deprecated `GlassAtoms.get_neighbors`
+  documents), an unusable *value* such as `"auto"` or a mismatched list length raises
+  `ValueError`, and a dict with no entry for a bond raises `KeyError`. Previously a bad
+  cutoff type gave `TypeError` from `get_neighbors` but `ValueError` elsewhere.
+- `Coordination.get_neighbors` rejects a bare list rather than accepting one. Nothing in
+  the call orders it, so it could only have been read positionally against the sorted
+  species — silently wrong for a structure of different composition. Use a dict.
+- `get_angle_distribution` raises when no angles were found at all, instead of returning an
+  array of `NaN` from a zero-count `density=True` histogram.
+- `Coordination` methods report an absent species the same way regardless of entry point.
+  `get_coordination_numbers` had its own message ("not found in structure"); every method
+  now uses the shared one ("not present in the structure").
+- **`Coordination` no longer builds an N x N distance matrix.** Bonds are found with a
+  periodic KD-tree (`scipy.spatial.cKDTree`, already a dependency) and held as an edge list,
+  so both time and memory scale with the number of bonds rather than with the square of the
+  system size. Measured against the previous dense implementation, per method call on the
+  shipped 3000-atom trajectory: coordination numbers 3.4x faster, Q^n speciation 2.7x, bond
+  angles 1.8x, neighbour lists 1.6x; at 6000 atoms, 7.6x / 5.9x / 3.5x / 3.3x. The larger
+  change is the ceiling — a 24,000-atom cell needed 4.6 GB for the matrix alone and is now
+  analysed in under half a second at 0.38 GB peak. `cutoff="Auto"` resolution takes the same
+  path, using a short-range PDF at the unchanged 0.1 A bin width and widening only when the
+  first minimum lands too near the end to be trusted. A structure with no periodic cell
+  still uses a dense matrix, which is the only remaining case that needs one. **No number
+  changes**: both backends were checked array-for-array against the previous implementation.
+- **The KD-tree bond backend above is replaced with `ase.neighborlist.neighbor_list`.** This
+  removes the orthorhombic-cell restriction from `Coordination`, `vitrum.bonds.Bonds`, and
+  `cutoff="Auto"` resolution generally — including inside `find_rings`/`RingAnalysis`, see
+  Added — so they now work on a triclinic cell, which `scipy.spatial.cKDTree`'s `boxsize`
+  could not represent. `Bonds` gains an `offsets` attribute, the per-bond periodic shift
+  vector, and a structure with no periodic cell is handled directly rather than falling back
+  to a dense matrix. **No number changes** on an orthorhombic cell, checked the same way as
+  the KD-tree swap above; two atoms coincident at zero separation now bond correctly, which
+  the dense path's old `distance > 0` self-exclusion got wrong.
+- **The opportunistic dense-matrix fast path is removed entirely from `vitrum.bonds`.** It
+  only ever activated when a distance matrix happened to already be cached on the same
+  `_Frame`, which no caller does; `neighbor_list` is faster at every system size measured
+  regardless. `Coordination` and `find_rings`/`RingAnalysis` with an explicit `cutoff` no
+  longer touch a dense matrix or `vitrum.geometry.distance_matrix` at all, so nothing in
+  that path is limited to an orthorhombic cell any more. **No number changes.**
+- `Coordination.get_angles` measures every angle in one batched ASE call instead of one call
+  per centre atom.
 - `rings.check_ring_is_periodic` is renamed `ring_closes_in_cell`, which is what it
   returns; the old name stated the opposite of its behaviour.
 - `Compositions.get_structures(max_atoms=...)` and `gen_random_glasses` now check the cell
@@ -68,6 +164,41 @@ Each of the following changes the numbers the package returns.
 - `Scattering` raises naming the element when a species has no tabulated neutron scattering
   length, instead of failing inside NumPy with an unrelated shape error. `Coordination`
   rejects an empty `atoms_list` rather than raising `IndexError` on first use.
+
+### Deprecated
+
+- **`GlassAtoms` is deprecated and will be removed in 2.0.0.** Every analysis class now
+  takes and holds plain `ase.Atoms`, so there is no second atoms type to convert to or
+  remember. Existing code keeps working unchanged: each `GlassAtoms` method still returns
+  exactly what it returned before, and warns with the name of its replacement.
+
+  **This move changes no numbers.** Every method body was carried over as-is; the outputs
+  of `Scattering`, `Coordination` and the `GlassAtoms` methods themselves were checked
+  array-for-array against the previous implementation.
+
+  | Deprecated | Use instead |
+  | --- | --- |
+  | `GlassAtoms(atoms).get_dist()` | `vitrum.geometry.distance_matrix(atoms)` |
+  | `GlassAtoms(atoms).get_pdf(pair)` | `Scattering(atoms).get_partial_pdf(pair)` |
+  | `GlassAtoms(atoms).get_all_angles(...)` | `Coordination([atoms]).get_angles(...)` |
+  | `GlassAtoms(atoms).get_coordination_number(...)` | `Coordination([atoms]).get_coordination_numbers(..., per_atom=True)` |
+  | `GlassAtoms(atoms).get_bridging_analysis(...)` | `Coordination([atoms]).get_bridging_analysis(...)` |
+  | `GlassAtoms(atoms).get_neighbors(...)` | `Coordination([atoms]).get_neighbors(...)` |
+  | `GlassAtoms(atoms).get_density()` | `vitrum.io_helpers.get_density(atoms)` |
+  | `GlassAtoms(atoms).set_new_chemical_symbols(map)` | `vitrum.io_helpers.correct_atom_types(atoms, map)` |
+
+  See [Migrating from GlassAtoms](docs/vitrum/glass_atoms.md).
+
+  Note that the deprecated methods keep the conventions they shipped with, so two of them
+  no longer match their replacements exactly: `GlassAtoms.get_neighbors` still returns
+  species-relative indices, and `GlassAtoms.get_all_angles` still groups its angles by
+  centre atom. See Changed above.
+
+  Known, unchanged for now, to be fixed in 2.0.0:
+
+  - `get_bridging_analysis` applies a single centre-bridge cutoff to every former-bridge
+    bond, so in a mixed-former glass the second former's bonds are judged by the first
+    former's bond length. Pass an explicit `cutoff` when the two differ enough to matter.
 
 ### Fixed
 
@@ -106,6 +237,17 @@ changes.
   times: a one-atom cell searched with `repeat=(3, 3, 3)` returned `[0, 0, 0, 0]` and
   reported it as a 4-ring of zero area. These are now discarded with a warning to increase
   `repeat`.
+
+**Coordination**
+
+- `Coordination.get_angles` double-counted an angle when its two arms named the same
+  species but were given different cutoffs (`neigh_types=["O", "O"]`,
+  `cutoff=[1.6, 2.0]`): the two arm neighbour lists then differ even though the species are
+  the same, so a pair inside the smaller cutoff was emitted as both `(x, y)` and `(y, x)`
+  from the branch meant for two *different* species. Each qualifying pair is now counted
+  once regardless of which arm it was found through. Two equal cutoffs on the same species,
+  the previously-tested case, are unaffected. `get_angle_distribution`, which pools
+  `get_angles`, inherited the same fix.
 
 **Scattering and PDFs**
 

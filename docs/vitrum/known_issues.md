@@ -30,14 +30,21 @@ Use `type="approx_xray"` for the Q-independent atomic-number approximation, or
 
 ## Orthorhombic cells only
 
-Distance calculations, trajectory unwrapping, void grids and ring centres all
-apply the minimum image convention using only the cell diagonal, so they are
-valid only for orthorhombic cells. Positions need not be wrapped into the cell.
+Distance calculations (`vitrum.geometry.distance_matrix`), trajectory unwrapping, void grids
+and ring centres all apply the minimum image convention using only the cell diagonal, so
+they are valid only for orthorhombic cells. Positions need not be wrapped into the cell.
 
 As of 1.1.0 this is checked rather than assumed: passing a triclinic cell raises
 `NotImplementedError` via `vitrum.geometry.require_orthorhombic` instead of
 silently returning plausible-looking but wrong numbers. Full triclinic support
-is not implemented.
+is not implemented for these routines.
+
+`Coordination`, the underlying `vitrum.bonds.Bonds`/`_Frame`, and `find_rings`/
+`RingAnalysis.calculate` given an explicit `cutoff` are no longer subject to this
+restriction: their bond graph is built entirely with `ase.neighborlist.neighbor_list`, which
+takes a general cell matrix, so `cutoff="Auto"` and every other cutoff spelling work on a
+triclinic cell. `find_rings`'s covalent-radii default (`cutoff=None`) was never subject to
+this restriction in the first place — it already built its graph from a general cell matrix.
 
 ## `Diffusion` — limitations
 
@@ -58,7 +65,7 @@ module has no test coverage beyond its input guards.
 
 The `vitrum.batch_active` module drives VASP/LAMMPS active-learning workflows
 through FireWorks. It requires external services that are not covered by the
-test suite, and it is known to be broken in several places:
+test suite, and it is known to be broken in several places: Treat this module as unsupported. 
 
 - `balace.run_train_pace()` raises `TypeError`. It calls `train_pace(self)`,
   which then does `**pace_kwargs` with `pace_kwargs=None`.
@@ -75,6 +82,3 @@ test suite, and it is known to be broken in several places:
 - `load_config` applies arbitrary YAML keys to the instance with `setattr`, so
   the attribute surface of `balace` cannot be determined statically.
 
-Treat this module as unsupported. The analysis modules (`scattering`,
-`coordination`, `rings`, `voids`, `glass_atoms`) are the tested, supported part
-of the package.

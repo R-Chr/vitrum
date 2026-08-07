@@ -250,18 +250,24 @@ def test_varying_composition_is_rejected(random_gas):
         Scattering([frame_a, frame_b], disable_progress=True)
 
 
-def test_glass_atoms_pdf_matches_scattering(silicon_diamond):
-    """GlassAtoms.get_pdf and Scattering.get_partial_pdf are the same quantity.
+def test_geometry_partial_pdf_matches_scattering(silicon_diamond):
+    """geometry.partial_pdf and Scattering.get_partial_pdf are the same quantity.
 
-    They are separate entry points to vitrum.geometry.pdf, so this pins them to a
-    shared like-pair normalisation of N*(N-1); an N*N count in either would put them
-    (N-1)/N apart.
+    Scattering's dense backend is a frame-averaging loop over partial_pdf, so this pins
+    the single-frame case to it, and with it the like-pair normalisation of N*(N-1); an
+    N*N count in either would put them (N-1)/N apart.
     """
-    from vitrum.glass_atoms import GlassAtoms
+    from vitrum.geometry import distance_matrix, partial_pdf
 
-    atoms = GlassAtoms(silicon_diamond)
-    _, direct = atoms.get_pdf(["Si", "Si"], rrange=8.0, nbin=400)
-    scattering = Scattering([atoms], rrange=8.0, nbin=400, disable_progress=True)
+    _, direct = partial_pdf(
+        distance_matrix(silicon_diamond),
+        silicon_diamond.get_chemical_symbols(),
+        silicon_diamond.get_volume(),
+        ("Si", "Si"),
+        rrange=8.0,
+        nbin=400,
+    )
+    scattering = Scattering([silicon_diamond], rrange=8.0, nbin=400, disable_progress=True)
 
     np.testing.assert_allclose(
         direct, scattering.get_partial_pdf(("Si", "Si")), rtol=1e-9, atol=1e-9

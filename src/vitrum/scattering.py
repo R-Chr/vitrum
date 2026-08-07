@@ -12,8 +12,7 @@ from scipy import integrate
 from scipy.stats import norm
 from tqdm import tqdm
 
-from vitrum.geometry import pdf, radial_bins, require_orthorhombic
-from vitrum.glass_atoms import GlassAtoms
+from vitrum.geometry import distance_matrix, partial_pdf, pdf, radial_bins, require_orthorhombic
 
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
@@ -82,7 +81,7 @@ class Scattering:
         else:
             atom_list = [atoms]
             
-        self.atom_list = [GlassAtoms(atom) for atom in atom_list]
+        self.atom_list = list(atom_list)
         script_dir = Path(__file__).parent
 
         # Every frame is binned with the same rrange, so every frame has to support it.
@@ -208,27 +207,13 @@ class Scattering:
         n_frames = len(self.atom_list)
 
         for atom in tqdm(self.atom_list, disable=self.disable_progress):
-            distances = atom.get_dist()
+            distances = distance_matrix(atom, "Scattering")
             symbols = np.array(atom.get_chemical_symbols())
             volume = atom.get_volume()
 
             for pair_ind, pair in enumerate(self.pairs):
-                idx_1 = np.flatnonzero(symbols == pair[0])
-                idx_2 = np.flatnonzero(symbols == pair[1])
-                like_pair = pair[0] == pair[1]
-                if like_pair:
-                    # Exclude self-pairs: N_a atoms each have N_a - 1 distinct partners.
-                    n_pairs = len(idx_1) * (len(idx_1) - 1)
-                else:
-                    n_pairs = len(idx_1) * len(idx_2)
-                dist_list = distances[np.ix_(idx_1, idx_2)]
-                _, current_pdf = pdf(
-                    dist_list,
-                    volume,
-                    self.rrange,
-                    self.nbin,
-                    n_pairs=n_pairs,
-                    exclude_self=like_pair,
+                _, current_pdf = partial_pdf(
+                    distances, symbols, volume, pair, self.rrange, self.nbin
                 )
                 pdf_sum[pair_ind, :] += current_pdf
         return pdf_sum / n_frames

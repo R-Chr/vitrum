@@ -4,20 +4,24 @@ This is an overview of various miscellaneous utility functions, useful for diffe
 
 ## Geometry
 
-Low-level distance/PDF helpers used internally by `GlassAtoms` — useful directly when you have raw distances rather than a full `Atoms` object.
+Low-level distance/PDF helpers shared by the analysis classes — useful directly when you
+want one quantity without constructing a class, or when you have raw distances rather than
+a full `Atoms` object.
 
 ```python
-from vitrum.geometry import pdf, find_min_after_peak, radial_bins
+from vitrum.geometry import distance_matrix, partial_pdf, pdf, find_min_after_peak, radial_bins
 
-xval, gr = pdf(dist_list, volume, rrange=10, nbin=100, n_pairs=n_i * n_j)
+# minimum-image distance matrix for a structure (orthorhombic cells only)
+distances = distance_matrix(atoms)
+
+# one partial g_ab(r) from that matrix, without building a Scattering object
+xval, gr = partial_pdf(distances, atoms.get_chemical_symbols(), atoms.get_volume(), ("Si", "O"))
 cutoff = xval[find_min_after_peak(gr)]  # first minimum after the first peak
 
+# the raw primitives, if you already have a list of distances
+xval, gr = pdf(dist_list, volume, rrange=10, nbin=100, n_pairs=n_i * n_j)
 xval, shell_volumes = radial_bins(rrange=10, nbin=100)
 ```
-
-`pdf` is the single normalisation used by `GlassAtoms.get_pdf` and both `Scattering`
-backends. Omitting `n_pairs` falls back to `dist_list.size`, which over-counts like
-pairs by `n / (n - 1)`; pass it explicitly.
 
 `require_orthorhombic` is the shared guard behind the orthorhombic-cell restriction
 described in [Known issues](known_issues.md). It returns the cell diagonal, or raises
@@ -61,11 +65,17 @@ See `IONIC_PACKING_FRACTION` in `vitrum.volume_estimation` for the calibration.
 See [Quick start](quickstart.md) for worked `correct_atom_types`/`get_LAMMPS_dump_timesteps` examples.
 
 ```python
-from vitrum.io_helpers import mass_density_to_number_density, number_density_to_mass_density
+from vitrum.io_helpers import (
+    get_density, mass_density_to_number_density, number_density_to_mass_density
+)
 
 number_density = mass_density_to_number_density("SiO2", density=2.2)  # atoms/Angstrom^3
 density = number_density_to_mass_density("SiO2", number_density)      # g/cm^3, round-trips
+get_density(atoms)  # g/cm^3; mass density of an actual structure, from its masses and cell volume
 ```
+
+The two conversions work from a composition, before a structure exists; `get_density` takes
+a built `Atoms` object. It replaces `GlassAtoms.get_density`.
 
 ::: vitrum.io_helpers
 
