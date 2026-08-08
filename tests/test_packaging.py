@@ -10,6 +10,7 @@ import subprocess
 import sys
 import textwrap
 
+import numpy as np
 import pytest
 
 # Installs a meta-path finder that makes the optional extras unimportable, so the
@@ -97,3 +98,38 @@ def test_ionic_radius_estimate_is_within_calibration(formula, structure, density
     estimated = get_volume(formula, structure, vol_per_atom_source="ionic_radius")
     actual = get_volume(formula, structure, density=density)
     assert 0.7 < estimated / actual < 1.35, f"{formula}: {estimated / actual:.2f}x"
+
+
+@pytest.mark.parametrize("scale", [1.2, 0.9])
+def test_apply_strain_scales_the_volume_by_the_determinant(scale):
+    """A deformation matrix D takes the cell volume to det(D) times itself.
+
+    An isotropic scaling of s in each direction is s^3 of the volume, which is the check
+    an EOS fit depends on: the deformations must actually reach the structure.
+    """
+    from pymatgen.core import Lattice, Structure
+
+    from vitrum.packing import apply_strain_to_structure
+
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0, 0, 0]])
+    deformation = [[scale, 0.0, 0.0], [0.0, scale, 0.0], [0.0, 0.0, scale]]
+
+    (transformed,) = apply_strain_to_structure(structure, [deformation])
+    assert transformed.final_structure.volume == pytest.approx(structure.volume * scale**3)
+    # The input is a template for every deformation, so it must come back untouched.
+    assert structure.volume == pytest.approx(64.0)
+
+
+def test_apply_strain_returns_one_structure_per_deformation():
+    """The deformations are applied independently, not composed onto one another."""
+    from pymatgen.core import Lattice, Structure
+
+    from vitrum.packing import apply_strain_to_structure
+
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0, 0, 0]])
+    deformations = [np.diag([s, s, s]).tolist() for s in (1.1, 1.0, 0.9)]
+
+    transformed = apply_strain_to_structure(structure, deformations)
+    assert len(transformed) == 3
+    volumes = [t.final_structure.volume for t in transformed]
+    assert volumes == pytest.approx([64.0 * s**3 for s in (1.1, 1.0, 0.9)])

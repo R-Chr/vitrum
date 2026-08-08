@@ -15,7 +15,7 @@ from numbers import Integral
 import numpy as np
 from ase import Atoms
 
-from vitrum.coordination import Coordination, _require_species
+from vitrum.coordination import Coordination
 from vitrum.geometry import distance_matrix, partial_pdf
 from vitrum.io_helpers import correct_atom_types, get_density
 
@@ -51,10 +51,6 @@ class GlassAtoms(Atoms):
         """
         _deprecated("GlassAtoms.get_dist", "vitrum.geometry.distance_matrix(atoms)")
         return distance_matrix(self, "GlassAtoms.get_dist")
-
-    def _require_species(self, *symbols: str) -> np.ndarray:
-        """Deprecated internal helper; see `vitrum.coordination._require_species`."""
-        return _require_species(self, *symbols)
 
     def set_new_chemical_symbols(self, symbol_map: dict[int, str]):
         """
@@ -114,7 +110,7 @@ class GlassAtoms(Atoms):
         self,
         center_type: str,
         neigh_types: str | list[str],
-        cutoff: float | list[float] | str = "Auto"
+        cutoff: float | dict | str = "Auto"
     ) -> list[np.ndarray]:
         """
         Deprecated. Use `Coordination([atoms]).get_angles(...)`.
@@ -123,16 +119,16 @@ class GlassAtoms(Atoms):
             center_type (str): The atomic symbol of the central atom.
             neigh_types (str | list[str]): The atomic symbol(s) of the neighbor atoms,
                 either one symbol or a list of exactly two.
-            cutoff (float | list[float] | str, optional): Range within which to calculate the
-                angular distribution. Defaults to "Auto". Can be a list of one cutoff per
-                neighbor type, or a single cutoff for both.
+            cutoff (float | dict | str, optional): Range within which to calculate the
+                angular distribution. Defaults to "Auto". Takes the same spellings as
+                `Coordination`; the two arms of a same-species angle share one cutoff.
 
         Returns:
             list[np.ndarray]: A list of arrays containing the angular distribution values.
 
         Raises:
             ValueError: If center_type or neigh_types are not present in the structure, or
-                if neigh_types or an explicit cutoff list does not have exactly two entries.
+                if neigh_types does not have exactly one or two entries.
         """
         _deprecated("GlassAtoms.get_all_angles", "Coordination([atoms]).get_angles(...)")
         return Coordination([self]).get_angles(

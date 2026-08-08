@@ -51,7 +51,7 @@ The main capabilities of `vitrum` are organized into focused modules:
 
 # Acknowledgements
 
-`vitrum` builds on ASE [@ase], pymatgen [@pymatgen], NumPy [@numpy], SciPy [@scipy], pandas [@pandas], scikit-learn [@sklearn], Numba [@numba], Matplotlib [@matplotlib], Dionysus and DioDe [@dionysus], and OVITO [@ovito]. The ring analysis implementation is adapted from `sova-cui` (<https://github.com/MotokiShiga/sova-cui>), and the approach to three-dimensional void rendering is adapted from GEMDAT [@gemdat].
+`vitrum` builds on ASE [@ase], pymatgen [@pymatgen], NumPy [@numpy], SciPy [@scipy], pandas [@pandas], Numba [@numba], Matplotlib [@matplotlib], Dionysus and DioDe [@dionysus], and OVITO [@ovito]. The ring analysis implementation is adapted from `sova-cui` (<https://github.com/MotokiShiga/sova-cui>), and the approach to three-dimensional void rendering is adapted from GEMDAT [@gemdat].
 
 <!-- TODO: add funding sources and grant numbers before submission. -->
 

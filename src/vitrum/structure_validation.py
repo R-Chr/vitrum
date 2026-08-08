@@ -92,8 +92,7 @@ def homogeneity_checker(
             z_idx[z_idx == -1] = grid_density[2] - 1
 
             counts = np.zeros(grid_density, dtype=int)
-            for xi, yi, zi in zip(x_idx, y_idx, z_idx):
-                counts[xi, yi, zi] += 1
+            np.add.at(counts, (x_idx, y_idx, z_idx), 1)
 
             too_low = counts < avg_atoms_per_box * lower_bound
             too_high = counts > avg_atoms_per_box * upper_bound

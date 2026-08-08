@@ -3,13 +3,11 @@
 import numpy as np
 import pytest
 from ase import Atoms
+from conftest import CAF2_FIRST_SHELL_CUTOFF, SI_FIRST_SHELL_CUTOFF, SI_O_CUTOFF
 
-from vitrum.coordination import Coordination
-
-# Between the 1st (2.3517 A) and 2nd (3.840 A) neighbour shells in diamond Si.
-SI_FIRST_SHELL_CUTOFF = 3.0
-# Between the 1st (2.36 A) and 2nd (2.73 A) shells in fluorite CaF2.
-CAF2_FIRST_SHELL_CUTOFF = 2.5
+from vitrum.coordination import (
+    Coordination,
+)
 
 
 def test_silicon_coordination_is_exactly_four(silicon_diamond):
@@ -35,32 +33,11 @@ def test_auto_cutoff_finds_first_shell(silicon_diamond):
     assert distribution == {4: pytest.approx(1.0)}
 
 
-def test_unexpected_cutoff_string_raises_value_error(silicon_diamond):
-    """A bad cutoff must produce a useful error, not UnboundLocalError.
-
-    The string branch matches "Auto" exactly, so anything else has to be rejected
-    explicitly rather than falling through with `cutoffs` unbound.
-    """
-    coordination = Coordination([silicon_diamond])
-    with pytest.raises(ValueError, match="Invalid cutoff"):
-        coordination.get_coordination_numbers("Si", "Si", cutoff="auto")
-
-
-def test_mismatched_cutoff_list_length_raises(silicon_diamond):
-    coordination = Coordination([silicon_diamond])
-    with pytest.raises(ValueError, match="must match"):
-        coordination.get_coordination_numbers("Si", "Si", cutoff=[2.0, 3.0])
-
-
-def test_missing_species_raises(silicon_diamond):
-    coordination = Coordination([silicon_diamond])
-    with pytest.raises(ValueError, match="not present in the structure"):
-        coordination.get_coordination_numbers("Ge", "Si", cutoff=3.0)
-
-
-def test_coordination_fractions_sum_to_one(random_gas):
-    coordination = Coordination([random_gas])
-    distribution = coordination.get_coordination_numbers("Si", "O", cutoff=4.0)
+def test_coordination_fractions_sum_to_one(sodium_silicate):
+    """A real melt has a spread of coordination numbers; the fractions still partition 1."""
+    coordination = Coordination(sodium_silicate)
+    distribution = coordination.get_coordination_numbers("Na", "O", cutoff=3.0)
+    assert len(distribution) > 1
     assert sum(distribution.values()) == pytest.approx(1.0)
 
 
@@ -196,16 +173,6 @@ def test_get_neighbors_auto_cutoff_matches_an_explicit_one(silicon_diamond):
             np.testing.assert_array_equal(a, b)
 
 
-def test_get_neighbors_rejects_bad_cutoff_type(silicon_small):
-    with pytest.raises(TypeError):
-        Coordination([silicon_small]).get_neighbors("Si", object())
-
-
-def test_get_neighbors_rejects_dict_missing_a_species(silicon_small):
-    with pytest.raises(KeyError, match="No cutoff defined"):
-        Coordination([silicon_small]).get_neighbors("Si", {"Ge": 3.0})
-
-
 @pytest.mark.parametrize(
     "call",
     [
@@ -213,10 +180,11 @@ def test_get_neighbors_rejects_dict_missing_a_species(silicon_small):
         lambda c: c.get_angles("Ge", "Si"),
         lambda c: c.get_coordination_numbers("Ge", "Si"),
         lambda c: c.get_bridging_analysis("Ge", "Si"),
+        lambda c: c.get_bonds("Ge", "Si", cutoff=3.0),
     ],
 )
 def test_absent_species_is_rejected_consistently(silicon_small, call):
-    """All four species-taking methods must reject an absent species the same way.
+    """All five species-taking methods must reject an absent species the same way.
 
     An absent species otherwise surfaces as an all-zero PDF with no first minimum, so the
     user is told the automatic cutoff search failed rather than that the species is missing.
@@ -344,11 +312,6 @@ def test_get_bonds_accepts_multi_species_selections():
     assert set(symbols[bonds.neighs].tolist()) == {"O"}
 
 
-def test_get_bonds_rejects_an_absent_species(silicon_small):
-    with pytest.raises(ValueError, match="not present in the structure"):
-        Coordination([silicon_small]).get_bonds("Ge", "Si", cutoff=3.0)
-
-
 def test_empty_atoms_list_raises():
     with pytest.raises(ValueError, match="at least one"):
         Coordination([])
@@ -375,17 +338,6 @@ def test_a_generator_of_frames_is_accepted(silicon_small):
     assert coordination.species.tolist() == ["Si"]
 
 
-@pytest.mark.parametrize(
-    "method",
-    ["get_angles", "get_coordination_numbers"],
-)
-def test_unknown_cutoff_string_is_rejected_by_every_method(silicon_small, method):
-    """Only the exact string "Auto" is a cutoff; anything else once died inside NumPy."""
-    coordination = Coordination([silicon_small])
-    with pytest.raises(ValueError, match="Invalid cutoff"):
-        getattr(coordination, method)("Si", "Si", cutoff="auto")
-
-
 def test_boolean_cutoff_is_rejected(silicon_small):
     """True is an int, and would otherwise be silently read as a 1 Angstrom cutoff."""
     coordination = Coordination([silicon_small])
@@ -402,18 +354,12 @@ def test_numpy_scalar_cutoff_is_accepted(silicon_small):
     assert distribution == {4: pytest.approx(1.0)}
 
 
-def test_angles_do_not_double_count_same_species_with_two_cutoffs():
-    """Same-species arms at two different cutoffs must not double-count a qualifying pair.
+def test_angles_do_not_double_count_same_species():
+    """A same-species pair spans one angle, counted once, not once per arm ordering.
 
-    Regression: the product branch fired whenever the two arm neighbour lists differed,
-    which happens for same-species arms as soon as the cutoffs differ, and it then counted
-    both (x, y) and (y, x) for any pair inside the smaller cutoff -- the same physical angle
-    twice.
-
-    Three O atoms sit on the axes around a central X, at 1.0, 1.3 and 1.6 A. cutoff=[2.5,
-    1.5] puts all three O within the first arm's cutoff but only the two closer ones within
-    the second's, so exactly three unordered pairs qualify: {O1, O2} (in both arms), {O1,
-    O3} and {O2, O3} (each in one arm only). The old code counted {O1, O2} twice.
+    Three O atoms sit on the axes around a central X, at 1.0, 1.3 and 1.6 A. All three are
+    inside the cutoff, so exactly three unordered pairs qualify -- {O1, O2}, {O1, O3} and
+    {O2, O3} -- not the six ordered ones.
     """
     atoms = Atoms(
         "XOOO",
@@ -422,17 +368,15 @@ def test_angles_do_not_double_count_same_species_with_two_cutoffs():
         pbc=True,
     )
     coordination = Coordination([atoms])
-    angles = coordination.get_angles("X", ["O", "O"], cutoff=[2.5, 1.5])
+    angles = coordination.get_angles("X", ["O", "O"], cutoff=2.5)
     assert len(angles[0]) == 3
 
 
-def test_angles_same_species_equal_cutoffs_are_unaffected(silicon_small):
-    """The same-species fix must not change the equal-cutoff case it used to handle."""
+def test_angles_same_species_named_once_or_twice_agree(silicon_small):
+    """Naming the species once must give what naming it for both arms gives."""
     coordination = Coordination([silicon_small])
     single = coordination.get_angles("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF)
-    two = coordination.get_angles(
-        "Si", ["Si", "Si"], cutoff=[SI_FIRST_SHELL_CUTOFF, SI_FIRST_SHELL_CUTOFF]
-    )
+    two = coordination.get_angles("Si", ["Si", "Si"], cutoff=SI_FIRST_SHELL_CUTOFF)
     np.testing.assert_array_equal(single[0], two[0])
 
 
@@ -441,3 +385,128 @@ def test_angle_distribution_with_no_angles_raises(silicon_small):
     coordination = Coordination([silicon_small])
     with pytest.raises(ValueError, match="No Si-Si-Si angles found"):
         coordination.get_angle_distribution("Si", "Si", cutoff=0.5, range=(0.0, 180.0))
+
+
+def test_fluorite_fluorine_is_bonded_to_four_calcium(fluorite_caf2):
+    """Every F in fluorite sits at the centre of a Ca tetrahedron, so the speciation of F
+    over Ca formers is entirely n=4. In the oxygen-speciation reading that is a tri-cluster
+    and then some; the point is that the count comes out of the structure, not from labels
+    fixed in the code.
+    """
+    coordination = Coordination([fluorite_caf2])
+    speciation = coordination.get_bridging_speciation(
+        "F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF
+    )
+    assert speciation == {4: pytest.approx(1.0)}
+
+
+def test_bridging_speciation_counts_every_bridge_atom(fluorite_caf2):
+    """per_atom gives one entry per bridge atom in the frame, not per former."""
+    coordination = Coordination([fluorite_caf2])
+    per_atom = coordination.get_bridging_speciation(
+        "F", ["Ca"], cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
+    )
+    n_fluorine = sum(1 for s in fluorite_caf2.get_chemical_symbols() if s == "F")
+    assert len(per_atom) == 1
+    assert per_atom[0].shape == (n_fluorine,)
+
+
+def test_bridging_speciation_agrees_with_bridging_analysis(fluorite_caf2):
+    """The two are the same count read from opposite ends: the number of Ca-F bonds
+    counted per F must equal the number counted per Ca.
+    """
+    coordination = Coordination([fluorite_caf2])
+    per_bridge = coordination.get_bridging_speciation(
+        "F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
+    )
+    per_former = coordination.get_coordination_numbers(
+        "Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
+    )
+    assert per_bridge[0].sum() == per_former[0].sum()
+
+
+def test_bridging_speciation_needs_a_former(silicon_small):
+    with pytest.raises(ValueError, match="at least one network former"):
+        Coordination([silicon_small]).get_bridging_speciation("Si", [])
+
+
+def test_sin_normalisation_divides_out_exactly_sin_theta(sodium_silicate):
+    """The two conventions must differ by sin(theta) and a constant, and both must still
+    integrate to 1. A disordered structure is needed: a perfect crystal has one angle, and
+    rescaling a single spike leaves it unchanged. The O-Si-O angles of a real melt are
+    spread around the tetrahedral value, which is exactly the case the weighting is for.
+    """
+    coordination = Coordination(sodium_silicate)
+    angles, plain = coordination.get_angle_distribution(
+        "Si", "O", cutoff=SI_O_CUTOFF, range=(0.0, 180.0)
+    )
+    _, normalised = coordination.get_angle_distribution(
+        "Si", "O", cutoff=SI_O_CUTOFF, range=(0.0, 180.0), sin_normalised=True
+    )
+    assert np.trapezoid(plain, angles) == pytest.approx(1.0)
+    assert np.trapezoid(normalised, angles) == pytest.approx(1.0)
+    assert not np.allclose(plain, normalised)
+    assert np.all(np.isfinite(normalised))
+
+    populated = plain > 0
+    ratio = plain[populated] / (normalised[populated] * np.sin(np.radians(angles[populated])))
+    np.testing.assert_allclose(ratio, ratio[0], rtol=1e-10)
+
+
+def test_sin_normalisation_rejects_a_range_outside_the_angle_domain(sodium_silicate):
+    """Past 180 degrees the solid-angle weight is <= 0, so every bin is zeroed and the
+    density comes back NaN from a division by a zero total.
+    """
+    with pytest.raises(ValueError, match="sin_normalised"):
+        Coordination(sodium_silicate).get_angle_distribution(
+            "Si", "O", cutoff=SI_O_CUTOFF, range=(180.0, 200.0), sin_normalised=True
+        )
+
+
+def test_get_bonds_rejects_a_multi_species_selection_with_differing_cutoffs(fluorite_caf2):
+    """Only the first species pair used to reach the resolver, so the rest of the dict was
+    dropped and every bond silently measured at the Ca-F cutoff.
+    """
+    with pytest.raises(ValueError, match="one cutoff"):
+        Coordination([fluorite_caf2]).get_bonds(
+            ["Ca", "F"], "F", cutoff={("Ca", "F"): 2.5, ("F", "F"): 3.5}
+        )
+
+
+def test_get_coordination_numbers_ignores_a_repeated_neighbour(fluorite_caf2):
+    """A species named twice must contribute its bonds once, not double every count."""
+    coordination = Coordination([fluorite_caf2])
+    once = coordination.get_coordination_numbers("Ca", "F", CAF2_FIRST_SHELL_CUTOFF)
+    twice = coordination.get_coordination_numbers("Ca", ["F", "F"], CAF2_FIRST_SHELL_CUTOFF)
+    assert once == twice == {8: pytest.approx(1.0)}
+
+
+def test_get_angles_per_atom_keeps_one_entry_per_centre(silicon_small):
+    """The arrays are indexed back to the frame's atoms, so a centre with no qualifying
+    pair has to hold an empty array rather than drop out of the list.
+    """
+    coordination = Coordination([silicon_small])
+    per_atom = coordination.get_angles("Si", "Si", cutoff=0.5, per_atom=True)[0]
+    assert len(per_atom) == len(silicon_small)
+    assert all(angles.size == 0 for angles in per_atom)
+
+
+def test_cutoff_frame_chooses_which_frame_auto_is_measured_from(silicon_diamond):
+    """Frame 0 of a trajectory is often the starting configuration, whose PDF minima need
+    not be the equilibrated structure's.
+    """
+    stretched = silicon_diamond.copy()
+    stretched.set_cell(stretched.get_cell() * 1.6, scale_atoms=True)
+    frames = [silicon_diamond, stretched]
+
+    from_first = Coordination(frames).get_coordination_numbers("Si", "Si", per_atom=True)[0]
+    from_last = Coordination(frames, cutoff_frame=-1).get_coordination_numbers(
+        "Si", "Si", per_atom=True
+    )[0]
+    assert from_first.tolist() == [4] * len(silicon_diamond)
+    assert np.all(from_last > from_first)
+
+
+def test_cutoff_frame_out_of_range_is_rejected(silicon_small):
+    with pytest.raises(IndexError, match="cutoff_frame"):
+        Coordination([silicon_small], cutoff_frame=1)

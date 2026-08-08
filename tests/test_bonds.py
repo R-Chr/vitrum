@@ -11,11 +11,14 @@ import numpy as np
 import pytest
 from ase import Atoms
 from ase.geometry import find_mic
+from conftest import (
+    CAF2_FIRST_SHELL_CUTOFF,
+    SI_FIRST_SHELL_CUTOFF,
+    SI_NN_DISTANCE,
+    SI_O_CUTOFF,
+)
 
 from vitrum.bonds import Bonds, _Frame, _neighbor_list_bonds
-
-SI_FIRST_SHELL_CUTOFF = 3.0
-CAF2_FIRST_SHELL_CUTOFF = 2.5
 
 
 def _kd_bonds(atoms, center_type, neigh_type, cutoff):
@@ -76,10 +79,12 @@ def test_neighbor_list_matches_brute_force_on_fluorite(fluorite_caf2, center, ne
     )
 
 
-def test_neighbor_list_matches_brute_force_on_a_disordered_structure(random_gas):
-    bonds = _kd_bonds(random_gas, "Si", "O", 4.0)
+def test_neighbor_list_matches_brute_force_on_a_disordered_structure(sodium_silicate_frame):
+    """The same reference on a real melt: 3000 atoms, no symmetry to hide a mistake behind."""
+    bonds = _kd_bonds(sodium_silicate_frame, "Si", "O", SI_O_CUTOFF)
     np.testing.assert_array_equal(
-        bonds.counts(), _brute_force_counts(random_gas, bonds.centers, bonds.neighs, 4.0)
+        bonds.counts(),
+        _brute_force_counts(sodium_silicate_frame, bonds.centers, bonds.neighs, SI_O_CUTOFF),
     )
 
 
@@ -163,15 +168,6 @@ def test_counts_and_degrees_are_the_two_margins(silicon_small):
     assert set(bonds.counts().tolist()) == {4}
 
 
-def test_lists_and_matrix_describe_the_same_adjacency(fluorite_caf2):
-    bonds = _Frame(fluorite_caf2).bonds("Ca", "F", CAF2_FIRST_SHELL_CUTOFF)
-    matrix = bonds.matrix()
-    assert matrix.shape == (len(bonds.centers), len(bonds.neighs))
-    np.testing.assert_array_equal(matrix.sum(axis=1), bonds.counts())
-    for row, entry in zip(matrix, bonds.lists()):
-        np.testing.assert_array_equal(bonds.neighs[row], entry)
-
-
 def test_lists_returns_global_indices(fluorite_caf2):
     bonds = _Frame(fluorite_caf2).bonds("Ca", "F", CAF2_FIRST_SHELL_CUTOFF)
     symbols = np.array(fluorite_caf2.get_chemical_symbols())
@@ -179,26 +175,23 @@ def test_lists_returns_global_indices(fluorite_caf2):
         assert set(symbols[entry].tolist()) == {"F"}
 
 
-def test_neighbors_of_agrees_with_lists(silicon_small):
-    bonds = _Frame(silicon_small).bonds("Si", "Si", SI_FIRST_SHELL_CUTOFF)
-    for i, entry in enumerate(bonds.lists()):
-        np.testing.assert_array_equal(bonds.neighbors_of(i), entry)
-
-
 def test_select_neighs_drops_only_the_failing_neighbours(fluorite_caf2):
     bonds = _Frame(fluorite_caf2).bonds("Ca", "F", CAF2_FIRST_SHELL_CUTOFF)
     keep = np.zeros(len(bonds.neighs), dtype=bool)
     keep[: len(keep) // 2] = True
     kept = bonds.select_neighs(keep)
-    np.testing.assert_array_equal(kept.matrix(), bonds.matrix() & keep)
+    for before, after in zip(bonds.lists(), kept.lists()):
+        # `neighs` is sorted and every list is a sorted subset of it, so searchsorted
+        # maps each global index back to its flag.
+        np.testing.assert_array_equal(after, before[keep[np.searchsorted(bonds.neighs, before)]])
     assert len(kept) < len(bonds)
 
 
 def test_an_atom_is_never_bonded_to_itself(silicon_small):
     """The two selections overlap for a like pair, so the diagonal has to be excluded."""
     bonds = _Frame(silicon_small).bonds("Si", "Si", SI_FIRST_SHELL_CUTOFF)
-    for i, centre in enumerate(bonds.centers):
-        assert centre not in bonds.neighbors_of(i)
+    for centre, entry in zip(bonds.centers, bonds.lists()):
+        assert centre not in entry
 
 
 def test_absent_species_gives_an_empty_selection(silicon_small):
@@ -222,3 +215,29 @@ def test_index_deduplicates_a_repeated_species(silicon_small):
 def test_frame_reports_absent_species(silicon_small):
     with pytest.raises(ValueError, match="not present in the structure"):
         _Frame(silicon_small).require("Ge")
+
+
+def test_lengths_recover_the_silicon_bond_length(silicon_small):
+    """Every first-shell bond in diamond silicon is a*sqrt(3)/4 long, PBC or not."""
+    bonds = _Frame(silicon_small).bonds("Si", "Si", SI_FIRST_SHELL_CUTOFF)
+    lengths = bonds.lengths(silicon_small)
+    assert len(lengths) == len(bonds)
+    np.testing.assert_allclose(lengths, SI_NN_DISTANCE, rtol=1e-10)
+
+
+@pytest.mark.parametrize("cutoff", [2.5, 4.2, 6.0])
+def test_lengths_match_find_mic(silicon_small, cutoff):
+    """The offsets must name the same image `find_mic` picks, at any cutoff."""
+    bonds = _Frame(silicon_small).bonds("Si", "Si", cutoff)
+    positions = silicon_small.get_positions()
+    expected = find_mic(
+        positions[bonds.neighs[bonds.col]] - positions[bonds.centers[bonds.row]],
+        silicon_small.get_cell(),
+        pbc=True,
+    )[1]
+    np.testing.assert_allclose(bonds.lengths(silicon_small), expected, atol=1e-10)
+
+
+def test_lengths_of_no_bonds_is_empty(silicon_small):
+    bonds = _Frame(silicon_small).bonds("Si", "Si", 0.5)
+    assert bonds.lengths(silicon_small).shape == (0,)

@@ -6,6 +6,7 @@ backends must agree, since they are two implementations of the same quantity.
 
 import numpy as np
 import pytest
+from conftest import SI_NN_DISTANCE, SI_O_CUTOFF
 
 from vitrum.scattering import Scattering, gaussian_broadening
 
@@ -31,19 +32,25 @@ def test_broadening_leaves_the_asymptote_alone():
     np.testing.assert_allclose(np.interp([2.0, 5.0, 9.0], r, broadened), 1.0, atol=1e-6)
 
 
-def test_untabulated_neutron_scattering_length_names_the_element(random_gas):
+def test_untabulated_neutron_scattering_length_names_the_element(silicon_small):
     """A missing scattering length must say which element, not fail inside numpy."""
-    thorium = random_gas.copy()
+    thorium = silicon_small.copy()
     thorium.symbols = ["Th"] * len(thorium)
     with pytest.raises(ValueError, match="Th"):
         Scattering(thorium, disable_progress=True)
 
 
+# The neighbourhood backend costs ~30x the dense one on 3000 atoms, and grows as rrange^3.
+# Backend agreement is a per-frame, per-bin property, so one frame over the first few
+# coordination shells shows any disagreement that a longer range would.
+BACKEND_COMPARISON = dict(rrange=8.0, nbin=800, disable_progress=True)
+
+
 @pytest.fixture(scope="module")
-def scattering_pair(random_gas):
-    """The same structure analysed with both PDF backends."""
-    full = Scattering(random_gas, disable_progress=True, use_neighborhood=False)
-    neigh = Scattering(random_gas, disable_progress=True, use_neighborhood=True)
+def scattering_pair(sodium_silicate_frame):
+    """One frame of the melt analysed with both PDF backends."""
+    full = Scattering(sodium_silicate_frame, use_neighborhood=False, **BACKEND_COMPARISON)
+    neigh = Scattering(sodium_silicate_frame, use_neighborhood=True, **BACKEND_COMPARISON)
     return full, neigh
 
 
@@ -83,16 +90,16 @@ def test_cross_pairs_are_symmetric(scattering_pair):
         )
 
 
-@pytest.mark.parametrize("use_neighborhood", [False, True])
-def test_partial_pdf_tends_to_unity(random_gas, use_neighborhood):
-    """g(r) -> 1 at large r for a structure with no long-range correlation.
+def test_partial_pdf_tends_to_unity(sodium_silicate):
+    """g(r) -> 1 at large r, which is what a glass does and a crystal never does.
 
     This pins the normalisation: using N_a^2 rather than N_a*(N_a - 1) for like
-    pairs makes the tail settle at (N_a - 1)/N_a instead of 1.
+    pairs makes the tail settle at (N_a - 1)/N_a instead of 1. Only the dense backend
+    is run: the tail needs the full L/2 range, which is expensive on the neighbourhood
+    path, and `test_neighborhood_matches_full_matrix_per_pair` already pins that one to
+    this one bin by bin.
     """
-    scattering = Scattering(
-        random_gas, disable_progress=True, use_neighborhood=use_neighborhood
-    )
+    scattering = Scattering(sodium_silicate, disable_progress=True)
     for pair in scattering.pairs:
         tail = scattering.get_partial_pdf(pair)[-100:].mean()
         assert tail == pytest.approx(1.0, abs=0.03), f"{pair} tail g(r) = {tail}"
@@ -128,26 +135,27 @@ def test_partial_pdf_matches_independent_reference(silicon_small, use_neighborho
     )
 
 
-def test_structure_factor_tends_to_unity(random_gas):
+def test_structure_factor_tends_to_unity(sodium_silicate):
     """S(Q) -> 1 at high Q."""
-    scattering = Scattering(random_gas, disable_progress=True)
+    scattering = Scattering(sodium_silicate, disable_progress=True)
     tail = scattering.get_structure_factor()[-100:].mean()
     assert tail == pytest.approx(1.0, abs=0.05)
 
 
-def test_multi_frame_uses_per_frame_cell(random_gas):
+def test_multi_frame_uses_per_frame_cell(sodium_silicate):
     """Both backends must use each frame's own volume and symbols, not frame 0's.
 
-    The two frames differ only by a 5% cell scaling, so a backend reading the cached
-    self.volume or self.chemical_symbols instead of the frame's own shows up as a
-    disagreement between the backends.
+    Two genuinely different configurations from the melt, with the second one's cell
+    scaled by 5% on top. A backend reading the cached self.volume or
+    self.chemical_symbols instead of the frame's own shows up as a disagreement between
+    the backends.
     """
-    frame_a = random_gas.copy()
-    frame_b = random_gas.copy()
+    frame_a = sodium_silicate[0].copy()
+    frame_b = sodium_silicate[-1].copy()
     frame_b.set_cell(np.array(frame_b.get_cell()) * 1.05, scale_atoms=True)
 
-    full = Scattering([frame_a, frame_b], disable_progress=True, use_neighborhood=False)
-    neigh = Scattering([frame_a, frame_b], disable_progress=True, use_neighborhood=True)
+    full = Scattering([frame_a, frame_b], use_neighborhood=False, **BACKEND_COMPARISON)
+    neigh = Scattering([frame_a, frame_b], use_neighborhood=True, **BACKEND_COMPARISON)
 
     for pair in full.pairs:
         np.testing.assert_allclose(
@@ -157,23 +165,74 @@ def test_multi_frame_uses_per_frame_cell(random_gas):
         )
 
 
-def test_xray_rdf_raises_not_implemented(random_gas):
-    """The unimplemented x-ray RDF must raise, not return an array of zeros."""
-    scattering = Scattering(random_gas, disable_progress=True)
-    with pytest.raises(NotImplementedError, match="not implemented"):
-        scattering.get_total_rdf(type="xray")
+def test_xray_rdf_matches_the_q_space_transform(sodium_silicate_frame):
+    """G^X(r) must be the Fourier partner of the x-ray S(Q) the class already computes.
+
+    Keen eq 58, G^X(r) = (1 / (2 pi^2 rho_0 r)) Integral[ Q (S(Q) - 1) sin(Qr) dQ ], is
+    written out here and shares no code with the r-space path, so agreement pins the kernel
+    normalisation and the odd extension of r*(g-1). qmin is 0 to cover exactly the [0, qmax]
+    range the truncated eq 61 kernel is built from.
+    """
+    scattering = Scattering(sodium_silicate_frame, qmin=0.0, qmax=25.0, disable_progress=True)
+    q, r = scattering.qval, scattering.xval
+
+    f_q = q * (scattering.get_structure_factor(type="xray") - 1.0)
+    from_q_space = np.trapezoid(f_q * np.sin(np.outer(r, q)), q) / (2 * np.pi**2 * scattering.aveden * r)
+
+    from_r_space = scattering.get_total_rdf(type="xray") - 1.0
+    # Not masking r below the first bond: a misnormalised kernel shows up there first.
+    np.testing.assert_allclose(from_r_space, from_q_space, atol=0.02)
 
 
-def test_approx_xray_rdf_works(random_gas):
+def test_lorch_suppresses_the_truncation_ripple(sodium_silicate_frame):
+    """Below the shortest bond the true G'(r) is 0, so anything there is truncation ripple."""
+    scattering = Scattering(sodium_silicate_frame, qmax=25.0, disable_progress=True)
+    below_first_bond = scattering.xval < 1.4
+
+    plain = scattering.get_total_rdf(type="xray")
+    lorched = scattering.get_total_rdf(type="xray", lorch=True)
+
+    ripple = np.sqrt(np.mean(lorched[below_first_bond] ** 2))
+    assert ripple < 0.15
+    assert ripple < np.sqrt(np.mean(plain[below_first_bond] ** 2)) / 10
+
+    # SI_O_CUTOFF is past the Si-O bond and short of any second shell.
+    peak_r = scattering.xval[np.argmax(lorched[scattering.xval < SI_O_CUTOFF])]
+    assert peak_r == pytest.approx(1.60, abs=0.05)
+
+    # Broadening genuine features is the price, so the peak must survive rather than vanish.
+    assert lorched.max() > 1.5
+    assert lorched[-100:].mean() == pytest.approx(1.0, abs=0.05)
+
+
+@pytest.mark.parametrize("type", ["neutron", "approx_xray"])
+def test_lorch_rejected_where_there_is_no_transform(sodium_silicate_frame, type):
+    scattering = Scattering(sodium_silicate_frame, disable_progress=True)
+    with pytest.raises(ValueError, match="lorch"):
+        scattering.get_total_rdf(type=type, lorch=True)
+
+
+def test_xray_rdf_is_not_the_atomic_number_approximation(sodium_silicate_frame):
+    """approx_xray weights by Z_i = f_i(0); agreement would mean f_i was evaluated at one Q."""
+    scattering = Scattering(sodium_silicate_frame, disable_progress=True)
+    xray = scattering.get_total_rdf(type="xray")
+    assert xray.shape == (scattering.nbin,)
+    assert np.all(np.isfinite(xray))
+    # g_ij(r) -> 1 for every pair, so every weighting scheme shares the same asymptote.
+    assert xray[-100:].mean() == pytest.approx(1.0, abs=0.05)
+    assert not np.allclose(xray, scattering.get_total_rdf(type="approx_xray"), atol=0.05)
+
+
+def test_approx_xray_rdf_works(sodium_silicate_frame):
     """The approximate x-ray weighting is implemented and must still work."""
-    scattering = Scattering(random_gas, disable_progress=True)
+    scattering = Scattering(sodium_silicate_frame, disable_progress=True)
     rdf = scattering.get_total_rdf(type="approx_xray")
     assert rdf.shape == (scattering.nbin,)
     assert rdf[-100:].mean() == pytest.approx(1.0, abs=0.05)
 
 
-def test_invalid_rdf_type_raises(random_gas):
-    scattering = Scattering(random_gas, disable_progress=True)
+def test_invalid_rdf_type_raises(sodium_silicate_frame):
+    scattering = Scattering(sodium_silicate_frame, disable_progress=True)
     with pytest.raises(ValueError):
         scattering.get_total_rdf(type="not-a-type")
 
@@ -189,16 +248,14 @@ def test_silicon_first_peak_at_nn_distance(silicon_diamond):
     Only the first shell is considered: the 12-neighbour second shell at 3.840 A is
     actually the taller peak in g(r), so a global argmax would find that instead.
     """
-    si_nn_distance = 5.431 * np.sqrt(3) / 4
-
     scattering = Scattering(silicon_diamond, disable_progress=True)
     pdf = scattering.get_partial_pdf(("Si", "Si"))
     first_shell = scattering.xval < 3.0
     peak_r = scattering.xval[first_shell][np.argmax(pdf[first_shell])]
-    assert peak_r == pytest.approx(si_nn_distance, abs=0.05)
+    assert peak_r == pytest.approx(SI_NN_DISTANCE, abs=0.05)
 
     # There must be nothing at all below the nearest-neighbour distance.
-    assert np.all(pdf[scattering.xval < si_nn_distance - 0.1] == 0.0)
+    assert np.all(pdf[scattering.xval < SI_NN_DISTANCE - 0.1] == 0.0)
 
 
 def test_running_coordination_uses_neighbour_density(fluorite_caf2):
@@ -219,14 +276,14 @@ def test_running_coordination_uses_neighbour_density(fluorite_caf2):
     assert scattering.get_N_running(("Ca", "Ca"))[shell] == pytest.approx(0.0, abs=1e-9)
 
 
-def test_average_density_is_trajectory_average(random_gas):
+def test_average_density_is_trajectory_average(sodium_silicate_frame):
     """volume and aveden must average over frames, not snapshot frame 0.
 
     They feed get_N_running, the structure factors and the reduced PDFs, all of which
     would otherwise be normalised with the first frame's cell for an NPT trajectory.
     """
-    frame_a = random_gas.copy()
-    frame_b = random_gas.copy()
+    frame_a = sodium_silicate_frame.copy()
+    frame_b = sodium_silicate_frame.copy()
     frame_b.set_cell(np.array(frame_b.get_cell()) * 1.05, scale_atoms=True)
 
     scattering = Scattering([frame_a, frame_b], disable_progress=True)
@@ -240,10 +297,10 @@ def test_average_density_is_trajectory_average(random_gas):
     assert scattering.aveden != pytest.approx(len(frame_a) / frame_a.get_volume())
 
 
-def test_varying_composition_is_rejected(random_gas):
+def test_varying_composition_is_rejected(sodium_silicate_frame):
     """Species counts are read from frame 0, so a changing composition must not be silent."""
-    frame_a = random_gas.copy()
-    frame_b = random_gas.copy()
+    frame_a = sodium_silicate_frame.copy()
+    frame_b = sodium_silicate_frame.copy()
     frame_b.symbols[0] = "O" if frame_b.symbols[0] == "Si" else "Si"
 
     with pytest.raises(ValueError, match="composition"):

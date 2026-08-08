@@ -8,35 +8,56 @@ import numpy as np
 import pytest
 
 from vitrum.comparison import r_chi
-from vitrum.io_helpers import correct_atom_types, get_density
+from vitrum.io_helpers import correct_atom_types, get_LAMMPS_dump_timesteps, get_density
 from vitrum.scattering import Scattering
 
 
-def test_weighted_partial_structure_factors_returns_dict(random_gas):
+@pytest.mark.parametrize(
+    "dump, expected",
+    [
+        ("ITEM: TIMESTEP\n0\nITEM: NUMBER OF ATOMS\n2\nITEM: TIMESTEP\n1000\n", [0, 1000]),
+        ("ITEM: TIMESTEP\n7", [7]),  # no trailing newline
+        ("ITEM: TIMESTEP\n0\nITEM: TIMESTEP\n", [0]),  # truncated on the header
+        ("junk\nmore junk\n", []),
+        ("", []),
+    ],
+)
+def test_lammps_dump_timesteps(tmp_path, dump, expected):
+    """The header line is skipped and the line after it is the timestep."""
+    path = tmp_path / "md.lammpstrj"
+    path.write_text(dump, encoding="utf-8")
+    assert get_LAMMPS_dump_timesteps(str(path)) == expected
+
+
+@pytest.fixture(scope="module")
+def glass_scattering(sodium_silicate_frame):
+    return Scattering(sodium_silicate_frame, disable_progress=True)
+
+
+def test_weighted_partial_structure_factors_returns_dict(glass_scattering):
     """Documented and annotated as a dict of label -> W_ij * S_ij(Q)."""
-    scattering = Scattering(random_gas, disable_progress=True)
-    result = scattering.get_weighted_partial_structure_factors()
+    result = glass_scattering.get_weighted_partial_structure_factors()
     assert isinstance(result, dict)
-    assert set(result) == {"O-O", "O-Si", "Si-Si"}
+    # Three species give the six unordered pairs.
+    assert set(result) == {"Na-Na", "Na-O", "Na-Si", "O-O", "O-Si", "Si-Si"}
     for value in result.values():
         assert isinstance(value, np.ndarray)
-        assert value.shape == (scattering.nbin,)
+        assert value.shape == (glass_scattering.nbin,)
 
 
-def test_weighted_partials_sum_to_total_structure_factor(random_gas):
-    """The docstring claims the weighted partials sum to the total S(Q)."""
-    scattering = Scattering(random_gas, disable_progress=True)
-    partials = scattering.get_weighted_partial_structure_factors(type="neutron")
-    total = sum(partials.values())
+@pytest.mark.parametrize("type", ["neutron", "xray", "approx_xray"])
+def test_weighted_partials_sum_to_total_for_every_weighting(glass_scattering, type):
+    """xray weights are Q-dependent arrays, so a wrong summation axis in the normalisation
+    would still return a plausibly shaped S(Q)."""
+    partials = glass_scattering.get_weighted_partial_structure_factors(type=type)
     np.testing.assert_allclose(
-        total, scattering.get_structure_factor(type="neutron"), rtol=1e-6
+        sum(partials.values()), glass_scattering.get_structure_factor(type=type), rtol=1e-6
     )
 
 
-def test_weighted_partials_rejects_bad_type(random_gas):
-    scattering = Scattering(random_gas, disable_progress=True)
-    with pytest.raises(ValueError):
-        scattering.get_weighted_partial_structure_factors(type="approx_xray")
+def test_weighted_partials_rejects_bad_type(glass_scattering):
+    with pytest.raises(ValueError, match="Invalid type"):
+        glass_scattering.get_weighted_partial_structure_factors(type="not-a-type")
 
 
 def test_correct_atom_types_mutates_in_place_and_returns_none(silicon_small):

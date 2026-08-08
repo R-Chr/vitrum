@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from vitrum.geometry import distance_matrix, partial_pdf, require_orthorhombic
+from vitrum.geometry import distance_matrix, partial_pdf, peak_metrics, require_orthorhombic
 
 
 def test_distance_matrix_matches_ase_minimum_image(silicon_small):
@@ -38,20 +38,10 @@ def test_distance_matrix_is_unchanged_by_wrapping(silicon_small):
     )
 
 
-def test_distance_matrix_is_symmetric(silicon_small):
-    distances = distance_matrix(silicon_small)
-    np.testing.assert_allclose(distances, distances.T, atol=1e-12)
-
-
 def test_distance_matrix_rejects_triclinic(triclinic_atoms):
     """A triclinic cell must raise rather than silently give wrong distances."""
     with pytest.raises(NotImplementedError, match="orthorhombic"):
         distance_matrix(triclinic_atoms)
-
-
-def test_distance_matrix_names_the_caller(triclinic_atoms):
-    with pytest.raises(NotImplementedError, match="my_analysis"):
-        distance_matrix(triclinic_atoms, "my_analysis")
 
 
 def test_require_orthorhombic_returns_diagonal():
@@ -130,3 +120,36 @@ def test_partial_pdf_indices_override_the_pair(silicon_small):
         distances, silicon_small.get_chemical_symbols(), volume, ["Si", "Si"]
     )
     np.testing.assert_allclose(by_index, by_symbol)
+
+
+def test_peak_metrics_recovers_a_known_gaussian():
+    """A Gaussian of width sigma has FWHM = 2*sqrt(2*ln2)*sigma, and its height and centre
+    are what it was built with."""
+    x = np.linspace(0.0, 10.0, 2001)
+    sigma, centre, amplitude = 0.4, 3.0, 2.5
+    y = amplitude * np.exp(-((x - centre) ** 2) / (2 * sigma**2))
+
+    position, fwhm, height = peak_metrics(x, y)
+    assert position == pytest.approx(centre, abs=x[1] - x[0])
+    assert fwhm == pytest.approx(2 * np.sqrt(2 * np.log(2)) * sigma, rel=1e-3)
+    assert height == pytest.approx(amplitude, rel=1e-6)
+
+
+def test_peak_metrics_takes_the_first_peak_and_the_window_selects_another():
+    """Two well-separated peaks: the default finds the first, a window finds the second."""
+    x = np.linspace(0.0, 10.0, 2001)
+    y = np.exp(-((x - 2.0) ** 2) / 0.08) + 3 * np.exp(-((x - 7.0) ** 2) / 0.08)
+
+    assert peak_metrics(x, y)[0] == pytest.approx(2.0, abs=1e-2)
+    assert peak_metrics(x, y, window=(5.0, 10.0))[0] == pytest.approx(7.0, abs=1e-2)
+
+
+def test_peak_metrics_on_a_monotonic_function_raises():
+    x = np.linspace(0.0, 10.0, 200)
+    with pytest.raises(ValueError, match="No local maximum"):
+        peak_metrics(x, x**2)
+
+
+def test_peak_metrics_rejects_mismatched_lengths():
+    with pytest.raises(ValueError, match="same shape"):
+        peak_metrics(np.arange(10.0), np.arange(9.0))

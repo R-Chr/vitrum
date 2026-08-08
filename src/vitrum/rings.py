@@ -7,12 +7,12 @@ from ase import Atoms
 from ase.data import covalent_radii
 from ase.geometry import find_mic
 from ase.io import write
-from ase.neighborlist import NeighborList
+from ase.neighborlist import NeighborList, neighbor_list
 from ase.symbols import symbols2numbers
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import dijkstra
 
-from vitrum.bonds import _Frame, graph_edges
+from vitrum.bonds import _Frame
 from vitrum.coordination import Cutoff, _resolve_cutoffs
 
 
@@ -290,7 +290,7 @@ def _find_guttman_rings(
     adj = _adjacency_lists(d)
     hop_limit = limit - 1 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
-    stats = {"deepened": 0, "truncated": 0, "exhausted": 0}
+    stats = Counter()
     for i in range(len_ats):
         for j in adj[i]:
             j = int(j)
@@ -300,8 +300,7 @@ def _find_guttman_rings(
                 adj, offsets, i, j, [], hop_limit, banned_edge=(i, j)
             )
             rings.extend(found)
-            for key, value in flags.items():
-                stats[key] += value
+            stats.update(flags)
     return rings, stats
 
 
@@ -322,7 +321,7 @@ def _find_king_rings(
     adj = _adjacency_lists(d)
     hop_limit = limit - 2 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
-    stats = {"deepened": 0, "truncated": 0, "exhausted": 0}
+    stats = Counter()
     for c in range(len_ats):
         shell = {int(n) for n in adj[c]} - {c}
         neighbors = sorted(shell)
@@ -335,8 +334,7 @@ def _find_king_rings(
                     adj, offsets, n1, n2, [c], hop_limit, banned_nodes=frozenset(banned)
                 )
                 rings.extend(found)
-                for key, value in flags.items():
-                    stats[key] += value
+                stats.update(flags)
     return rings, stats
 
 
@@ -378,7 +376,7 @@ def _find_primitive_rings(
     max_size = int(limit) if np.isfinite(limit) else d.shape[0]
     kmax = max_size // 2
 
-    stats = {"deepened": 0, "truncated": 0, "exhausted": 0, "wrapped": 0}
+    stats = Counter()
     candidates: dict[tuple[int, ...], list[int]] = {}
     for root in range(len_ats):
         dist = _bfs_levels(adj, root, kmax)
@@ -536,10 +534,11 @@ def find_rings(
         pairs = list(bonds) if bonds is not None else list(
             itertools.combinations_with_replacement(frame.species.tolist(), 2)
         )
-        resolved = _resolve_cutoffs(frame, pairs, cutoff, positional=False)
-        pair_cutoffs = dict(zip(pairs, resolved))
+        resolved = _resolve_cutoffs(frame, pairs, cutoff)
+        # A pair absent from the dict is not searched; key order does not matter.
+        pair_cutoffs = {pair: float(c) for pair, c in zip(pairs, resolved)}
 
-        i_arr, j_arr, d_arr, s_arr = graph_edges(s, pair_cutoffs)
+        i_arr, j_arr, d_arr, s_arr = neighbor_list("ijdS", s, pair_cutoffs)
         for i, j, r, o in zip(i_arr.tolist(), j_arr.tolist(), d_arr.tolist(), s_arr):
             if i == j or (i, j) in all_offsets:
                 n_ambiguous += 1
@@ -603,7 +602,7 @@ def find_rings(
             f'{_MAX_DEGENERATE_PATHS} equally short paths and may have missed rings. '
             'Lower `limit` to bound the search.'
         )
-    if stats.get("wrapped"):
+    if stats["wrapped"]:
         warnings.warn(
             f'{stats["wrapped"]} primitive ring candidate(s) wrap around the periodic cell '
             'and were discarded. Consider increasing `repeat`.'
@@ -687,14 +686,9 @@ class Ring:
         self.atoms = atoms
         self.indexes = indexes
         self._unwrapped_positions_cache = None
-        self._roundness = None
-        self._roughness = None
         self.ellipsoid_lengths = None
         self._principal_axes = None
         self._ellipse_axes_cache = None
-        self.atom_symbols = np.array(self.atoms.get_chemical_symbols())
-        self.atom_types = np.unique(self.atom_symbols).tolist()
-        self.atom_ids = {atom_type: np.where(self.atom_symbols == atom_type)[0] for atom_type in self.atom_types}
 
     def _unwrapped_positions(self) -> np.ndarray:
         """
@@ -778,9 +772,7 @@ class Ring:
         """
         if self.ellipsoid_lengths is None:
             self._compute_ellipsoid()
-        if self._roundness is None:
-            self._roundness = self.ellipsoid_lengths[1] / self.ellipsoid_lengths[0]
-        return self._roundness
+        return self.ellipsoid_lengths[1] / self.ellipsoid_lengths[0]
 
     def roughness(self) -> float:
         """
@@ -793,9 +785,7 @@ class Ring:
         """
         if self.ellipsoid_lengths is None:
             self._compute_ellipsoid()
-        if self._roughness is None:
-            self._roughness = self.ellipsoid_lengths[2] / np.sqrt(self.ellipsoid_lengths[0] * self.ellipsoid_lengths[1])
-        return self._roughness
+        return self.ellipsoid_lengths[2] / np.sqrt(self.ellipsoid_lengths[0] * self.ellipsoid_lengths[1])
 
     def radius_of_gyration(self) -> float:
         """
@@ -916,14 +906,8 @@ class RingAnalysis:
             included_atoms (List[str]): A list of strings representing the chemical symbols of the atoms to include in the analysis.
             bonding_dict (Optional[List[Tuple[str, str]]]): A list of allowed bonds, e.g., [('Si', 'O')].
         """
-        super().__init__()
         self.bonding_dict = bonding_dict
-        atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
-        self.atoms = atoms
-        self.num_atoms = len(self.atoms)
-        self.atom_symbols = np.array(self.atoms.get_chemical_symbols())
-        self.atom_types = np.unique(self.atom_symbols).tolist()
-        self.atom_ids = [np.where(self.atom_symbols == atom_type)[0] for atom_type in self.atom_types]
+        self.atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
         self.rings = None
 
 

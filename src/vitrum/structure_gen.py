@@ -34,11 +34,11 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-import tqdm
 from pymatgen.core import Composition, Element
 from scipy.stats.qmc import LatinHypercube, Sobol
+from tqdm import tqdm
 
-from vitrum.io_helpers import formula_unit, parse_composition
+from vitrum.io_helpers import formula_unit
 from vitrum.packing import get_random_packed
 
 # ---------------------------------------------------------------------------
@@ -79,11 +79,8 @@ class Compositions:
 
     @staticmethod
     def _units_to_composition(unit_fracs):
-        comps = [parse_composition(u) * f for u, f in unit_fracs.items()]
-        total = comps[0]
-        for c in comps[1:]:
-            total += c
-        return total
+        comps = [Composition(u) * f for u, f in unit_fracs.items()]
+        return sum(comps[1:], start=comps[0])
 
     def to_pymatgen(self):
         """Convert the sampled rows to pymatgen ``Composition`` objects.
@@ -140,7 +137,8 @@ class Compositions:
             list: ASE ``Atoms`` or pymatgen ``Structure`` objects.
         """
         structures = []
-        for comp in self.to_pymatgen():
+        # Packing is the slow step, so it is the one worth showing progress for.
+        for comp in tqdm(self.to_pymatgen()):
             if max_atoms is not None and _packed_cell_size(comp, target_atoms) > max_atoms:
                 continue
             structures.append(
@@ -536,33 +534,16 @@ def gen_random_glasses(modifiers, formers, anions, weights=None, num_structures=
     generator = GlassGenerator(
         elements={"formers": formers, "modifiers": modifiers, "anions": anions}
     )
-    structures = []
-    seen = set()
-    pbar = tqdm.tqdm(total=num_structures)
-    print("Generated structures")
-    attempts, max_attempts = 0, num_structures * 1000 + 1000
-    while len(structures) < num_structures and attempts < max_attempts:
-        attempts += 1
-        comps = generator.sample("random", n=1, weights=weights or {}, dedup=False)
-        comp = comps.to_pymatgen()[0]
-        formula = comp.reduced_formula
-        if formula in seen:
-            continue
-        seen.add(formula)
-
-        if _packed_cell_size(comp, target_atoms) > max_atoms:
-            continue
-        rand_atoms = get_random_packed(comp, target_atoms=target_atoms, **kwargs)
-
-        structures.append(rand_atoms)
-        pbar.n = len(structures)
-        pbar.refresh()
-    pbar.close()
+    # `sample` already dedups and retries; oversample so the max_atoms filter, which is
+    # applied after sampling, still has a chance of leaving num_structures behind.
+    comps = generator.sample("random", n=num_structures * 3, weights=weights or {})
+    structures = comps.get_structures(
+        target_atoms=target_atoms, max_atoms=max_atoms, **kwargs
+    )[:num_structures]
 
     if len(structures) < num_structures:
         warnings.warn(
-            f"Only generated {len(structures)} of {num_structures} requested structures "
-            f"after {attempts} attempts."
+            f"Only generated {len(structures)} of {num_structures} requested structures."
         )
     return structures
 
@@ -578,7 +559,7 @@ def _packed_cell_size(composition, target_atoms):
     formula that reaches ``target_atoms``. Mirrors the sizing in ``get_random_packed`` so
     callers can filter on size without paying for the packing.
     """
-    integer_composition = Composition(parse_composition(composition).get_integer_formula_and_factor()[0])
+    integer_composition = Composition(Composition(composition).get_integer_formula_and_factor()[0])
     return int(integer_composition.num_atoms * math.ceil(target_atoms / integer_composition.num_atoms))
 
 

@@ -10,11 +10,9 @@ order.
 import numpy as np
 import pytest
 from ase import Atoms
+from conftest import CAF2_FIRST_SHELL_CUTOFF, SI_FIRST_SHELL_CUTOFF
 
 from vitrum.coordination import Coordination
-
-SI_FIRST_SHELL_CUTOFF = 3.0
-CAF2_FIRST_SHELL_CUTOFF = 2.5
 
 
 @pytest.fixture
@@ -44,12 +42,9 @@ def caf2(fluorite_caf2):
 # --- the spellings agree with one another -------------------------------------------------
 
 
-def test_number_dict_and_list_agree_for_coordination_numbers(caf2):
+def test_number_and_dict_agree_for_coordination_numbers(caf2):
     """One cutoff written three ways must count the same bonds."""
     number = caf2.get_coordination_numbers("Ca", ["F", "Ca"], CAF2_FIRST_SHELL_CUTOFF)
-    as_list = caf2.get_coordination_numbers(
-        "Ca", ["F", "Ca"], [CAF2_FIRST_SHELL_CUTOFF] * 2
-    )
     by_species = caf2.get_coordination_numbers(
         "Ca", ["F", "Ca"], {"F": CAF2_FIRST_SHELL_CUTOFF, "Ca": CAF2_FIRST_SHELL_CUTOFF}
     )
@@ -58,7 +53,7 @@ def test_number_dict_and_list_agree_for_coordination_numbers(caf2):
         ["F", "Ca"],
         {("Ca", "F"): CAF2_FIRST_SHELL_CUTOFF, ("Ca", "Ca"): CAF2_FIRST_SHELL_CUTOFF},
     )
-    assert number == as_list == by_species == by_bond
+    assert number == by_species == by_bond
 
 
 def test_dict_distinguishes_the_two_bonds(caf2):
@@ -217,9 +212,9 @@ def test_every_method_rejects_a_dict_missing_the_bond(silicon_small, call):
 
 
 def test_get_neighbors_rejects_a_list(silicon_small):
-    """Nothing in a get_neighbors call orders a list, so it must not be read positionally."""
+    """A cutoff is named by the bond it belongs to; a bare list names nothing."""
     coordination = Coordination([silicon_small])
-    with pytest.raises(TypeError, match="no neighbour-type argument"):
+    with pytest.raises(TypeError, match="Invalid cutoff"):
         coordination.get_neighbors("Si", [SI_FIRST_SHELL_CUTOFF])
 
 

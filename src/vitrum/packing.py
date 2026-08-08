@@ -10,7 +10,6 @@ from pymatgen.transformations.standard_transformations import (
 )
 from scipy.stats import qmc
 
-from vitrum.io_helpers import parse_composition
 from vitrum.volume_estimation import get_packing_radii, get_volume
 
 
@@ -62,7 +61,7 @@ def get_random_packed(
     """
 
     side_ratios = [1, 1, 1] if side_ratios is None else side_ratios
-    composition = parse_composition(composition)
+    composition = Composition(composition)
     elements, factor = composition.get_integer_formula_and_factor()
     integer_composition = Composition(elements)
     full_cell_composition = integer_composition * np.ceil(target_atoms / integer_composition.num_atoms)

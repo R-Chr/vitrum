@@ -63,12 +63,29 @@ class Bonds:
         """Bonds at each neighbour atom. A bridging atom is one with two or more."""
         return np.bincount(self.col, minlength=len(self.neighs))
 
-    def neighbors_of(self, i: int) -> np.ndarray:
-        """Sorted global indices bonded to centre `i`, a position in `centers`."""
-        return np.sort(self.neighs[self.col[self.row == i]])
+    def lengths(self, atoms: Atoms) -> np.ndarray:
+        """
+        Minimum-image length of every bond, in the order the bonds are held.
+
+        `Bonds` keeps no reference to the frame it was measured in, so the frame it came
+        from has to be handed back.
+
+        Args:
+            atoms (Atoms): The frame these bonds were measured in.
+
+        Returns:
+            np.ndarray: One distance per bond, aligned with `row` and `col`.
+        """
+        pos = atoms.get_positions()
+        vectors = (
+            pos[self.neighs[self.col]]
+            - pos[self.centers[self.row]]
+            + self.offsets @ np.asarray(atoms.get_cell())
+        )
+        return np.linalg.norm(vectors, axis=1)
 
     def lists(self) -> list[np.ndarray]:
-        """`neighbors_of` every centre atom, in the order of `centers`."""
+        """Sorted global indices bonded to each centre atom, in the order of `centers`."""
         ordered = self.neighs[self.col[np.argsort(self.row, kind="stable")]]
         splits = np.cumsum(self.counts())[:-1]
         return [np.sort(part) for part in np.split(ordered, splits)]
@@ -79,12 +96,6 @@ class Bonds:
         return Bonds(
             self.centers, self.neighs, self.row[edges], self.col[edges], self.offsets[edges]
         )
-
-    def matrix(self) -> np.ndarray:
-        """The adjacency as a dense (len(centers), len(neighs)) boolean matrix."""
-        out = np.zeros((len(self.centers), len(self.neighs)), dtype=bool)
-        out[self.row, self.col] = True
-        return out
 
 
 def _as_list(symbols: str | Sequence[str]) -> list[str]:
@@ -188,26 +199,6 @@ def _neighbor_list_bonds(
     col = _positions_in(neighs, j)
     keep = (row >= 0) & (col >= 0)
     return Bonds(centers, neighs, row[keep], col[keep], S[keep])
-
-
-def graph_edges(
-    atoms: Atoms, pair_cutoffs: dict[tuple[str, str], float]
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Every directed bond in `atoms` under a per-species-pair cutoff, every periodic image kept.
-
-    Args:
-        atoms (Atoms): The structure to search, generally a repeated supercell.
-        pair_cutoffs (Dict[Tuple[str, str], float]): Cutoff for each species pair to search;
-            a pair absent from the dict is not searched. Key order does not matter.
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: Global atom indices `i`, `j`,
-            the bond distance `d`, and the shift vector `S` such that
-            ``D = pos[j] - pos[i] + S @ cell``, one row per directed edge.
-    """
-    cutoff = {key: float(value) for key, value in pair_cutoffs.items()}
-    return neighbor_list("ijdS", atoms, cutoff)
 
 
 def _positions_in(selection: np.ndarray, values: np.ndarray) -> np.ndarray:

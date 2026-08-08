@@ -1,5 +1,4 @@
 import re
-from collections import deque
 from fractions import Fraction
 from functools import reduce
 from math import gcd
@@ -18,18 +17,15 @@ def get_LAMMPS_dump_timesteps(filename: str):
     Returns:
         List[int]: A list of timesteps extracted from the file.
     """
+    timesteps = []
     with open(filename, encoding="utf-8") as f:
-        timesteps = []
-        lines = deque(f.readlines())
-        if len(lines) == 0:
-            return timesteps
-        line = lines.popleft()
-        while len(lines) > 0:
+        for line in f:
             if "ITEM: TIMESTEP" in line:
-                line = lines.popleft()
-                timesteps.append(int(line))
-            else:
-                line = lines.popleft()
+                # The timestep is the line after the header, consumed in the same pass.
+                # A file truncated on the header itself simply has no value to read.
+                value = next(f, None)
+                if value is not None:
+                    timesteps.append(int(value))
     return timesteps
 
 
@@ -67,20 +63,6 @@ def get_density(atoms) -> float:
     return (sum(atoms.get_masses()) / Avogadro) / (atoms.get_volume() * 1e-24)
 
 
-def parse_composition(composition: str | dict | Composition) -> Composition:
-    """Normalize a composition into a pymatgen Composition.
-
-    Args:
-        composition (str, dict or pymatgen.core.Composition): A chemical formula string (e.g. "SiO2"),
-            a dict mapping element symbols to relative amounts (e.g. {"Si": 1, "O": 2}), or an existing
-            pymatgen Composition.
-
-    Returns:
-        pymatgen.core.Composition: The parsed composition.
-    """
-    return composition if isinstance(composition, Composition) else Composition(composition)
-
-
 def mass_density_to_number_density(composition: str | dict | Composition, density: float) -> float:
     """Convert a mass density to an atomic number density for a given composition.
 
@@ -92,7 +74,7 @@ def mass_density_to_number_density(composition: str | dict | Composition, densit
     Returns:
         float: Atomic number density in atoms/Angstrom^3.
     """
-    composition = parse_composition(composition)
+    composition = Composition(composition)
     mass_per_atom = float(composition.weight) / composition.num_atoms  # g/mol per atom
     return (density / mass_per_atom) * Avogadro * 1e-24
 
@@ -108,7 +90,7 @@ def number_density_to_mass_density(composition: str | dict | Composition, number
     Returns:
         float: Mass density in g/cm^3.
     """
-    composition = parse_composition(composition)
+    composition = Composition(composition)
     mass_per_atom = float(composition.weight) / composition.num_atoms  # g/mol per atom
     return number_density * 1e24 * mass_per_atom / Avogadro
 
@@ -144,6 +126,9 @@ def formula_unit(formula, integers=False, anions_last=True):
                       (e.g. 'Si602B320...O2015')
     """
     parts = [p for p in re.split(r"[-\s]+", formula.strip()) if p]
+    if not parts:
+        # No components at all: every total below is empty and the result is a bare "".
+        raise ValueError(f"Cannot parse formula: {formula!r}")
     totals, order = {}, []
     for part in parts:
         m = re.match(r"^(\d*\.?\d*)\s*(.+)$", part)

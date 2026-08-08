@@ -9,13 +9,12 @@ GlassAtoms in 2.0.0.
 import numpy as np
 import pytest
 from ase import Atoms
+from conftest import SI_FIRST_SHELL_CUTOFF
 
 from vitrum.coordination import Coordination
 from vitrum.geometry import distance_matrix
 from vitrum.glass_atoms import GlassAtoms
 from vitrum.io_helpers import get_density
-
-SI_FIRST_SHELL_CUTOFF = 3.0
 
 
 @pytest.mark.parametrize(

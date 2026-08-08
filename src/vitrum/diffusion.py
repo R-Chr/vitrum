@@ -6,6 +6,14 @@ from scipy.stats import linregress
 
 from vitrum.trajectory_tools import unwrap_trajectory
 
+# How far outside the cell, as a fraction of a cell length, a "wrapped" trajectory may sit.
+# MD codes write wrapped coordinates that land past a face: the example trajectory in
+# examples/analysis reaches 0.027 of a cell outside. What this guard is for is a trajectory
+# that was already unwrapped, where atoms leave by whole cells, so the two stay far apart.
+# ponytail: a fixed fraction, not a per-trajectory judgement; a short unwrapped trajectory
+# whose atoms never travel a tenth of a cell is accepted, and unwrapping it again is a no-op.
+_WRAP_TOLERANCE = 0.1
+
 
 class Diffusion:
     """
@@ -27,10 +35,12 @@ class Diffusion:
         if wrapped:
             for atoms in trajectory:
                 scaled_positions = atoms.get_scaled_positions(wrap=False)
-                if np.any(scaled_positions < 0) or np.any(scaled_positions >= 1):
+                overhang = max(-scaled_positions.min(), scaled_positions.max() - 1.0, 0.0)
+                if overhang > _WRAP_TOLERANCE:
                     raise ValueError(
-                        "wrapped=True but some atom coordinates lie outside the cell. "
-                        "Set wrapped=False if the trajectory is already unwrapped."
+                        f"wrapped=True but some atom coordinates lie {overhang:.2f} of a cell "
+                        "length outside it. Set wrapped=False if the trajectory is already "
+                        "unwrapped."
                     )
             trajectory = unwrap_trajectory(trajectory)
         if len(sample_times) != len(trajectory):
@@ -152,9 +162,3 @@ class Diffusion:
         hist = np.mean(np.array(hist_all), axis=0)
         # Only atoms of the target species are histogrammed, so they are what normalises it.
         return edges[:-1], hist / len(index)
-
-    def get_van_hove_dist_correlation(self):
-        pass
-
-    def get_velocity_autocorrelation(self):
-        pass

@@ -7,11 +7,6 @@ import pandas as pd
 from ase import Atoms
 from ase.data import covalent_radii
 from ase.symbols import symbols2numbers
-from sklearn.cluster import Birch
-from sklearn.neighbors import KernelDensity
-from tqdm import tqdm
-
-from vitrum.geometry import distance_matrix, require_orthorhombic
 
 
 class PersistenceDiagram:
@@ -393,7 +388,6 @@ class PersistenceDiagram:
         sigma: Optional[float] = None,
         birth_range: Optional[Tuple[float, float]] = None,
         persistence_range: Optional[Tuple[float, float]] = None,
-        weight_fn: Optional[callable] = None,
     ) -> Tuple[np.ndarray, Tuple[float, float, float, float]]:
         """
         Calculate the persistence image of a persistence diagram.
@@ -401,7 +395,7 @@ class PersistenceDiagram:
         Following Adams et al. (J. Mach. Learn. Res. 2017, 18, 1), each
         birth-death pair (b, d) is first mapped to birth-persistence
         coordinates (b, p) with p = d - b, then represented as a Gaussian of
-        width `sigma` centered at (b, p) and scaled by `weight_fn(p)`.
+        width `sigma` centered at (b, p) and weighted by its persistence p.
 
         Infinite-persistence points are dropped, as for `get_apf`.
 
@@ -415,8 +409,6 @@ class PersistenceDiagram:
                 value range to sample over.
             persistence_range (Optional[Tuple[float, float]]): (min, max)
                 persistence (Death - Birth) value range to sample over.
-            weight_fn (Optional[callable]): Function mapping an array of
-                persistence values to weights. 
 
         Returns:
             Tuple[np.ndarray, Tuple[float, float, float, float]]: (image,
@@ -445,8 +437,6 @@ class PersistenceDiagram:
             persistence_range = (0.0, p_max * 1.1 or 1.0)
         if sigma is None:
             sigma = 0.1 * (persistence_range[1] - persistence_range[0]) or 1.0
-        if weight_fn is None:
-            weight_fn = lambda p: p  # noqa: E731
 
         xs = np.linspace(*birth_range, resolution)
         ys = np.linspace(*persistence_range, resolution)
@@ -455,11 +445,10 @@ class PersistenceDiagram:
         if len(births) == 0:
             return np.zeros((resolution, resolution)), extent
 
-        weights = weight_fn(persistences)
         dx = xs[None, :, None] - births[None, None, :]
         dy = ys[:, None, None] - persistences[None, None, :]
         gaussians = np.exp(-(dx**2 + dy**2) / (2 * sigma**2)) / (2 * np.pi * sigma**2)
-        image = (gaussians * weights[None, None, :]).sum(axis=2)
+        image = (gaussians * persistences[None, None, :]).sum(axis=2)
         return image, extent
 
     def plot_diagram(self, dimension: int = 1, ax=None, **plot_kwargs):
@@ -575,7 +564,6 @@ class PersistenceDiagram:
         sigma: Optional[float] = None,
         birth_range: Optional[Tuple[float, float]] = None,
         persistence_range: Optional[Tuple[float, float]] = None,
-        weight_fn: Optional[callable] = None,
         ax=None,
         **imshow_kwargs,
     ):
@@ -593,9 +581,6 @@ class PersistenceDiagram:
             persistence_range (Optional[Tuple[float, float]]): (min, max)
                 persistence value range to sample over. Defaults to None (see
                 `get_persistence_image`).
-            weight_fn (Optional[callable]): Function mapping an array of
-                persistence values to weights. Defaults to None (see
-                `get_persistence_image`).
             ax (matplotlib.axes.Axes, optional): Axes to plot on. If None, a new
                 figure and axes are created.
             **imshow_kwargs: Additional keyword arguments passed to `ax.imshow`.
@@ -611,7 +596,6 @@ class PersistenceDiagram:
             sigma=sigma,
             birth_range=birth_range,
             persistence_range=persistence_range,
-            weight_fn=weight_fn,
         )
 
         if ax is None:
@@ -623,144 +607,3 @@ class PersistenceDiagram:
         im = ax.imshow(image, extent=extent, origin="lower", aspect="auto", **imshow_kwargs)
         plt.colorbar(im, ax=ax)
         return ax
-
-
-"""
-NOTE: `LocalPD` and the standalone `get_local_persistence` below are currently
-broken and quarantined (raise NotImplementedError on use).
-See docs/vitrum/known_issues.md.
-"""
-
-class LocalPD:  # Broken after moving persistence diagram functions out of glass_Atoms
-    def __init__(
-        self,
-        glass_atoms_list,
-        center_atom,
-        cutoff,
-        dimension=1,
-        weights=None,
-        birch_threshold=0.075,
-    ):
-        raise NotImplementedError(
-            "LocalPD is currently broken: it calls neighborhood.get_persistence_diagram(...) "
-            "as a bound method, but that functionality now lives in the standalone "
-            "PersistenceDiagram class in this module and this call site was never updated. "
-            "See docs/vitrum/known_issues.md."
-        )
-        self.atom_list = glass_atoms_list
-        self.center_atom = center_atom
-        self.cutoff = cutoff
-        self.dimension = dimension
-        self.weights = weights
-        self.birch_threshold = birch_threshold
-
-    def compute_features(self):
-        sampling_centers = self.find_sampling_centers()
-        features = []
-        for atoms in self.atom_list:
-            peristence_diagrams = self.get_local_persistence(atoms, self.center_atom, self.cutoff)
-            features.append(self.kde_pd(sampling_centers, peristence_diagrams))
-        return np.vstack(features)
-
-    def center_atoms(self, atoms, center_atom):
-        dim = require_orthorhombic(atoms.get_cell(), "center_atoms")
-        positions = atoms.get_positions()
-        x_dif = positions[:, 0] - positions[center_atom, 0]
-        y_dif = positions[:, 1] - positions[center_atom, 1]
-        z_dif = positions[:, 2] - positions[center_atom, 2]
-        x_dif = np.where(
-            x_dif > 0.5 * dim[0],
-            positions[:, 0] - positions[center_atom, 0] - dim[0],
-            x_dif,
-        )
-        y_dif = np.where(
-            y_dif > 0.5 * dim[1],
-            positions[:, 1] - positions[center_atom, 1] - dim[1],
-            y_dif,
-        )
-        z_dif = np.where(
-            z_dif > 0.5 * dim[2],
-            positions[:, 2] - positions[center_atom, 2] - dim[2],
-            z_dif,
-        )
-        x_dif = np.where(
-            x_dif < -0.5 * dim[0],
-            positions[:, 0] - positions[center_atom, 0] + dim[0],
-            x_dif,
-        )
-        y_dif = np.where(
-            y_dif < -0.5 * dim[1],
-            positions[:, 1] - positions[center_atom, 1] + dim[1],
-            y_dif,
-        )
-        z_dif = np.where(
-            z_dif < -0.5 * dim[2],
-            positions[:, 2] - positions[center_atom, 2] + dim[2],
-            z_dif,
-        )
-        new_postions = np.vstack([x_dif, y_dif, z_dif]).T
-        return new_postions
-
-    def get_local_persistence(self, atom, center_id, cutoff):
-        persistence_diagrams = []
-        if isinstance(center_id, str):
-            types = atom.get_chemical_symbols()
-        if isinstance(center_id, int):
-            types = atom.get_atomic_numbers()
-        centers = np.where(np.array(types) == center_id)[0]
-        for i in tqdm(centers):
-            neighbors = np.where(distance_matrix(atom)[i, :] < cutoff)[0]
-            neighborhood = atom[neighbors]
-            center_index = np.where(neighbors == i)
-            neighborhood.set_positions(self.center_atoms(neighborhood, center_index))
-            persistence_diagrams.append(
-                neighborhood.get_persistence_diagram(dimension=self.dimension, weights=self.weights)
-            )
-        return persistence_diagrams
-
-    def find_sampling_centers(self):
-        peristence_diagrams = self.get_local_persistence(self.atom_list[0], self.center_atom, self.cutoff)
-        total_df = pd.concat(peristence_diagrams)
-        birth_death = np.array([total_df["Birth"], total_df["Death"] - total_df["Birth"]]).T
-        birch = Birch(n_clusters=100, threshold=self.birch_threshold).fit(birth_death)
-        return birch.subcluster_centers_
-
-    def kde_pd(self, centers, list_pds):
-        features = []
-        for pds in list_pds:
-            data = np.vstack((pds["Birth"], pds["Death"] - pds["Birth"])).T
-            kde = KernelDensity(kernel="gaussian", bandwidth=0.2).fit(data)
-            features.append(np.exp(kde.score_samples(centers)))
-        features = np.array(features)
-        return features
-
-def get_local_persistence(atoms, center_id, cutoff):
-    """
-    Calculate the persistence diagram of the local environment of an atom.
-
-    Parameters:
-        center_id (int or str): The atomic number or symbol of the central atom.
-        cutoff (float): The cutoff distance for the local environment.
-
-    Returns:
-        list: A list of pandas.DataFrame containing the persistence diagram of the local environment.
-    """
-    raise NotImplementedError(
-        "get_local_persistence is currently broken: it calls neighborhood.center() "
-        "(which does not do minimum-image centering on an ASE Atoms object) and "
-        "neighborhood.get_persistence_diagram() (which does not exist as a bound method; "
-        "use PersistenceDiagram(neighborhood).calculate(...) instead). "
-        "See docs/vitrum/known_issues.md."
-    )
-    persistence_diagrams = []
-    if isinstance(center_id, str):
-        types = atoms.get_chemical_symbols()
-    if isinstance(center_id, int):
-        types = atoms.get_atomic_numbers()
-    centers = np.where(types == center_id)[0]
-    for i in centers:
-        neighbors = np.where(distance_matrix(atoms)[i, :] < cutoff)[0]
-        neighborhood = atoms[neighbors]
-        neighborhood.center()
-        persistence_diagrams.append(neighborhood.get_persistence_diagram())
-    return persistence_diagrams

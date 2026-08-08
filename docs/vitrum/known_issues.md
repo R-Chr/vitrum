@@ -3,10 +3,6 @@
 This page tracks confirmed correctness bugs and unimplemented code paths that
 have not yet been fixed.
 
-## `persistent_homology.py` — `LocalPD` and `get_local_persistence`
-
-Quarantined: both raise `NotImplementedError` 
-
 ## `PersistenceDiagram` — the filtration is not periodic
 
 `PersistenceDiagram.calculate` passes the atom positions to the weighted alpha-shape
@@ -18,15 +14,6 @@ This is a surface effect and scales with the surface-to-volume ratio of the cell
 is worst for the few-hundred-atom cells typical of ab-initio glass models. Treat the
 diagrams as comparable to each other at fixed cell size and shape, not as absolute
 loop/void statistics of the bulk.
-
-## `Scattering.get_total_rdf(type="xray")`
-
-Not implemented: raises `NotImplementedError`. Previously this printed a message
-and returned an array of zeros.
-
-Use `type="approx_xray"` for the Q-independent atomic-number approximation, or
-`type="neutron"`. Note that `get_structure_factor(type="xray")` *is* implemented
-— the limitation only affects the real-space RDF.
 
 ## Orthorhombic cells only
 
@@ -57,8 +44,6 @@ module has no test coverage beyond its input guards.
   the single-origin estimate rests on one sample per atom.
 - `get_van_hove_self_correlation` uses its `t_window` as both the stride and the
   window, so time origins never overlap.
-- `get_van_hove_dist_correlation` and `get_velocity_autocorrelation` are stubs that
-  return `None`.
 
 
 ## `batch_active` — stale and largely untested

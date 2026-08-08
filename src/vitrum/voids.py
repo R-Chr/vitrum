@@ -1,4 +1,5 @@
 import warnings
+from itertools import combinations, product
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -145,18 +146,9 @@ def _cell_edges(cell_lengths: np.ndarray) -> List[Tuple[np.ndarray, np.ndarray]]
     '''
     Pairs of (start, stop) Cartesian points for the 12 edges of an axis-aligned box.
     '''
-    org = np.zeros(3)
-    a = np.array([cell_lengths[0], 0, 0])
-    b = np.array([0, cell_lengths[1], 0])
-    c = np.array([0, 0, cell_lengths[2]])
-    abc = a + b + c
-    return [
-        (org, a), (org, b), (org, c),
-        (a, a + b), (a, a + c),
-        (b, b + a), (b, b + c),
-        (c, c + a), (c, c + b),
-        (abc, abc - a), (abc, abc - b), (abc, abc - c),
-    ]
+    # Two corners of the box are joined by an edge exactly when they differ along one axis.
+    corners = np.array(list(product([0, 1], repeat=3))) * cell_lengths
+    return [(a, b) for a, b in combinations(corners, 2) if np.count_nonzero(a != b) == 1]
 
 
 def _add_cell_edges_trace(fig, cell_lengths: np.ndarray) -> None:
@@ -327,7 +319,6 @@ class Cavity(object):
             mean becomes numerically ill-conditioned and the result is not
             physically meaningful. `volume()`, `effective_radius()`, and
             `n_grid_points()` are unaffected by this, since they only count voxels.
-            Use `spans_full_cell()` to detect this case.
 
         Returns:
             np.ndarray: Array of shape (3,), fractional coordinates in [0, 1).
@@ -350,28 +341,6 @@ class Cavity(object):
         """
         cell = self.atoms.get_cell()
         return cell.cartesian_positions(self.fractional_center())
-
-    def spans_full_cell(self, axis: Optional[int] = None) -> bool:
-        """
-        Check whether the cavity's voxels cover every grid index along an axis.
-
-        Useful as a cheap diagnostic for whether `center()` is trustworthy: a
-        cavity that fully spans a periodic axis is percolating/channel-like, and
-        its centroid along that axis is not physically meaningful.
-
-        Args:
-            axis (Optional[int]): Which axis (0, 1, or 2) to check. If None, checks
-                all three axes and returns True if any of them is fully spanned.
-
-        Returns:
-            bool: True if the cavity covers every grid index along the checked
-                axis (axes).
-        """
-        axes = [axis] if axis is not None else [0, 1, 2]
-        for ax in axes:
-            if len(np.unique(self.voxel_indices[:, ax])) == self.grid_shape[ax]:
-                return True
-        return False
 
 
 class VoidAnalysis:
@@ -401,26 +370,17 @@ class VoidAnalysis:
                 every atom's (scaled) exclusion radius. Defaults to 0.0.
 
         Raises:
-            ValueError: If the cell is not orthorhombic.
+            NotImplementedError: If the cell is not orthorhombic.
         """
         self.atoms = atoms.copy()
         self.atoms.wrap()
-        self._validate_orthorhombic()
+        require_orthorhombic(self.atoms.get_cell(), "VoidAnalysis")
         self.radii_scaling = radii_scaling
         self.radii_overrides = radii_overrides
         self.probe_radius = probe_radius
         self.cavities: Optional[List[Cavity]] = None
         self._occupied: Optional[np.ndarray] = None
         self._spacing: Optional[np.ndarray] = None
-
-    def _validate_orthorhombic(self):
-        cell = np.array(self.atoms.get_cell())
-        off_diag = cell - np.diag(np.diagonal(cell))
-        if not np.allclose(off_diag, 0.0, atol=1e-8):
-            raise ValueError(
-                "VoidAnalysis requires an orthorhombic cell; got a cell with "
-                "non-zero off-diagonal components."
-            )
 
     def calculate(
         self,
@@ -592,9 +552,8 @@ class VoidAnalysis:
 
         Note:
             Marching cubes does not stitch the isosurface mesh across periodic
-            cell boundaries, so a cavity that wraps the cell (see
-            `Cavity.spans_full_cell`) will appear visually "cut" at the box faces
-            even though it is a single connected void.
+            cell boundaries, so a cavity that wraps the cell will appear visually
+            "cut" at the box faces even though it is a single connected void.
         """
         if self._occupied is None:
             raise ValueError("Occupancy grid has not been calculated yet. Run .calculate() first.")

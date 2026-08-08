@@ -16,12 +16,11 @@ dependencies = [
     "numpy>=2.0",
     "ase",
     "pandas",
-    "scikit-learn",
     "scipy",
     "pymatgen",
-    "ruamel-yaml==0.17.9",
     "numba",
     "matplotlib",
+    "tqdm",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -41,7 +40,7 @@ Repository = "https://github.com/R-Chr/vitrum"
 Documentation = "https://vitrum.readthedocs.io/en/latest/"
 
 [project.optional-dependencies]
-workflows = ["fireworks", "jobflow", "atomate2"]
+workflows = ["fireworks", "jobflow", "atomate2", "PyYAML", "scikit-learn"]
 volume_estimation = ["atomate2", "mp_api"]
 # diode (used by persistent_homology.py) is not a normal PyPI package;
 # see docs/vitrum/install.md for its manual install instructions.

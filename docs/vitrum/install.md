@@ -27,6 +27,9 @@ pip install --force-reinstall --no-deps "vitrum @ git+https://github.com/R-Chr/v
 ```
 pip install "vitrum[workflows]"
 ```
+This pulls in `vitrum[workflows]` (FireWorks, jobflow, atomate2) plus the YAML and
+scikit-learn packages `batch_active` needs on top of them. Note that
+`batch_active` is unsupported — see [Known issues](known_issues.md).
 
 ### (optional) To install dependencies for Materials Project volume/composition lookups:
 ```
@@ -41,7 +44,7 @@ pip install "vitrum[persistent_homology]"
 pip install git+https://github.com/mrzv/diode.git
 ```
 
-DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology). Note: `LocalPD` and `get_local_persistence` in this module are currently non-functional — see [Known Issues](known_issues.md).
+DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology).
 
 ### (optional) Plotly and OVITO
 For the interactive 3D void visualization, `VoidAnalysis.plot_3d` and rendering structure images/widgets via `vitrum.visualization.StructureRenderer` (uses [OVITO](https://www.ovito.org/) for Tachyon rendering):

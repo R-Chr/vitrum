@@ -5,6 +5,7 @@ from typing import Dict, Optional, Sequence, Tuple, Union
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LinearSegmentedColormap, Normalize, to_rgb
 from ase import Atoms
 from ovito.data import DataCollection
 from ovito.io.ase import ase_to_ovito
@@ -17,25 +18,6 @@ _DEFAULT_COLOR_MAP = {"c_min": "#FF0000", "c_max": "#0000FF"}
 _RENDERERS = {"tachyon": TachyonRenderer}
 
 
-def hex_to_rgb(hex_color: str) -> Tuple[float, float, float]:
-    """
-    Convert a '#RRGGBB' (or 'RRGGBB') hex color string to an (r, g, b) tuple.
-
-    Args:
-        hex_color (str): A hex color string, e.g. "#FF0000".
-
-    Returns:
-        Tuple[float, float, float]: The red, green and blue channels, each in [0, 1].
-
-    Raises:
-        ValueError: If the string is not exactly 6 hex digits after stripping '#'.
-    """
-    digits = hex_color.lstrip("#")
-    if len(digits) != 6:
-        raise ValueError(f"Expected a '#RRGGBB' hex color, got {hex_color!r}.")
-    return tuple(int(digits[i:i + 2], 16) / 255 for i in (0, 2, 4))
-
-
 def _colors_by_element(symbols: Sequence[str], element_colors: Dict[str, Union[str, Tuple[float, float, float]]]) -> np.ndarray:
     """
     Build a per-atom (N, 3) RGB array by looking each atom's symbol up in a color map.
@@ -43,39 +25,29 @@ def _colors_by_element(symbols: Sequence[str], element_colors: Dict[str, Union[s
     Args:
         symbols (Sequence[str]): Chemical symbol of each atom, e.g. from atoms.get_chemical_symbols().
         element_colors (Dict[str, Union[str, Tuple[float, float, float]]]): Map from chemical
-            symbol to either a '#RRGGBB' hex string or an (r, g, b) tuple.
+            symbol to anything matplotlib reads as a color: a '#RRGGBB' hex string, a named
+            color, or an (r, g, b) tuple.
 
     Returns:
         np.ndarray: Array of shape (len(symbols), 3) with one RGB row per atom.
     """
-    rgb_by_symbol = {
-        symbol: hex_to_rgb(color) if isinstance(color, str) else tuple(color)
-        for symbol, color in element_colors.items()
-    }
-    unique_symbols, inverse = np.unique(symbols, return_inverse=True)
-    palette = np.array([rgb_by_symbol[symbol] for symbol in unique_symbols])
-    return palette[inverse]
+    return np.array([to_rgb(element_colors[symbol]) for symbol in symbols])
 
 
-def _colors_by_scalar(values: Sequence[float], low_hex: str, high_hex: str) -> np.ndarray:
+def _colors_by_scalar(values: Sequence[float], low: str, high: str) -> np.ndarray:
     """
-    Linearly map a scalar array to per-atom RGB colors between two hex colors.
+    Linearly map a scalar array to per-atom RGB colors between two colors.
 
     Args:
         values (Sequence[float]): One scalar per atom (e.g. a charge or displacement).
-        low_hex (str): Hex color assigned to the minimum value.
-        high_hex (str): Hex color assigned to the maximum value.
+        low (str): Color assigned to the minimum value.
+        high (str): Color assigned to the maximum value.
 
     Returns:
         np.ndarray: Array of shape (len(values), 3) with one RGB row per atom.
     """
-    values = np.asarray(values, dtype=float)
-    low_rgb = np.array(hex_to_rgb(low_hex))
-    high_rgb = np.array(hex_to_rgb(high_hex))
-    vmin, vmax = values.min(), values.max()
-    span = vmax - vmin
-    fraction = np.zeros_like(values) if span == 0 else (values - vmin) / span
-    return low_rgb + fraction[:, None] * (high_rgb - low_rgb)
+    ramp = LinearSegmentedColormap.from_list("vitrum", [to_rgb(low), to_rgb(high)])
+    return ramp(Normalize()(np.asarray(values, dtype=float)))[:, :3]
 
 
 class StructureRenderer:

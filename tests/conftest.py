@@ -1,24 +1,58 @@
 """Shared fixtures for the vitrum test suite.
 
-All structures are generated analytically, so the tests need no data files and every
-expected value is known from crystallography rather than recorded from this code's own
-output.
+Every expected value is known independently of this code: from crystallography for the
+generated structures, and from stoichiometry for the one real trajectory. Nothing here is
+a number recorded from vitrum's own output.
+
+The crystals are for the exact answers -- a coordination number that is 4 and nothing
+else, a ring count fixed by symmetry, an asymmetric 8-vs-4 fluorite. The glass is for
+everything that only means something in a disordered network: PDF and S(Q) asymptotes,
+angle distributions, Qn speciation, diffusion.
 """
+
+from pathlib import Path
 
 import numpy as np
 import pytest
 from ase import Atoms
 from ase.build import bulk
+from ase.io import read
+
+from vitrum.io_helpers import correct_atom_types
 
 # Lattice constant of crystalline silicon (diamond structure), in Angstrom.
 SI_LATTICE_CONSTANT = 5.431
 # Nearest-neighbour distance in the diamond structure: a * sqrt(3) / 4.
 SI_NN_DISTANCE = SI_LATTICE_CONSTANT * np.sqrt(3) / 4
-# Second-neighbour distance: a / sqrt(2).
-SI_2NN_DISTANCE = SI_LATTICE_CONSTANT / np.sqrt(2)
+# Between the 1st (2.3517 A) and 2nd (3.840 A) neighbour shells in diamond Si.
+SI_FIRST_SHELL_CUTOFF = 3.0
 
 # Lattice constant of fluorite CaF2, in Angstrom.
 CAF2_LATTICE_CONSTANT = 5.451
+# Between the 1st (2.36 A) and 2nd (2.73 A) shells in fluorite CaF2.
+CAF2_FIRST_SHELL_CUTOFF = 2.5
+
+# --- the example glass trajectory ---------------------------------------------------------
+#
+# examples/analysis/md.lammpstrj: 100 frames of 3000 atoms, a 34.44 A cubic cell at
+# 2.47 g/cm^3. LAMMPS types map to species as in docs/vitrum/quickstart.md.
+TRAJECTORY_PATH = Path(__file__).resolve().parents[1] / "examples" / "analysis" / "md.lammpstrj"
+LAMMPS_TYPE_TO_SYMBOL = {1: "Na", 2: "O", 3: "Si"}
+
+# Composition of that trajectory: Na600 O1700 Si700, i.e. 70 SiO2 . 30 Na2O.
+N_NA, N_O, N_SI = 600, 1700, 700
+# Every Na contributes one non-bridging oxygen, so the rest of the oxygens bridge.
+BRIDGING_OXYGEN_FRACTION = 1 - N_NA / N_O
+# Each non-bridging oxygen costs one bridge from a tetrahedron: <Qn> = 4 - NBO per Si.
+MEAN_Q_SPECIES = 4 - N_NA / N_SI
+# Comfortably past the 1.60 A Si-O bond and short of any second shell.
+SI_O_CUTOFF = 2.0
+
+
+def _read_glass(index):
+    atoms = read(TRAJECTORY_PATH, index=index, format="lammps-dump-text")
+    correct_atom_types(atoms, LAMMPS_TYPE_TO_SYMBOL)
+    return atoms
 
 
 @pytest.fixture(scope="session")
@@ -63,32 +97,27 @@ def fluorite_caf2():
 
 
 @pytest.fixture(scope="session")
-def random_gas():
-    """~300 atoms placed at random with a hard-sphere exclusion, in a 24 A cube.
+def sodium_silicate():
+    """Five frames of the 30Na2O-70SiO2 melt, every 20th of the 100 in the trajectory.
 
-    Ground truth: with no structural correlation beyond the exclusion radius,
-    g(r) -> 1 and S(Q) -> 1 at large r / large Q.
+    A real disordered network, so the quantities that only exist in one -- a spread of
+    bond angles, a Qn distribution, a PDF that decays to 1 -- are measured on the thing
+    they describe. The expected values come from the composition (see the constants
+    above) and from silicate chemistry, not from vitrum.
     """
-    rng = np.random.default_rng(42)
-    box = 24.0
-    min_sep = 2.2
-    points = []
-    while len(points) < 300:
-        candidate = rng.random(3) * box
-        if points:
-            delta = np.array(points) - candidate
-            delta -= box * np.round(delta / box)  # minimum image
-            if np.min(np.linalg.norm(delta, axis=1)) <= min_sep:
-                continue
-        points.append(candidate)
-    points = np.array(points)
-    n_si = len(points) // 3
-    return Atoms(
-        f"Si{n_si}O{len(points) - n_si}",
-        positions=points,
-        cell=[box, box, box],
-        pbc=True,
-    )
+    return _read_glass("::20")
+
+
+@pytest.fixture(scope="session")
+def sodium_silicate_frame(sodium_silicate):
+    """A single frame of the melt, for the single-structure code paths."""
+    return sodium_silicate[0]
+
+
+@pytest.fixture(scope="session")
+def sodium_silicate_full():
+    """All 100 frames, 1 ps apart. Only diffusion needs the time axis."""
+    return _read_glass(":")
 
 
 @pytest.fixture(scope="session")
@@ -124,28 +153,6 @@ def cube_graph():
     """
     positions = [(x, y, z) for x in (0.0, 2.2) for y in (0.0, 2.2) for z in (0.0, 2.2)]
     return Atoms("Si8", positions=positions, cell=[30.0] * 3, pbc=False)
-
-
-@pytest.fixture(scope="session")
-def random_network():
-    """90 atoms placed at random in a 16 A cube with a 2.35 A exclusion.
-
-    A disordered network rather than a crystal, so the ring criteria disagree with each
-    other and the counts are sensitive to how each one is defined.
-    """
-    rng = np.random.default_rng(7)
-    box = 16.0
-    min_sep = 2.35
-    points = []
-    while len(points) < 90:
-        candidate = rng.random(3) * box
-        if points:
-            delta = np.array(points) - candidate
-            delta -= box * np.round(delta / box)  # minimum image
-            if np.min(np.linalg.norm(delta, axis=1)) < min_sep:
-                continue
-        points.append(candidate)
-    return Atoms(f"Si{len(points)}", positions=points, cell=[box] * 3, pbc=True)
 
 
 @pytest.fixture

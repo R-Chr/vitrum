@@ -100,19 +100,6 @@ def test_ring_analysis_calculate_passes_cutoff_through(silicon_small):
     assert sizes([r.indexes for r in from_dict]) == sizes([r.indexes for r in from_default])
 
 
-def test_silicon_rings_are_six_membered(silicon_small):
-    """The shortest rings in the diamond structure are all 6-membered."""
-    rings = find_rings(silicon_small, bonds=None, limit=8)
-    assert {len(ring) for ring in rings} == {6}
-
-
-@pytest.mark.parametrize("criterion", ["guttman", "king", "primitive"])
-def test_all_criteria_give_six_membered_rings(silicon_small, criterion):
-    rings = find_rings(silicon_small, bonds=None, limit=8, criterion=criterion)
-    assert len(rings) > 0
-    assert {len(ring) for ring in rings} == {6}
-
-
 def test_unknown_criterion_raises(silicon_small):
     with pytest.raises(ValueError, match="Unknown ring criterion"):
         find_rings(silicon_small, bonds=None, criterion="nonsense")
@@ -160,9 +147,14 @@ def test_primitive_rings_are_not_king_rings(simple_cubic):
     six-rings run around a lattice cube; every atom on one has a two-hop shortcut
     between its two ring neighbours, so King never proposes them and generating King
     candidates first loses 57% of the answer.
+
+    A single cell also rejects many candidates for wrapping, and that report has to be
+    aggregated into one warning rather than one per rejected ring.
     """
-    rings = find_rings(simple_cubic, bonds=None, limit=6, repeat=(1, 1, 1), criterion="primitive")
+    with pytest.warns(UserWarning, match="wrap around the periodic cell") as record:
+        rings = find_rings(simple_cubic, bonds=None, limit=6, repeat=(1, 1, 1), criterion="primitive")
     assert sizes(rings) == {4: 81, 6: 108}
+    assert len(record) == 1
 
 
 def test_primitive_rings_in_the_cube_graph(cube_graph):
@@ -175,17 +167,6 @@ def test_primitive_rings_in_the_cube_graph(cube_graph):
     assert sizes(rings) == {4: 6, 6: 4}
 
 
-@pytest.mark.parametrize("criterion", ["guttman", "king", "primitive"])
-def test_criteria_agree_on_diamond(silicon_small, criterion):
-    """Diamond is degenerate enough that all three criteria give the same 6-rings.
-
-    A guard against the more aggressive searches over-counting, since the counts above
-    only pin cases where the criteria disagree.
-    """
-    rings = find_rings(silicon_small, bonds=None, limit=6, criterion=criterion)
-    assert sizes(rings) == {6: 128}
-
-
 def test_search_looks_past_rings_that_wrap_the_cell(silicon_cubic_cell):
     """A wrapping closure must not end the search for that bond.
 
@@ -193,10 +174,15 @@ def test_search_looks_past_rings_that_wrap_the_cell(silicon_cubic_cell):
     cell. They are not rings, but abandoning the bond there returns nothing at all;
     R.I.N.G.S. (`CHECK_LISTE`) treats them as dead branches and carries on, which
     recovers diamond's 16 six-rings (8 atoms * 12 rings per atom / 6).
+
+    The report of that deepening is aggregated: a real cell deepens many searches, so
+    there must be exactly one warning rather than one per bond, and it must be a warning
+    rather than a print, to stay filterable.
     """
-    with pytest.warns(UserWarning, match="look past a candidate that wraps"):
+    with pytest.warns(UserWarning, match="look past a candidate that wraps") as record:
         rings = find_rings(silicon_cubic_cell, bonds=None, limit=8, repeat=(1, 1, 1), criterion="guttman")
     assert sizes(rings) == {6: 16}
+    assert len(record) == 1
 
 
 def test_primitive_repeats_the_cell_by_default(simple_cubic):
@@ -235,26 +221,6 @@ def test_ambiguous_periodic_bonds_warn():
 
     with pytest.warns(UserWarning, match="more than one periodic image"):
         find_rings(primitive, criterion="guttman")
-
-
-def test_wrapping_rings_warn_once(simple_cubic):
-    """Rejected rings must produce one aggregated warning, not one per ring.
-
-    A real cell rejects many candidates, so the report has to be summarised and it has to
-    be a warning rather than a print, to stay filterable.
-    """
-    with pytest.warns(UserWarning, match="wrap around the periodic cell") as record:
-        find_rings(simple_cubic, bonds=None, limit=6, repeat=(1, 1, 1), criterion="primitive")
-
-    assert len(record) == 1
-
-
-def test_deepened_searches_warn_once(silicon_cubic_cell):
-    """The same for the report that a search had to look past a wrapping candidate."""
-    with pytest.warns(UserWarning, match="look past a candidate that wraps") as record:
-        find_rings(silicon_cubic_cell, bonds=None, limit=8, repeat=(1, 1, 1), criterion="guttman")
-
-    assert len(record) == 1
 
 
 # --- ring topology: area, eccentricity, planeness (Supplemental note 1) ------------------

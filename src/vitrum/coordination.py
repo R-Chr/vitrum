@@ -10,27 +10,12 @@ from vitrum.geometry import find_min_after_peak
 
 #: How every method in this module accepts a cutoff. A cutoff belongs to a bond, so a dict
 #: is keyed by one: ``{("Si", "O"): 1.9}``, or ``{"O": 1.9}`` as shorthand for the bond from
-#: the centre to that species. A bare list is positional against the method's neighbour-type
-#: argument, and is only accepted where there is one.
-Cutoff = float | str | dict[str | tuple[str, str], float] | Sequence[float]
+#: the centre to that species.
+Cutoff = float | str | dict[str | tuple[str, str], float]
 
 
-def _require_species(atoms: Atoms, *symbols: str) -> np.ndarray:
-    """Raise if a symbol is absent, else return the structure's symbol array.
-
-    A free function only because the deprecated `GlassAtoms` shim imports it.
-    """
-    frame = _Frame(atoms)
-    frame.require(*symbols)
-    return frame.types
-
-
-# The PDF "Auto" is resolved from. Its bin width sets the resolved cutoff, so that is held
-# fixed and only the range varies. _EXTREMA_ORDER must match the `order` that
-# find_min_after_peak passes to argrelextrema.
-_PDF_RANGE = 10.0
+_PDF_RANGE = 6.0
 _PDF_BIN_WIDTH = 0.1
-_PDF_PROBE_RANGE = 4.0
 _EXTREMA_ORDER = 4
 
 
@@ -38,40 +23,21 @@ def _auto_cutoff(frame: _Frame, pair: tuple[str, str]) -> float:
     """
     A cutoff taken from the first minimum after the first peak of the pair's PDF.
 
-    The probe range is tried first, so that a large cell's neighbor search isn't run out to
-    the full range just to find a bond length. It finds the same bin as the full range would,
-    provided the minimum sits more than `_EXTREMA_ORDER` bins inside it: argrelextrema
-    compares each point against that many neighbours either side and clips at the array end,
-    so only a result nearer the end than that could differ.
-
     Raises:
-        ValueError: If the PDF has no local minimum after a first peak.
+        ValueError: If the PDF has no local minimum after a first peak, or if that
+            minimum sits too near the end of `_PDF_RANGE` to be trusted.
     """
     context = f"{pair[0]}-{pair[1]}"
+    bins = round(_PDF_RANGE / _PDF_BIN_WIDTH)
+    pdf_r, pdf_g = frame.partial_pdf(pair, _PDF_RANGE, bins)
 
-    probe_bins = round(_PDF_PROBE_RANGE / _PDF_BIN_WIDTH)
-    pdf_r, pdf_g = frame.partial_pdf(pair, _PDF_PROBE_RANGE, probe_bins)
-    try:
-        index = find_min_after_peak(pdf_g, context)
-    except ValueError:
-        index = None  # no minimum this close in; look out to the full range
-    if index is not None and index < probe_bins - _EXTREMA_ORDER:
-        return float(pdf_r[index])
-
-    full_bins = round(_PDF_RANGE / _PDF_BIN_WIDTH)
-    pdf_r, pdf_g = frame.partial_pdf(pair, _PDF_RANGE, full_bins)
-    return float(pdf_r[find_min_after_peak(pdf_g, context)])
-
-
-def _is_number(value) -> bool:
-    """True for a real scalar, including NumPy scalars, but not for a bool."""
-    return isinstance(value, Real) and not isinstance(value, bool)
-
-
-_CUTOFF_FORMS = (
-    "Expected the string 'Auto', a number, a dict keyed by bond as ('Si', 'O') or by "
-    "neighbour species as 'O', or a list of one number per neighbour type."
-)
+    index = find_min_after_peak(pdf_g, context)
+    if index >= bins - _EXTREMA_ORDER:
+        raise ValueError(
+            f"{context}: first PDF minimum falls at the edge of the {_PDF_RANGE} Å "
+            f"range and may be spurious; set this cutoff explicitly."
+        )
+    return float(pdf_r[index])
 
 
 def _cutoff_for(cutoff: dict, pair: tuple[str, str]) -> float:
@@ -99,19 +65,16 @@ def _resolve_cutoffs(
     frame: _Frame,
     pairs: Sequence[tuple[str, str]],
     cutoff: Cutoff,
-    positional: bool = True,
 ) -> list[float]:
     """
     Turn any accepted `cutoff` into one float per bond, given the bonds as species pairs.
 
     The only place that understands "Auto", so the functions doing the counting never see
-    anything but floats. `positional` says whether a bare list is meaningful, which it is
-    only where the caller has a neighbour-type argument to order it against.
+    anything but floats.
 
     Raises:
         TypeError: If `cutoff` is of an unusable type.
-        ValueError: If a species is absent, the string is not "Auto", or a list is the
-            wrong length.
+        ValueError: If a species is absent, or the string is not "Auto".
         KeyError: If a cutoff dict has no entry for one of the bonds.
     """
     # Validate up front: an absent species otherwise surfaces as an all-zero PDF with no
@@ -120,31 +83,23 @@ def _resolve_cutoffs(
         frame.require(*pair)
 
     if isinstance(cutoff, str):
-        if cutoff != "Auto":
-            raise ValueError(f"Invalid cutoff {cutoff!r}. {_CUTOFF_FORMS}")
-        return _auto_cutoffs(frame, pairs)
+        if cutoff == "Auto":
+            return _auto_cutoffs(frame, pairs)
+        raise ValueError(
+            f"Invalid cutoff {cutoff!r}. The only string spelling is 'Auto', spelt exactly; "
+            f"anything else has to be a number or a dict."
+        )
 
-    if _is_number(cutoff):
+    if isinstance(cutoff, Real) and not isinstance(cutoff, bool):
         return [float(cutoff)] * len(pairs)
 
     if isinstance(cutoff, dict):
         return [_cutoff_for(cutoff, pair) for pair in pairs]
 
-    if not positional:
-        raise TypeError(
-            f"Invalid cutoff {cutoff!r}. {_CUTOFF_FORMS} A list is not accepted here, as "
-            "there is no neighbour-type argument to order it against; use a dict."
-        )
-    try:
-        cutoffs = [float(c) for c in cutoff]
-    except (TypeError, ValueError):
-        raise TypeError(f"Invalid cutoff {cutoff!r}. {_CUTOFF_FORMS}") from None
-    if len(cutoffs) != len(pairs):
-        raise ValueError(
-            f"cutoff list length ({len(cutoffs)}) must match the number of neighbour "
-            f"types ({len(pairs)})."
-        )
-    return cutoffs
+    raise TypeError(
+        f"Invalid cutoff {cutoff!r}. Expected the string 'Auto', a number, or a dict "
+        f"keyed by bond as ('Si', 'O') or by neighbour species as 'O'."
+    )
 
 
 def _angle_arms(neigh_types: str | Sequence[str]) -> list[str]:
@@ -154,9 +109,7 @@ def _angle_arms(neigh_types: str | Sequence[str]) -> list[str]:
         return [arms[0], arms[0]]
     if len(arms) != 2:
         raise ValueError(
-            f"neigh_types must be a single symbol or exactly two, got {arms}. "
-            "An angle is defined by the two neighbours it spans; call this once per pair "
-            "of neighbour species."
+            f"neigh_types must be a single symbol or exactly two, got {arms}."
         )
     return arms
 
@@ -171,48 +124,41 @@ def _angles(
     Angles subtended at each atom of `center_type` by two of its neighbours.
 
     `neigh_types` and `cutoffs` both hold exactly two entries. Returns one array of angles
-    per central atom that has at least one qualifying neighbour pair.
+    per atom of `center_type`, in index order, empty where the atom has no qualifying
+    neighbour pair, so the result stays aligned with `frame.index(center_type)`.
     """
-    arm_a, arm_b = (
-        frame.bonds(center_type, neigh, cut).lists()
-        for neigh, cut in zip(neigh_types, cutoffs)
-    )
 
-    # Two different species give disjoint index sets, so a product entry is already a
-    # distinct unordered pair. Same species can share atoms between the two arms even when
-    # their cutoffs differ, so the arm lists themselves are not reliable for telling the two
-    # cases apart -- unlike `np.array_equal(a, b)`, comparing the *species* is right even
-    # when unequal cutoffs make the two arms unequal lists.
     same_species = neigh_types[0] == neigh_types[1]
+    arm_a = frame.bonds(center_type, neigh_types[0], cutoffs[0]).lists()
+    arm_b = arm_a if same_species else frame.bonds(center_type, neigh_types[1], cutoffs[1]).lists()
 
     triples, sizes = [], []
     for center, a, b in zip(frame.index(center_type), arm_a, arm_b):
         if same_species:
-            # An atom may qualify through either arm, so a pair counts once as soon as one
-            # atom is within one arm's cutoff and the other is within the other's -- in
-            # either order -- rather than once per (arm_a, arm_b) ordering, which double
-            # counts every pair that qualifies both ways.
-            set_a, set_b = set(a.tolist()), set(b.tolist())
-            pairs = np.asarray(
-                [
-                    (x, y)
-                    for x, y in itertools.combinations(sorted(set_a | set_b), 2)
-                    if (x in set_a and y in set_b) or (y in set_a and x in set_b)
-                ]
-            )
+            pairs = np.asarray(list(itertools.combinations(a, 2)))
         else:
-            pairs = np.asarray([(x, y) for x, y in itertools.product(a, b) if x != y])
-        if len(pairs) == 0:
-            continue
-        triples.append(
-            np.column_stack((pairs[:, 0], np.full(len(pairs), center), pairs[:, 1]))
-        )
+            # Distinct species share no global index, so no pair can be an atom with itself.
+            pairs = np.asarray(list(itertools.product(a, b)))
         sizes.append(len(pairs))
+        if len(pairs):
+            triples.append(
+                np.column_stack((pairs[:, 0], np.full(len(pairs), center), pairs[:, 1]))
+            )
 
     if not triples:
-        return []
+        return [np.zeros(0) for _ in sizes]
     measured = frame.atoms.get_angles(np.vstack(triples), mic=True)
     return list(np.split(measured, np.cumsum(sizes)[:-1]))
+
+
+def _bridging_speciation(
+    frame: _Frame, bridge_type: str, former_cutoffs: dict[str, float]
+) -> np.ndarray:
+    """Number of network formers bonded to each `bridge_type` atom."""
+    return sum(
+        frame.bonds(former, bridge_type, cut).degrees()
+        for former, cut in former_cutoffs.items()
+    )
 
 
 def _bridging_analysis(
@@ -223,12 +169,7 @@ def _bridging_analysis(
     former_cutoffs: dict[str, float],
 ) -> np.ndarray:
     """Number of bridging `bridge_type` atoms around each `center_type` atom."""
-    # Bridging depends only on the bridge atom, so decide it once per bridge rather than
-    # once per (centre, bridge) pair. Each former is judged at its own bond length.
-    formers_per_bridge = sum(
-        frame.bonds(former, bridge_type, cut).degrees()
-        for former, cut in former_cutoffs.items()
-    )
+    formers_per_bridge = _bridging_speciation(frame, bridge_type, former_cutoffs)
     return (
         frame.bonds(center_type, bridge_type, center_cutoff)
         .select_neighs(formers_per_bridge >= 2)
@@ -242,8 +183,11 @@ def _neighbors(
     """Global indices of each `center_type` atom's neighbours, grouped by species."""
     missing = [t for t in frame.species if t not in cutoffs]
     if missing:
-        raise KeyError(f"No cutoff defined for atom type '{missing[0]}'")
-    return {t: frame.bonds(center_type, t, cutoffs[t]).lists() for t in frame.species}
+        raise KeyError(
+            f"No cutoff defined for atom type '{missing[0]}'. Cutoffs are resolved from the "
+            f"first frame, so this frame holds a species the first one does not."
+        )
+    return {str(t): frame.bonds(center_type, t, cutoffs[t]).lists() for t in frame.species}
 
 
 def _fractions(values: np.ndarray) -> dict[int, float]:
@@ -262,22 +206,25 @@ class Coordination:
     Frames are plain ASE `Atoms` objects and are stored as given.
 
     A cutoff belongs to a bond rather than to an atom, so every method accepts the same
-    spellings: `"Auto"`, a number for every bond, `{("Si", "O"): 1.6}` per bond, `{"O": 1.6}`
-    as shorthand for the bond from the centre to that species, or a list of one per
-    neighbour type where the method has a neighbour-type argument to order it against.
-    Unneeded keys are ignored, so one dict serves every method.
+    spellings: `"Auto"`, a number for every bond, `{("Si", "O"): 1.6}` per bond, or
+    `{"O": 1.6}` as shorthand for the bond from the centre to that species. Unneeded keys
+    are ignored, so one dict serves every method. It follows that the two arms of a
+    same-species angle always share one cutoff.
 
-    An "Auto" cutoff is resolved **once, from the first frame**, and then applied to every
-    frame, so it cannot drift along a trajectory and every method agrees on the same value.
-    The first frame's composition is likewise taken as representative of the trajectory: it
-    is what `chemical_symbols` and `species` describe.
+    An "Auto" cutoff is resolved **once, from one frame**, and then applied to every frame,
+    so it cannot drift along a trajectory and every method agrees on the same value. That
+    frame is the first by default; frame 0 of an MD run is often the starting crystal or
+    packed box, whose PDF minima can sit well away from the equilibrated liquid's, so
+    `cutoff_frame` picks a more representative one. The first frame's composition is taken
+    as representative regardless: it is what `chemical_symbols` and `species` describe.
 
     Attributes:
         atoms_list (List[Atoms]): The frames, as given.
         chemical_symbols (List[str]): The first frame's chemical symbols.
         species (np.ndarray): The distinct species present in the first frame.
+        cutoff_frame (int): Index of the frame an "Auto" cutoff is resolved from.
     """
-    def __init__(self, atoms_list: Atoms | list[Atoms]):
+    def __init__(self, atoms_list: Atoms | list[Atoms], cutoff_frame: int = 0):
         """
         Initialize the analysis from one structure or a list of frames.
 
@@ -285,10 +232,13 @@ class Coordination:
             atoms_list (Union[Atoms, List[Atoms]]): A single structure, or a list of
                 frames to aggregate over. A single `Atoms` is wrapped in a list rather
                 than iterated, which would otherwise yield individual `Atom` objects.
+            cutoff_frame (int, optional): Index of the frame an "Auto" cutoff is measured
+                from, negative counting from the end. Defaults to 0, the first frame.
 
         Raises:
             ValueError: If no frames are given.
             TypeError: If any frame is not an `Atoms` object.
+            IndexError: If `cutoff_frame` is out of range.
         """
         if isinstance(atoms_list, Atoms):
             atoms_list = [atoms_list]
@@ -298,20 +248,18 @@ class Coordination:
         wrong = sorted({type(a).__name__ for a in frames if not isinstance(a, Atoms)})
         if wrong:
             raise TypeError(f"atoms_list must contain Atoms objects, got {wrong}.")
+        if not -len(frames) <= cutoff_frame < len(frames):
+            raise IndexError(
+                f"cutoff_frame={cutoff_frame} is out of range for {len(frames)} frame(s)."
+            )
         self.atoms_list = frames
         self.chemical_symbols = frames[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
+        self.cutoff_frame = cutoff_frame
 
-    def _cutoffs(
-        self,
-        pairs: Sequence[tuple[str, str]],
-        cutoff: Cutoff,
-        positional: bool = True,
-    ) -> list[float]:
-        """Resolve `cutoff` to one float per bond in `pairs`, using the first frame."""
-        return _resolve_cutoffs(
-            _Frame(self.atoms_list[0]), pairs, cutoff, positional=positional
-        )
+    def _cutoffs(self, pairs: Sequence[tuple[str, str]], cutoff: Cutoff) -> list[float]:
+        """Resolve `cutoff` to one float per bond in `pairs`, using `cutoff_frame`."""
+        return _resolve_cutoffs(_Frame(self.atoms_list[self.cutoff_frame]), pairs, cutoff)
 
     def _frames(self, *required: str):
         """Yield one checked `_Frame` at a time, so peak memory stays at one frame's worth."""
@@ -337,23 +285,33 @@ class Coordination:
             center_type (Union[str, List[str]]): The species making up the centre selection.
             neigh_type (Union[str, List[str]]): The species making up the neighbour
                 selection. May name the same species as `center_type`.
-            cutoff (Cutoff, optional): Maximum separation for a bond, exclusive. One bond is
-                measured here, so a dict needs a single entry. Defaults to "Auto".
+            cutoff (Cutoff, optional): Maximum separation for a bond, exclusive. One cutoff
+                applies to the whole selection, so a multi-species selection has to resolve
+                to a single value: give it a number, or a dict whose entries agree.
+                Defaults to "Auto".
 
         Returns:
             List[Bonds]: One `Bonds` object per frame. Its `centers` and `neighs` hold global
                 atom indices, so results index straight into the frame.
 
         Raises:
-            ValueError: If any named species is absent, or the cutoff is not understood.
+            ValueError: If any named species is absent, the cutoff string is not "Auto", or
+                the selections resolve to more than one cutoff.
+            TypeError: If the cutoff is of an unusable type.
+            KeyError: If a cutoff dict has no entry for one of the bonds.
         """
         centers = _as_list(center_type)
         neighs = _as_list(neigh_type)
         if not centers or not neighs:
             raise ValueError("center_type and neigh_type must each name a species.")
-        # A selection may name several species, but the cutoff is one bond's, so it is
-        # keyed on the first of each.
-        (resolved,) = self._cutoffs([(centers[0], neighs[0])], cutoff)
+        pairs = [(c, n) for c in centers for n in neighs]
+        distinct = set(self._cutoffs(pairs, cutoff))
+        if len(distinct) > 1:
+            raise ValueError(
+                f"A multi-species selection is measured at one cutoff, but {pairs} resolved "
+                f"to {sorted(distinct)}. Call get_bonds once per bond, or pass a number."
+            )
+        (resolved,) = distinct
         return [
             frame.bonds(centers, neighs, resolved)
             for frame in self._frames(*centers, *neighs)
@@ -377,9 +335,8 @@ class Coordination:
             center_type (str): The atomic symbol of the central atom.
             neigh_types (Union[str, List[str]]): The atomic symbol(s) of the neighbor atoms,
                 either one symbol or a list of exactly two.
-            cutoff (Cutoff, optional): Range within which to count a neighbour. One
-                cutoff is taken per arm, so a list here holds exactly two. Defaults to
-                "Auto".
+            cutoff (Cutoff, optional): Range within which to count a neighbour. Both arms
+                of a same-species angle share one cutoff. Defaults to "Auto".
             per_atom (bool, optional): Group the angles by the central atom they were
                 measured at, instead of pooling each frame's angles together. Defaults to
                 False.
@@ -387,7 +344,8 @@ class Coordination:
         Returns:
             Union[List[np.ndarray], List[List[np.ndarray]]]: By default, one array of
                 angles in degrees per frame. With `per_atom=True`, one list per frame
-                holding one array per central atom that has a qualifying neighbour pair.
+                holding one array per central atom, in index order, empty for an atom with
+                no qualifying neighbour pair.
 
         Raises:
             ValueError: If center_type or neigh_types are not present in the structure, or
@@ -440,8 +398,8 @@ class Coordination:
 
         Returns:
             Union[Dict[int, float], List[np.ndarray]]: By default, a dictionary mapping each
-                n to its fraction over the whole trajectory, empty if the structures hold no
-                atoms of center_type. With `per_atom=True`, one integer array per frame.
+                n to its fraction over the whole trajectory. With `per_atom=True`, one
+                integer array per frame.
 
         Raises:
             ValueError: If center_type, bridge_type or any former_type is absent.
@@ -449,7 +407,6 @@ class Coordination:
         """
         if former_types is not None and not isinstance(former_types, list):
             raise TypeError("former_types must be either None or a List of atom types")
-        # A former named twice would otherwise count its bonds twice towards bridging.
         formers = list(dict.fromkeys(former_types if former_types else [center_type]))
         pairs = [(center_type, bridge_type)] + [(f, bridge_type) for f in formers]
         center_cutoff, *former_list = self._cutoffs(pairs, cutoff)
@@ -459,6 +416,55 @@ class Coordination:
                 frame, center_type, bridge_type, center_cutoff, former_cutoffs
             )
             for frame in self._frames(center_type, bridge_type, *formers)
+        ]
+        if per_atom:
+            return per_frame
+        return _fractions(np.concatenate(per_frame))
+
+    def get_bridging_speciation(
+        self,
+        bridge_type: str,
+        former_types: list[str] | str,
+        cutoff: Cutoff = "Auto",
+        per_atom: bool = False,
+    ) -> dict[int, float] | list[np.ndarray]:
+        """
+        Calculate the speciation of a bridging atom over the trajectory.
+        Counts how many network formers each `bridge_type` atom is bonded to. For a
+        silicate, `get_bridging_speciation("O", "Si")` splits the oxygen into free oxygen
+        at n=0, non-bridging oxygen at n=1, bridging oxygen at n=2 and tri-clusters at
+        n=3 and above, so the whole classification comes out of one distribution rather
+        than from labels fixed here.
+
+        This is the same count that decides bridging in `get_bridging_analysis`, reported
+        per bridge atom instead of reduced to a Q^n number per former.
+
+        Args:
+            bridge_type (str): The type of the bridging atoms, usually oxygen.
+            former_types (Union[List[str], str]): The types counted as network formers.
+            cutoff (Cutoff, optional): The cutoff distance for considering a bond. Every
+                bond here shares the bridge species as its neighbour, so telling the formers
+                apart needs the pair-keyed form. Defaults to "Auto".
+            per_atom (bool, optional): Return the raw per-atom counts for each frame instead
+                of the aggregated distribution. Defaults to False.
+
+        Returns:
+            Union[Dict[int, float], List[np.ndarray]]: By default, a dictionary mapping each
+                number of formers to the fraction of bridge atoms bonded to that many, over
+                the whole trajectory. With `per_atom=True`, one integer array per frame,
+                aligned with the frame's `bridge_type` atoms in index order.
+
+        Raises:
+            ValueError: If bridge_type or any former_type is absent, or no former is named.
+        """
+        formers = list(dict.fromkeys(_as_list(former_types)))
+        if not formers:
+            raise ValueError("former_types must name at least one network former.")
+        cutoffs = self._cutoffs([(f, bridge_type) for f in formers], cutoff)
+        former_cutoffs = dict(zip(formers, cutoffs))
+        per_frame = [
+            _bridging_speciation(frame, bridge_type, former_cutoffs)
+            for frame in self._frames(bridge_type, *formers)
         ]
         if per_atom:
             return per_frame
@@ -475,8 +481,8 @@ class Coordination:
         Args:
             center_type (str): The type of the center atoms.
             cutoff (Cutoff, optional): The cutoff distance for considering a neighbor.
-                Every species is a neighbour here, so a dict needs an entry for each; a
-                list is not accepted, as nothing in the call orders it. Defaults to "Auto".
+                Every species is a neighbour here, so a dict needs an entry for each.
+                Defaults to "Auto".
 
         Returns:
             List[Dict[str, List[np.ndarray]]]: One dict per frame, mapping each neighbor
@@ -486,11 +492,11 @@ class Coordination:
         Raises:
             ValueError: If center_type is not present in the structure.
             KeyError: If cutoff is a dict missing an entry for a species.
-            TypeError: If cutoff is a list, or is not a number, dict, or "Auto".
+            TypeError: If cutoff is not a number, dict, or "Auto".
         """
         species = list(self.species)
         pairs = [(center_type, neigh_type) for neigh_type in species]
-        cutoffs = dict(zip(species, self._cutoffs(pairs, cutoff, positional=False)))
+        cutoffs = dict(zip(species, self._cutoffs(pairs, cutoff)))
         return [
             _neighbors(frame, center_type, cutoffs)
             for frame in self._frames(center_type)
@@ -502,7 +508,8 @@ class Coordination:
         neigh_types: str | list[str],
         nbin: int = 70,
         cutoff: Cutoff = "Auto",
-        range: tuple[float, float] | None = None
+        range: tuple[float, float] | None = None,
+        sin_normalised: bool = False
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
@@ -512,10 +519,12 @@ class Coordination:
             neigh_types (Union[str, List[str]]): The atomic symbols of the neighbor atoms.
             nbin (int, optional): The number of bins to use for the histogram. Defaults to 70.
             cutoff (Cutoff, optional): Range within which to calculate the angular
-              distribution. One cutoff is taken per arm, so a list here holds exactly two.
-              Defaults to "Auto".
+              distribution. Defaults to "Auto".
             range (Optional[Tuple[float, float]], optional): The range of the histogram.
-              Defaults to None (range is determined automatically from np.histogram).
+              Defaults to None, meaning the full (0, 180) degrees an angle can take.
+            sin_normalised (bool, optional): Normalise the distribution by sin(theta),
+              removing the solid-angle weighting that favours angles near 90
+              degrees even in an uncorrelated structure. Defaults to False.
 
         Returns:
             Tuple[np.ndarray, np.ndarray]:
@@ -523,21 +532,42 @@ class Coordination:
                 - dist: An array containing the angular distribution values (probability density).
 
         Raises:
-            ValueError: If no angles were found at all, which would otherwise give a
-                histogram of NaN from dividing a zero count by a zero total.
+            ValueError: If no angles were found at all, or none fell inside `range`, either
+                of which would otherwise give a histogram of NaN from dividing a zero count
+                by a zero total. Also if `sin_normalised` is asked for outside (0, 180),
+                where the solid-angle weight is not defined.
         """
         arms = _angle_arms(neigh_types)
-        cutoffs = self._cutoffs([(center_type, arm) for arm in arms], cutoff)
-        angles_all = np.hstack(self.get_angles(center_type, arms, cutoffs))
+        pairs = [(center_type, arm) for arm in arms]
+        cutoffs = self._cutoffs(pairs, cutoff)
+        angles_all = np.hstack(self.get_angles(center_type, arms, dict(zip(pairs, cutoffs))))
+        if range is None:
+            range = (0.0, 180.0)
         if angles_all.size == 0:
             raise ValueError(
-                f"No {arms[0]}-{center_type}-{arms[1]} angles found: no {center_type} atom "
-                f"has two qualifying neighbours within the cutoff {cutoffs}. Check the "
-                "cutoff and the species order."
+                f"No {arms[0]}-{center_type}-{arms[1]} angles found. The cutoff leaves the "
+                f"central atoms with fewer than two neighbours to subtend an angle."
+            )
+        if sin_normalised and not (0.0 <= range[0] < range[1] <= 180.0):
+            raise ValueError(
+                f"sin_normalised needs range within (0, 180) degrees, got {range}: outside "
+                f"it the sin(theta) weight is zero or negative and the density undefined."
             )
 
-        dist, edges = np.histogram(angles_all, bins=nbin, density=True, range=range)
+        counts, edges = np.histogram(angles_all, bins=nbin, range=range)
+        widths = np.diff(edges)
         angles = 0.5 * (edges[:-1] + edges[1:])
+        total = counts.sum()
+        if total == 0:
+            raise ValueError(
+                f"All {angles_all.size} angles fell outside range={range}."
+            )
+
+        dist = counts.astype(float)
+        if sin_normalised:
+            solid = np.cos(np.radians(edges[:-1])) - np.cos(np.radians(edges[1:]))
+            dist = np.divide(dist, solid, out=np.zeros_like(dist), where=solid > 0)
+        dist /= (dist * widths).sum()
         return angles, dist
 
     def get_coordination_numbers(
@@ -555,21 +585,21 @@ class Coordination:
             neigh_type (Union[str, List[str]]): The atomic symbol(s) of the
                 neighbor atoms. Can be a single string (e.g. "O") or a list
                 (e.g. ["O", "F"]) to count all neighbor types together.
-            cutoff (Cutoff, optional): The cutoff distance. A list must match the length
-                of neigh_type. Defaults to "Auto".
+            cutoff (Cutoff, optional): The cutoff distance. A dict tells the neighbour
+                types apart. Defaults to "Auto".
             per_atom (bool, optional): Return the raw per-atom counts for each frame
                 instead of the aggregated distribution. Defaults to False.
 
         Returns:
             Union[Dict[int, float], List[np.ndarray]]: By default, a dictionary mapping
-                each coordination number to its fraction, empty if the structures hold no
-                atoms of center_type. With `per_atom=True`, one integer array per frame.
+                each coordination number to its fraction. With `per_atom=True`, one integer
+                array per frame.
 
         Raises:
-            ValueError: If center_type or any neigh_type is not found in the
-                structure, or if cutoff list length does not match neigh_type.
+            ValueError: If center_type or any neigh_type is not found in the structure.
         """
-        neigh_types = _as_list(neigh_type)
+        # Deduped: a species named twice would otherwise have its bonds counted twice.
+        neigh_types = list(dict.fromkeys(_as_list(neigh_type)))
         if not neigh_types:
             raise ValueError("neigh_type must name at least one neighbour species.")
         cutoffs = self._cutoffs([(center_type, neigh) for neigh in neigh_types], cutoff)

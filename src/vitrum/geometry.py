@@ -62,6 +62,78 @@ def find_min_after_peak(padf, context: str = ""):
     return int(after_peak[0])
 
 
+def peak_metrics(
+    x: np.ndarray, y: np.ndarray, window: tuple[float, float] | None = None
+) -> tuple[float, float, float]:
+    """
+    Position, width and height of the first peak of a tabulated function.
+
+    The first peak is the first local maximum, found the same way as in
+    `find_min_after_peak`. The width is the full width at half maximum, taken between the
+    two half-height crossings either side of the peak by linear interpolation, so it is not
+    limited to the bin spacing. Height is measured from zero, not from a fitted baseline.
+
+    This is the one primitive behind several reported quantities: on a partial g(r) it gives
+    the bond length and the static disorder of that bond, and on S(Q) it gives the position,
+    width and intensity of the first sharp diffraction peak.
+
+    Args:
+        x (np.ndarray): The abscissa, increasing.
+        y (np.ndarray): The function values, same length as `x`.
+        window (Optional[Tuple[float, float]], optional): Restrict the search to this range
+            of `x`, for picking out a peak that is not the first one overall. Defaults to
+            None, meaning the whole range. Simulated S(Q) usually needs one: the noise
+            below the first sharp diffraction peak carries local maxima of its own, and
+            they come first.
+
+    Returns:
+        Tuple[float, float, float]: The peak position in units of `x`, its full width at
+            half maximum, and its height. The width is NaN where the data do not fall to
+            half maximum on both sides, which is the sign that the peak runs off the end of
+            the range or the window is too tight.
+
+    Raises:
+        ValueError: If `x` and `y` differ in length, or the searched range holds no local
+            maximum.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError(f"x and y must have the same shape, got {x.shape} and {y.shape}.")
+    if window is not None:
+        inside = (x >= window[0]) & (x <= window[1])
+        x, y = x[inside], y[inside]
+
+    peaks = argrelextrema(y, np.greater, order=4)[0]
+    if peaks.size == 0:
+        raise ValueError(
+            "No local maximum found"
+            f"{f' within {window}' if window is not None else ''}: the function is "
+            "monotonic or too noisy to peak-find. Widen the window or smooth the input."
+        )
+    top = int(peaks[0])
+    height = float(y[top])
+
+    half = height / 2
+    left = _crossing(x, y, top, half, step=-1)
+    right = _crossing(x, y, top, half, step=1)
+    fwhm = right - left if (left is not None and right is not None) else float("nan")
+    return float(x[top]), float(fwhm), height
+
+
+def _crossing(x, y, start: int, level: float, step: int) -> float | None:
+    """Where `y` first falls to `level` walking from `start`, interpolated; None if never."""
+    for i in range(start, -1 if step < 0 else len(y) - 1, step):
+        nxt = i + step
+        if not 0 <= nxt < len(y):
+            return None
+        if y[nxt] <= level:
+            span = y[nxt] - y[i]
+            fraction = 0.0 if span == 0 else (level - y[i]) / span
+            return float(x[i] + fraction * (x[nxt] - x[i]))
+    return None
+
+
 def radial_bins(rrange=10, nbin=100):
     """
     Bin centres and shell volumes for a radial histogram.

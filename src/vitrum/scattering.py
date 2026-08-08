@@ -2,7 +2,6 @@ import itertools
 import logging
 import math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -12,7 +11,15 @@ from scipy import integrate
 from scipy.stats import norm
 from tqdm import tqdm
 
-from vitrum.geometry import distance_matrix, partial_pdf, pdf, radial_bins, require_orthorhombic
+from vitrum.geometry import (
+    distance_matrix,
+    partial_pdf,
+    pdf,
+    radial_bins,
+    require_orthorhombic,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
@@ -49,13 +56,13 @@ class Scattering:
     """
     def __init__(
         self,
-        atoms: Union[List[Atoms], Atoms],
+        atoms: list[Atoms] | Atoms,
         qmin: float = 0.5,
         qmax: float = 20.0,
-        rrange: Optional[float] = None,
+        rrange: float | None = None,
         nbin: int = 500,
-        neutron_scattering_coef: Optional[List[float]] = None,
-        x_ray_scattering_coef: Optional[np.ndarray] = None,
+        neutron_scattering_coef: list[float] | None = None,
+        x_ray_scattering_coef: np.ndarray | None = None,
         disable_progress: bool = False,
         use_neighborhood: bool = False
     ):
@@ -92,9 +99,11 @@ class Scattering:
 
         if rrange:
             if rrange > half_min_dim:
-                logging.warning(
-                    f"Specified rrange ({rrange:.2f}) exceeds half the shortest cell length ({half_min_dim:.2f}). "
-                    "This may violate the Minimum Image Convention."
+                logger.warning(
+                    "Specified rrange (%.2f) exceeds half the shortest cell length "
+                    "(%.2f). This may violate the Minimum Image Convention.",
+                    rrange,
+                    half_min_dim,
                 )
             self.rrange = rrange
         else:
@@ -158,24 +167,12 @@ class Scattering:
         else:
             x_ray_scattering_coef_arr = x_ray_scattering_coef
 
-        self.x_ray_a = x_ray_scattering_coef_arr[:, [1, 3, 5, 7]]
-        self.x_ray_b = x_ray_scattering_coef_arr[:, [2, 4, 6, 8]]
-        self.x_ray_c = x_ray_scattering_coef_arr[:, [9]]
+        # Column 0 is the element symbol, so the array read from the CSV has dtype object.
+        self.x_ray_a = x_ray_scattering_coef_arr[:, [1, 3, 5, 7]].astype(float)
+        self.x_ray_b = x_ray_scattering_coef_arr[:, [2, 4, 6, 8]].astype(float)
+        self.x_ray_c = x_ray_scattering_coef_arr[:, [9]].astype(float)
 
-        self.f_i = []
-
-        for ind in range(len(self.species)):
-
-            self.f_i.append(
-                np.sum(
-                    [
-                        self.x_ray_a[ind][i] * np.exp(-self.x_ray_b[ind][i] * ((self.qval) / (4 * np.pi)) ** 2)
-                        for i in range(4)
-                    ],
-                    axis=0,
-                )
-                + self.x_ray_c[ind]
-            )
+        self.f_i = list(self._form_factors(self.qval))
 
         self.xray_cb = [i * j for i, j in zip(self.c, self.f_i)]
         self.xray_timesby = [pair[0] * pair[1] for pair in itertools.product(self.xray_cb, repeat=2)]
@@ -185,10 +182,40 @@ class Scattering:
             [pair[0] * pair[1] for pair in itertools.product(self.approx_xray_cb, repeat=2)]
         )
 
+        self._weights = {
+            "neutron": np.asarray(self.timesby, dtype=float),
+            "xray": np.asarray(self.xray_timesby, dtype=float),
+            "approx_xray": np.asarray(self.approx_xray_timesby, dtype=float),
+        }
+
         if use_neighborhood:
             self.partial_pdfs = self.calculate_partial_pdfs_neighborhood()
         else:
             self.partial_pdfs = self.calculate_partial_pdfs()
+
+    def _form_factors(self, q: np.ndarray) -> np.ndarray:
+        """Cromer-Mann x-ray form factors f_i(Q) for every species, shape (n_species, nq)."""
+        s2 = (np.asarray(q, dtype=float) / (4 * math.pi)) ** 2
+        return (self.x_ray_a[:, :, None] * np.exp(-self.x_ray_b[:, :, None] * s2)).sum(axis=1) + self.x_ray_c
+
+    def _normalized_weights(self, type: str) -> np.ndarray:
+        """
+        Weights W_ij / sum_ij W_ij for every ordered pair in self.pairs.
+
+        Args:
+            type (str): The weighting scheme, one of "neutron", "xray" or "approx_xray".
+
+        Returns:
+            np.ndarray: Shape (n_pairs,) for the Q-independent schemes, and (n_pairs, nbin)
+                for "xray", whose f_i(Q) are tabulated on self.qval.
+
+        Raises:
+            ValueError: If type is not a known weighting scheme.
+        """
+        if type not in self._weights:
+            raise ValueError(f"Invalid type {type!r}. Choose one of {sorted(self._weights)}.")
+        w = self._weights[type]
+        return w / w.sum(axis=0)
 
     def calculate_partial_pdfs(self) -> np.ndarray:
         """
@@ -276,7 +303,7 @@ class Scattering:
 
         return pdfs
 
-    def get_partial_pdf(self, pair: Tuple[str, str]) -> np.ndarray:
+    def get_partial_pdf(self, pair: tuple[str, str]) -> np.ndarray:
         """
         Get the partial probability density function (PDF) of a given pair of target atoms.
 
@@ -288,38 +315,86 @@ class Scattering:
         """
         return self.partial_pdfs[self.pairs.index(pair)]
 
-    def get_total_rdf(self, type: str = "neutron", broaden: Union[bool, int, float] = False) -> np.ndarray:
+    def _xray_total_rdf(self, lorch: bool = False) -> np.ndarray:
+        """
+        Calculate the x-ray weighted total radial distribution function G^X(r).
+
+        Keen (2001) eqs 57-61, with eq 61 truncated at the instance's qmax:
+
+            f_ij(Q)   = f_i(Q) f_j(Q) / [sum_k c_k f_k(Q)]^2                         (57)
+            j_ij(r)   = (1 / pi) Integral[ f_ij(Q) M(Q) cos(Qr) dQ ]                 (61)
+            g^X_ij(r) = (1 / r) Integral[ r' (g_ij(r') - 1) j_ij(r - r') dr' ]       (60)
+            G^X(r)    = sum_ij c_i c_j g^X_ij(r)                                     (59)
+
+        lorch sets M(Q) to the Lorch function, tapering the integrand to zero at qmax
+        instead of cutting it off. Returns G^X(r); callers wanting G'(r) add 1.
+        """
+        q_max = float(self.qval[-1])
+        nq = int(np.ceil(30 * q_max * self.rrange / math.pi)) + 2
+        q = np.linspace(0.0, q_max, nq)
+        f = self._form_factors(q)
+        f_norm = np.square(np.asarray(self.c) @ f)  # [sum_k c_k f_k(Q)]^2.
+        mod = np.sinc(q / q_max) if lorch else 1.0
+
+        dr = self.rrange / self.nbin
+        s = np.arange(2 * self.nbin) * dr
+        cos_qs = np.cos(np.outer(s, q))
+        delta_r = np.abs(self.xval[np.newaxis, :] - self.xval[:, np.newaxis])
+        sum_r = self.xval[np.newaxis, :] + self.xval[:, np.newaxis]
+
+        # j_ij == j_ji, so each unordered pair is transformed once and reused for both orderings.
+        kernels: dict[tuple[int, int], np.ndarray] = {}
+        g_x = np.zeros(self.nbin)
+        for pair in self.pairs:
+            i, j = self.species_code[pair[0]], self.species_code[pair[1]]
+            key = tuple(sorted((i, j)))
+            if key not in kernels:
+                kernels[key] = np.trapezoid(f[i] * f[j] / f_norm * mod * cos_qs, q) / math.pi  # eqs 57, 61
+            j_ij = kernels[key]
+            # eq 60; r'(g-1) extended odd, folding r' < 0 onto the j_ij(r + r') term.
+            d = self.xval * (self.get_partial_pdf(pair) - 1.0)
+            conv = np.trapezoid(d * (np.interp(delta_r, s, j_ij) - np.interp(sum_r, s, j_ij)), self.xval)
+            g_x = g_x + self.c[i] * self.c[j] * conv / self.xval  # eq 59
+        return g_x
+
+    def get_total_rdf(
+        self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False
+    ) -> np.ndarray:
         """
         Calculate the total RDF for a given number of bins and range.
 
         Args:
-            type (str, optional): The type of structure factor to calculate. Defaults to "neutron".
-            broaden (Union[bool, int, float], optional): If True, apply Gaussian broadening to the RDF. 
-                If a number, specify the maximum Q value for broadening. Defaults to False.
+            type (str, optional): The type of structure factor to calculate, one of "neutron",
+                "xray" or "approx_xray". Defaults to "neutron".
+            broaden (Union[bool, int, float], optional): If a number, apply Gaussian broadening
+                to the RDF at that maximum Q value. Defaults to False. type="xray" is already
+                broadened to qmax by the transform it is built from.
+            lorch (bool, optional): If True, apply the Lorch modification function to the
+                transform behind type="xray", suppressing truncation ripples at the cost of
+                real-space resolution. Defaults to False.
 
         Returns:
             np.ndarray: An array of shape (nbin,) containing the total RDF values.
-            
-        Raises:
-            ValueError: If type is invalid or broaden is invalid.
-            NotImplementedError: If type is "xray"; use "approx_xray" instead.
-        """
-        if type not in {"neutron", "xray", "approx_xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
 
-        gr_tot = np.zeros(self.nbin)
-        for ind, pair in enumerate(self.pairs):
-            pdf_val = self.get_partial_pdf(pair=pair)
-            if type == "neutron":
-                gr_tot = gr_tot + (self.timesby[ind] * pdf_val) / sum(self.timesby)
-            elif type == "approx_xray":
-                gr_tot = gr_tot + (self.approx_xray_timesby[ind] * pdf_val) / np.sum(self.approx_xray_timesby, axis=0)
-            elif type == "xray":
-                raise NotImplementedError(
-                    "X-ray RDF using the Fourier transform of the x-ray scattering function "
-                    "f_ij(Q) is not implemented. Use type='approx_xray' for the Q-independent "
-                    "atomic-number approximation, or type='neutron'."
+        Raises:
+            ValueError: If type is invalid, broaden is invalid, or lorch is used with a
+                weighting that involves no transform.
+
+        Note:
+            type="xray" is built from a transform truncated at qmax and ripples below the
+            first bond; raise qmax or pass lorch=True. See the scattering docs.
+        """
+        weights = self._normalized_weights(type)  # validates `type` before any work is done
+        if type == "xray":
+            gr_tot = 1.0 + self._xray_total_rdf(lorch=lorch)
+        else:
+            if lorch:
+                raise ValueError(
+                    f"lorch=True is meaningless for type={type!r}, which weights the partial "
+                    "PDFs directly and involves no Fourier transform to modify. It applies "
+                    "only to type='xray'."
                 )
+            gr_tot = weights @ self.partial_pdfs
         if broaden:
             if isinstance(broaden, (int, float)) and not isinstance(broaden, bool): 
                 # bool check needed because bool is subclass of int in Python
@@ -331,7 +406,7 @@ class Scattering:
 
         return gr_tot
 
-    def get_partial_structure_factor(self, target_atoms: Tuple[str, str], lorch: bool = False) -> np.ndarray:
+    def get_partial_structure_factor(self, target_atoms: tuple[str, str], lorch: bool = False) -> np.ndarray:
         """
         Calculate the partial structure factor for a given target atoms within a specified range.
 
@@ -344,30 +419,18 @@ class Scattering:
         """
 
         pdf_val = self.get_partial_pdf(pair=target_atoms)
-        q_r = np.outer(self.qval, self.xval).T
-        # Fix division by zero if xval contains 0 (it shouldn't based on init, but good to be safe)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            q_r = np.sin(q_r) / q_r
-            q_r[np.isnan(q_r)] = 1.0 # sin(0)/0 limit is 1
-            
-        A_q = np.ones((np.shape(self.qval)[0], 1, np.shape(self.xval)[0]))
-        A_q = A_q * 4 * math.pi * self.xval**2 * (pdf_val - 1)
-        A_q = np.moveaxis(A_q, 0, -1) * q_r
+        # np.sinc(x) is sin(pi x)/(pi x), which is 1 at x = 0, so r = 0 needs no special case.
+        kernel = np.sinc(np.outer(self.qval, self.xval) / np.pi)
+        integrand = 4 * math.pi * self.xval**2 * (pdf_val - 1) * kernel
         if lorch:
-            factor = np.pi*self.xval / self.rrange
-            with np.errstate(divide='ignore', invalid='ignore'):
-                lorch_correction = np.sin(factor) / factor
-                lorch_correction[np.isnan(lorch_correction)] = 1.0
-            A_q = A_q * lorch_correction
-            
-        A_q = 1 + self.aveden * np.trapezoid(A_q[0].T, self.xval)
-        return A_q
+            integrand = integrand * np.sinc(self.xval / self.rrange)
+        return 1 + self.aveden * np.trapezoid(integrand, self.xval)
 
     def get_weighted_partial_structure_factors(
         self,
         type: str = "neutron",
         lorch: bool = False,
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         """
         Calculate weighted partial structure factors W_ij * S_ij(Q) for all
         unique element pairs.
@@ -382,7 +445,8 @@ class Scattering:
         Summing the returned values gives get_structure_factor(type=type).
 
         Args:
-            type (str): Weighting scheme, "neutron" or "xray". Defaults to "neutron".
+            type (str): Weighting scheme, one of "neutron", "xray" or "approx_xray".
+                Defaults to "neutron".
             lorch (bool): If True, apply Lorch modification function to reduce
                 truncation ripples. Passed through to get_partial_structure_factor().
                 Defaults to False.
@@ -392,18 +456,13 @@ class Scattering:
                 W_ij * S_ij(Q), each of shape (nbin,).
 
         Raises:
-            ValueError: If type is not "neutron" or "xray".
+            ValueError: If type is not a known weighting scheme.
         """
-        if type == "neutron":
-            denom = sum(self.timesby)
-        elif type == "xray":
-            denom = np.sum(self.xray_timesby, axis=0)
-        else:
-            raise ValueError("Invalid type. Choose either 'neutron' or 'xray'.")
+        weights = self._normalized_weights(type)
 
         unique_pairs = list(itertools.combinations_with_replacement(self.species, 2))
 
-        weighted_partials: Dict[str, np.ndarray] = {}
+        weighted_partials: dict[str, np.ndarray] = {}
 
         for pair in unique_pairs:
             label = f"{pair[0]}-{pair[1]}"
@@ -418,12 +477,7 @@ class Scattering:
             )
 
             multiplier = 1.0 if pair[0] == pair[1] else 2.0
-            if type == "neutron":
-                weight = multiplier * self.timesby[idx] / denom
-            else:
-                weight = multiplier * self.xray_timesby[idx] / denom
-
-            w_sij = np.asarray(weight * partial_sq, dtype=float)
+            w_sij = np.asarray(multiplier * weights[idx] * partial_sq, dtype=float)
             weighted_partials[label] = w_sij
 
         return weighted_partials
@@ -434,14 +488,17 @@ class Scattering:
         Calculate the total structure factor.
 
         Args:
-            type (str, optional): The type of structure factor to calculate. Defaults to "neutron".
+            type (str, optional): The type of structure factor to calculate, one of "neutron",
+                "xray" or "approx_xray". Defaults to "neutron".
             lorch (bool, optional): whether to apply lorch correction.
 
         Returns:
             np.ndarray: An array of shape (nbin,) containing the total structure factor.
+
+        Raises:
+            ValueError: If type is not a known weighting scheme.
         """
-        if type not in {"neutron", "xray", "approx_xray"}:
-            raise ValueError("Invalid type. Choose either 'neutron', 'xray', or 'approx_xray'.")
+        weights = self._normalized_weights(type)
 
         # S_ij == S_ji, so each unordered pair is transformed once and reused for both
         # orderings.
@@ -453,40 +510,56 @@ class Scattering:
                 transforms[key] = self.get_partial_structure_factor(
                     target_atoms=(pair[0], pair[1]), lorch=lorch
                 )
-            partial_sq = transforms[key]
-            if type == "neutron":
-                S_q_tot = S_q_tot + (self.timesby[ind] * partial_sq) / sum(self.timesby)
-            elif type == "approx_xray":
-                S_q_tot = S_q_tot + (self.approx_xray_timesby[ind] * partial_sq) / np.sum(self.approx_xray_timesby, axis=0)
-            elif type == "xray":
-                S_q_tot = S_q_tot + (self.xray_timesby[ind] * partial_sq) / np.sum(self.xray_timesby, axis=0)
+            S_q_tot = S_q_tot + weights[ind] * transforms[key]
         return S_q_tot
 
-    def get_T_r_pdf(self, type: str = "neutron", broaden: Union[bool, int, float] = False) -> np.ndarray:
+    def get_T_r_pdf(
+        self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False
+    ) -> np.ndarray:
         """
         Calculate the total correlation function T(r).
-        
+
         T(r) = 4 * pi * r * rho_0 * g(r)
         where rho_0 is the average number density.
 
         Args:
-            type (str, optional): The type of scattering ("neutron" or "xray"). Defaults to "neutron".
+            type (str, optional): The type of scattering, one of "neutron", "xray" or
+                "approx_xray". Defaults to "neutron".
             broaden (Union[bool, int, float], optional): Broadening parameter. Defaults to False.
+            lorch (bool, optional): Apply the Lorch modification function; type="xray" only.
+                Passed through to get_total_rdf(). Defaults to False.
 
         Returns:
             np.ndarray: The T(r) function values.
         """
-        return 4 * math.pi * self.xval * self.aveden * self.get_total_rdf(type=type, broaden=broaden)
+        rdf = self.get_total_rdf(type=type, broaden=broaden, lorch=lorch)
+        return 4 * math.pi * self.xval * self.aveden * rdf
 
-    def get_reduced_pdf(self, type: str = "neutron", broaden: Union[bool, int, float] = False) -> np.ndarray:
+    def get_reduced_pdf(
+        self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False
+    ) -> np.ndarray:
         """
-        Get reduced PDF G(r).
+        Get reduced PDF G(r), also written D(r).
+
+        D(r) = 4 * pi * r * rho_0 * [G'(r) - 1]
+
+        Its factor of r cancels the 1/r of Keen eq 60, so for type="xray" this is the better
+        function to read at small r.
+
+        Args:
+            type (str, optional): The type of scattering, one of "neutron", "xray" or
+                "approx_xray". Defaults to "neutron".
+            broaden (Union[bool, int, float], optional): Broadening parameter. Defaults to False.
+            lorch (bool, optional): Apply the Lorch modification function; type="xray" only.
+                Passed through to get_total_rdf(). Defaults to False.
+
+        Returns:
+            np.ndarray: The D(r) function values.
         """
-        return (-4 * math.pi * self.xval * self.aveden) + (
-            4 * math.pi * self.xval * self.aveden * self.get_total_rdf(type=type, broaden=broaden)
-        )
+        t_r = self.get_T_r_pdf(type=type, broaden=broaden, lorch=lorch)
+        return t_r - 4 * math.pi * self.xval * self.aveden
     
-    def get_N_running(self, pair: Tuple[str, str]) -> np.ndarray:
+    def get_N_running(self, pair: tuple[str, str]) -> np.ndarray:
         """
         Calculate the running coordination number for a specific pair of elements.
         
@@ -500,8 +573,6 @@ class Scattering:
             np.ndarray: The running coordination number as a function of r.
         """
         pair_pdf = self.get_partial_pdf(pair)
-        # rho_j is the density of the neighbour species, pair[1]. Expressed as concentration x
-        # average density so it holds for NPT trajectories.
         c_j = self.c[list(self.species).index(pair[1])]
         n_v = c_j * self.aveden
         integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
