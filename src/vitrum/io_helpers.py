@@ -40,7 +40,7 @@ def correct_atom_types(atoms_list, atom_to_type_map):
     Returns:
         None: The Atoms objects are modified in place.
     """
-    #Check if atoms_list is a list of Atoms objects
+    # Check if atoms_list is a list of Atoms objects
     if not isinstance(atoms_list, list):
         atoms_list = [atoms_list]
 
@@ -109,17 +109,18 @@ def _parse_oxide(formula):
     if pos != len(formula) or not counts:
         raise ValueError(f"Cannot parse formula: {formula!r}")
     return counts
-  
+
+
 def formula_unit(formula, integers=False, anions_last=True):
     """Convert a mol% oxide formula string into a single formula-unit string.
     Example:
     "60.2SiO2-16.0B2O3-12.6Na2O-3.8Al2O3-5.7CaO-1.7ZrO2"
     -> "Si0.602B0.32Na0.252Al0.076Ca0.057Zr0.017O2.015"   (per one formula unit)
     -> "Si602B320Na252Al76Ca57Zr17O2015"                  (smallest integers)
- 
+
     Components may be separated by '-' or whitespace. Prefixes are treated as
     molar proportions (they need not sum to 100; the result is normalized).
- 
+
     integers=False -> fractional coefficients per one formula unit
                       (e.g. 'Si0.602B0.32...O2.015')
     integers=True  -> smallest whole-number multiple of the formula unit
@@ -138,24 +139,22 @@ def formula_unit(formula, integers=False, anions_last=True):
                 totals[el] = Fraction(0)
                 order.append(el)
             totals[el] += frac * n
- 
+
     total_mol = sum(Fraction(re.match(r"^(\d*\.?\d*)", p).group(1) or 1) for p in parts)
     coeffs = {el: v / total_mol for el, v in totals.items()}  # per one formula unit
- 
+
     if anions_last:
         anions = [el for el in ("O", "S", "Se", "F", "Cl", "Br", "I") if el in order]
         order = [el for el in order if el not in anions] + anions
- 
+
     if integers:
-        lcm_den = reduce(lambda a, b: a * b // gcd(a, b),
-                         (coeffs[el].denominator for el in order))
+        lcm_den = reduce(lambda a, b: a * b // gcd(a, b), (coeffs[el].denominator for el in order))
         ints = [coeffs[el].numerator * (lcm_den // coeffs[el].denominator) for el in order]
         g = reduce(gcd, ints)
-        return "".join(f"{el}{n // g if n // g != 1 else ''}"
-                       for el, n in zip(order, ints))
- 
+        return "".join(f"{el}{n // g if n // g != 1 else ''}" for el, n in zip(order, ints))
+
     def fmt(x):
         s = f"{float(x):.6g}"
         return "" if s == "1" else s
- 
+
     return "".join(f"{el}{fmt(coeffs[el])}" for el in order)

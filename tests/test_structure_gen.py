@@ -68,9 +68,7 @@ def test_x_min_is_respected_by_the_active_components(generator):
 
 def test_min_former_sum_is_respected():
     """The constraint has to bind, not just be accepted."""
-    generator = GlassGenerator(
-        units=UNITS, network_formers={"SiO2"}, min_former_sum=0.5, seed=4
-    )
+    generator = GlassGenerator(units=UNITS, network_formers={"SiO2"}, min_former_sum=0.5, seed=4)
     compositions = generator.sample(scheme="sobol", n=24)
     assert (compositions.df["former_sum"] >= 0.5).all()
 
@@ -115,9 +113,7 @@ def test_to_pymatgen_and_to_formulas_describe_the_same_composition(generator):
 
 def test_elemental_mode_sets_its_own_mode():
     """Elemental mode charge-balances rather than mixing units, and has its own schemes."""
-    generator = GlassGenerator(
-        elements={"formers": ["Si"], "modifiers": ["Na"], "anions": ["O"]}, seed=0
-    )
+    generator = GlassGenerator(elements={"formers": ["Si"], "modifiers": ["Na"], "anions": ["O"]}, seed=0)
     compositions = generator.sample(scheme="random", n=6)
     assert compositions.mode == "elemental"
     assert len(compositions) == 6

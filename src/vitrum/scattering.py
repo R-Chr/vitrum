@@ -54,6 +54,7 @@ class Scattering:
     """
     Class for calculating scattering functions from glass structures.
     """
+
     def __init__(
         self,
         atoms: list[Atoms] | Atoms,
@@ -64,7 +65,7 @@ class Scattering:
         neutron_scattering_coef: list[float] | None = None,
         x_ray_scattering_coef: np.ndarray | None = None,
         disable_progress: bool = False,
-        use_neighborhood: bool = False
+        use_neighborhood: bool = False,
     ):
         """
         Initializes a new instance of the class with the given atoms.
@@ -75,9 +76,11 @@ class Scattering:
             qmax (float, optional): The maximum q-value to use. Defaults to 20.
             rrange (float, optional): The range of r-values to use. If None, defaults to min(cell_dim)/2.
             nbin (int, optional): The number of bins to use. Defaults to 500.
-            neutron_scattering_coef (List[float], optional): A list of custom neutron scattering lengths. Defaults to None.
+            neutron_scattering_coef (List[float], optional): A list of custom neutron scattering lengths. Defaults to
+                None.
               If None, the default coefficients from Neutron News, Vol. 3, No. 3, 1992, pp. 29-37 are used.
-            x_ray_scattering_coef (np.ndarray, optional): A list of custom x-ray scattering coefficients. Defaults to None.
+            x_ray_scattering_coef (np.ndarray, optional): A list of custom x-ray scattering coefficients. Defaults to
+                None.
               If None, the default coefficients from International Tables for Crystallography (2006). Vol. C. ch. 6.1,
               pp. 554-595 are used.
             disable_progress (bool, optional): Whether to disable the progress bar. Defaults to False.
@@ -87,14 +90,12 @@ class Scattering:
             atom_list = atoms
         else:
             atom_list = [atoms]
-            
+
         self.atom_list = list(atom_list)
         script_dir = Path(__file__).parent
 
         # Every frame is binned with the same rrange, so every frame has to support it.
-        half_min_dims = [
-            np.min(require_orthorhombic(atom.get_cell(), "Scattering")) / 2 for atom in atom_list
-        ]
+        half_min_dims = [np.min(require_orthorhombic(atom.get_cell(), "Scattering")) / 2 for atom in atom_list]
         half_min_dim = float(np.min(half_min_dims))
 
         if rrange:
@@ -239,12 +240,9 @@ class Scattering:
             volume = atom.get_volume()
 
             for pair_ind, pair in enumerate(self.pairs):
-                _, current_pdf = partial_pdf(
-                    distances, symbols, volume, pair, self.rrange, self.nbin
-                )
+                _, current_pdf = partial_pdf(distances, symbols, volume, pair, self.rrange, self.nbin)
                 pdf_sum[pair_ind, :] += current_pdf
         return pdf_sum / n_frames
-
 
     def calculate_partial_pdfs_neighborhood(self):
         """
@@ -357,9 +355,7 @@ class Scattering:
             g_x = g_x + self.c[i] * self.c[j] * conv / self.xval  # eq 59
         return g_x
 
-    def get_total_rdf(
-        self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False
-    ) -> np.ndarray:
+    def get_total_rdf(self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False) -> np.ndarray:
         """
         Calculate the total RDF for a given number of bins and range.
 
@@ -396,12 +392,12 @@ class Scattering:
                 )
             gr_tot = weights @ self.partial_pdfs
         if broaden:
-            if isinstance(broaden, (int, float)) and not isinstance(broaden, bool): 
+            if isinstance(broaden, (int, float)) and not isinstance(broaden, bool):
                 # bool check needed because bool is subclass of int in Python
                 Q_max = float(broaden)
             else:
-                 raise ValueError("broaden must be a number (Q_max) to apply broadening.")
-                 
+                raise ValueError("broaden must be a number (Q_max) to apply broadening.")
+
             gr_tot = gaussian_broadening(gr_tot, self.xval, Q_max)
 
         return gr_tot
@@ -472,16 +468,13 @@ class Scattering:
             except ValueError:
                 idx = self.pairs.index((pair[1], pair[0]))
 
-            partial_sq = self.get_partial_structure_factor(
-                target_atoms=(pair[0], pair[1]), lorch=lorch
-            )
+            partial_sq = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]), lorch=lorch)
 
             multiplier = 1.0 if pair[0] == pair[1] else 2.0
             w_sij = np.asarray(multiplier * weights[idx] * partial_sq, dtype=float)
             weighted_partials[label] = w_sij
 
         return weighted_partials
-
 
     def get_structure_factor(self, type: str = "neutron", lorch: bool = False) -> np.ndarray:
         """
@@ -507,15 +500,11 @@ class Scattering:
         for ind, pair in enumerate(self.pairs):
             key = tuple(sorted((self.species_code[pair[0]], self.species_code[pair[1]])))
             if key not in transforms:
-                transforms[key] = self.get_partial_structure_factor(
-                    target_atoms=(pair[0], pair[1]), lorch=lorch
-                )
+                transforms[key] = self.get_partial_structure_factor(target_atoms=(pair[0], pair[1]), lorch=lorch)
             S_q_tot = S_q_tot + weights[ind] * transforms[key]
         return S_q_tot
 
-    def get_T_r_pdf(
-        self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False
-    ) -> np.ndarray:
+    def get_T_r_pdf(self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False) -> np.ndarray:
         """
         Calculate the total correlation function T(r).
 
@@ -535,9 +524,7 @@ class Scattering:
         rdf = self.get_total_rdf(type=type, broaden=broaden, lorch=lorch)
         return 4 * math.pi * self.xval * self.aveden * rdf
 
-    def get_reduced_pdf(
-        self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False
-    ) -> np.ndarray:
+    def get_reduced_pdf(self, type: str = "neutron", broaden: bool | float = False, lorch: bool = False) -> np.ndarray:
         """
         Get reduced PDF G(r), also written D(r).
 
@@ -558,11 +545,11 @@ class Scattering:
         """
         t_r = self.get_T_r_pdf(type=type, broaden=broaden, lorch=lorch)
         return t_r - 4 * math.pi * self.xval * self.aveden
-    
+
     def get_N_running(self, pair: tuple[str, str]) -> np.ndarray:
         """
         Calculate the running coordination number for a specific pair of elements.
-        
+
         This is the integral of the partial RDF up to distance r:
         N(r) = Integral(4 * pi * rho_j * g_ij(r) * r^2 dr)
 
@@ -575,5 +562,5 @@ class Scattering:
         pair_pdf = self.get_partial_pdf(pair)
         c_j = self.c[list(self.species).index(pair[1])]
         n_v = c_j * self.aveden
-        integrand = 4*np.pi*n_v*pair_pdf*self.xval**2
+        integrand = 4 * np.pi * n_v * pair_pdf * self.xval**2
         return integrate.cumulative_trapezoid(integrand, self.xval, initial=0.0)

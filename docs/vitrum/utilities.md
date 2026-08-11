@@ -103,3 +103,17 @@ rchi, common_x, y_sim, y_exp = r_chi(simulated, experimental)
 ```
 
 ::: vitrum.comparison
+
+## Visualization
+
+Renders `ase.Atoms` structures to static images or Jupyter widgets via OVITO. Requires the
+optional `visualization` extra, see [Installation](install.md).
+
+```python
+from vitrum.visualization import StructureRenderer
+
+renderer = StructureRenderer(atoms, bonds={("Si", "O"): 2.0})
+renderer.render(filename="structure.png")
+```
+
+::: vitrum.visualization

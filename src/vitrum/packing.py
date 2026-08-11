@@ -37,17 +37,18 @@ def get_random_packed(
         density (float, optional): The target density of the structure (in g/cm^3). If not provided, the volume per atom
                                    is estimated using `vol_per_atom_source`.
         target_atoms (int, optional): The target number of atoms in the structure. Defaults to 100.
-        min_distance (float, optional): Minimum distance between atoms in the structure. If not provided, no minimum distance is enforced.
-        radii_source (str, optional): The source for the atomic radii. Can be "covalent", "atomic", or "ionic". Defaults to "ionic".
+        min_distance (float, optional): Minimum distance between atoms in the structure. If not provided, no minimum
+            distance is enforced.
+        radii_source (str, optional): The source for the atomic radii. Can be "covalent", "atomic", or "ionic". Defaults
+            to "ionic".
         radii_scaling (float, optional): Scaling factor for the covalent radii of the atoms. Defaults to 1.0.
         volume_scaling (float, optional): Scaling factor for the volume of the structure. Defaults to 1.0.
-        vol_per_atom_source (float or str, optional): The source for the volume per atom. Can be a float value or one of the following strings:
-                                                     "ionic_radius" (estimate from ionic radii; needs no network access or optional
-                                                     dependencies, calibrated on oxides), "mp" (Materials Project),
-                                                     "icsd" (Inorganic Crystal Structure Database), "density" (use provided density),
-                                                     "covalent_radius" (estimate from covalent radii; poorly calibrated for ionic systems),
-                                                     or "convex_hull" (estimate from convex hull). Defaults to "ionic_radius".
-                                                     See `vitrum.volume_estimation.get_volume` for details.
+        vol_per_atom_source (float or str, optional): The source for the volume per atom. Either a float, or one of:
+            "ionic_radius" (estimate from ionic radii; needs no network access or optional dependencies, calibrated
+            on oxides), "mp" (Materials Project), "icsd" (Inorganic Crystal Structure Database), "density" (use the
+            provided density), "covalent_radius" (estimate from covalent radii; poorly calibrated for ionic systems),
+            or "convex_hull" (estimate from convex hull). Defaults to "ionic_radius".
+            See `vitrum.volume_estimation.get_volume` for details.
         datatype (str, optional): The type of data to return. Can be "ase" for ASE format or "pymatgen"
                                   for pymatgen format. Defaults to "ase".
         db_kwargs (dict, optional): Additional keyword arguments for database access. Defaults to None.
@@ -94,15 +95,13 @@ def get_random_packed(
         raise ValueError(f"Unknown algorithm {algorithm!r}; choose 'sobol' or 'random'.")
 
     ats = Atoms(elements, cell=cell, pbc=True, positions=pos)
-    skin_init = 0.2        # Å of extra buffer at the start (~10% of a typical radius)
-    decay_iters = 50       # skin reaches zero by this iteration
+    skin_init = 0.2  # Å of extra buffer at the start (~10% of a typical radius)
+    decay_iters = 50  # skin reaches zero by this iteration
 
-    nl = NeighborList(radii + skin_init / 2, self_interaction=False,
-                    bothways=True, skin=0.3)
+    nl = NeighborList(radii + skin_init / 2, self_interaction=False, bothways=True, skin=0.3)
 
     for it in range(500):
-
-        skin = skin_init * max(0.0, 1.0 - it / decay_iters)   # linear decay
+        skin = skin_init * max(0.0, 1.0 - it / decay_iters)  # linear decay
         nl.update(ats)
         pos = ats.get_positions()
         dx = np.zeros_like(pos)
@@ -125,9 +124,7 @@ def get_random_packed(
         if dsum >= -1.0e-5:
             break
     else:
-        warnings.warn(
-            f'Cell packing not converged after 500 iterations, final overlap sum {dsum:.3e}'
-        )
+        warnings.warn(f"Cell packing not converged after 500 iterations, final overlap sum {dsum:.3e}")
 
     ats.wrap()
     if datatype == "pymatgen":

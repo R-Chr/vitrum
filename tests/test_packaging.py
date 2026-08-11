@@ -6,6 +6,8 @@ extras. These tests run in a subprocess with those modules blocked, because a de
 machine that happens to have them installed cannot otherwise tell the two apart.
 """
 
+import pathlib
+import re
 import subprocess
 import sys
 import textwrap
@@ -37,6 +39,34 @@ def run_without_extras(body):
         capture_output=True,
         text=True,
     )
+
+
+def test_py_typed_marker_is_installed():
+    """Without this marker, downstream type checkers ignore every annotation in the package.
+
+    PEP 561: an installed distribution is treated as untyped unless it ships `py.typed`
+    alongside its modules, so the marker has to survive the build, not just exist in the tree.
+    """
+    from importlib.resources import files
+
+    assert files("vitrum").joinpath("py.typed").is_file()
+
+
+def test_citation_version_matches_package_version():
+    """`CITATION.cff` is what GitHub's "Cite this repository" button and Zenodo read.
+
+    It is edited by hand and has silently lagged the package version before, so the release
+    that forgets to bump it fails here instead of minting a DOI for the wrong version.
+    """
+    citation = pathlib.Path(__file__).parents[1] / "CITATION.cff"
+    if not citation.is_file():
+        pytest.skip("CITATION.cff is not part of the installed distribution")
+
+    import vitrum
+
+    match = re.search(r"^version:\s*(\S+)", citation.read_text(), re.MULTILINE)
+    assert match is not None, "CITATION.cff has no version field"
+    assert match.group(1) == vitrum.__version__
 
 
 def test_package_imports_without_optional_extras():

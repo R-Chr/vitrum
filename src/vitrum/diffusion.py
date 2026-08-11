@@ -1,5 +1,3 @@
-from typing import List, Optional, Tuple
-
 import numpy as np
 from ase import Atoms
 from scipy.stats import linregress
@@ -19,7 +17,8 @@ class Diffusion:
     """
     Class for analyzing diffusion in glass structures.
     """
-    def __init__(self, trajectory: List[Atoms], sample_times: List[float], wrapped: bool = True):
+
+    def __init__(self, trajectory: list[Atoms], sample_times: list[float], wrapped: bool = True):
         """
         Initializes a new instance of the class with the given a trajectory as a list of Atoms objects.
 
@@ -86,7 +85,7 @@ class Diffusion:
 
         return np.array(mean_square_displacement)
 
-    def get_diffusion_coef(self, skip_first: int = 100, msds: Optional[np.ndarray] = None) -> np.ndarray:
+    def get_diffusion_coef(self, skip_first: int = 100, msds: np.ndarray | None = None) -> np.ndarray:
         """
         Calculate the diffusion coefficients.
 
@@ -112,15 +111,12 @@ class Diffusion:
         D = []
         for msd in msds:
             lin_reg = linregress(self.sample_times[skip_first:], msd[skip_first:])
-            D.append((lin_reg.slope / 6))
+            D.append(lin_reg.slope / 6)
         return np.array(D)
 
     def get_van_hove_self_correlation(
-        self,
-        target_atom: str,
-        t_window: Optional[int] = None,
-        nbin: int = 70
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        self, target_atom: str, t_window: int | None = None, nbin: int = 70
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the Van Hove self-correlation function.
 
@@ -140,8 +136,7 @@ class Diffusion:
         index = np.where(self.chemical_symbols == target_atom)[0]
         if index.size == 0:
             raise ValueError(
-                f"target_atom '{target_atom}' not present in the trajectory. "
-                f"Available species: {list(self.species)}."
+                f"target_atom '{target_atom}' not present in the trajectory. Available species: {list(self.species)}."
             )
 
         if t_window is None:

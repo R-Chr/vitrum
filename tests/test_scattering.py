@@ -67,7 +67,10 @@ def test_neighborhood_matches_full_matrix_per_pair(scattering_pair):
         from_neigh = neigh.get_partial_pdf(pair)
         assert np.any(from_neigh != 0.0), f"partial PDF for {pair} is all zeros"
         np.testing.assert_allclose(
-            from_neigh, from_full, rtol=1e-6, atol=1e-9,
+            from_neigh,
+            from_full,
+            rtol=1e-6,
+            atol=1e-9,
             err_msg=f"PDF backends disagree for pair {pair}",
         )
 
@@ -75,9 +78,7 @@ def test_neighborhood_matches_full_matrix_per_pair(scattering_pair):
 def test_neighborhood_matches_full_matrix_total_rdf(scattering_pair):
     """The total RDF must not depend on which backend produced the partials."""
     full, neigh = scattering_pair
-    np.testing.assert_allclose(
-        neigh.get_total_rdf(), full.get_total_rdf(), rtol=1e-6, atol=1e-9
-    )
+    np.testing.assert_allclose(neigh.get_total_rdf(), full.get_total_rdf(), rtol=1e-6, atol=1e-9)
 
 
 def test_cross_pairs_are_symmetric(scattering_pair):
@@ -113,16 +114,12 @@ def test_partial_pdf_matches_independent_reference(silicon_small, use_neighborho
     The tail-tends-to-unity test cannot see the (N_a - 1)/N_a error at large N, so
     this reimplements the definition from ASE distances and compares exactly.
     """
-    scattering = Scattering(
-        silicon_small, disable_progress=True, use_neighborhood=use_neighborhood
-    )
+    scattering = Scattering(silicon_small, disable_progress=True, use_neighborhood=use_neighborhood)
 
     distances = silicon_small.get_all_distances(mic=True)
     n_atoms = len(silicon_small)
     off_diagonal = distances[~np.eye(n_atoms, dtype=bool)]
-    counts, edges = np.histogram(
-        off_diagonal, bins=scattering.nbin, range=(0.0, scattering.rrange)
-    )
+    counts, edges = np.histogram(off_diagonal, bins=scattering.nbin, range=(0.0, scattering.rrange))
     volbin = (4 / 3) * np.pi * (edges[1:] ** 3 - edges[:-1] ** 3)
     expected = (counts / volbin) / (n_atoms * (n_atoms - 1) / silicon_small.get_volume())
 
@@ -130,9 +127,7 @@ def test_partial_pdf_matches_independent_reference(silicon_small, use_neighborho
     # a separation of exactly half the cell length has two equally valid images. ASE's
     # neighbor_list counts such a pair once, the full distance matrix counts it twice.
     # That degeneracy is inherent to the MIC, not a property of either backend.
-    np.testing.assert_allclose(
-        scattering.get_partial_pdf(("Si", "Si"))[:-1], expected[:-1], rtol=1e-9, atol=1e-9
-    )
+    np.testing.assert_allclose(scattering.get_partial_pdf(("Si", "Si"))[:-1], expected[:-1], rtol=1e-9, atol=1e-9)
 
 
 def test_structure_factor_tends_to_unity(sodium_silicate):
@@ -159,8 +154,10 @@ def test_multi_frame_uses_per_frame_cell(sodium_silicate):
 
     for pair in full.pairs:
         np.testing.assert_allclose(
-            neigh.get_partial_pdf(pair), full.get_partial_pdf(pair),
-            rtol=1e-6, atol=1e-9,
+            neigh.get_partial_pdf(pair),
+            full.get_partial_pdf(pair),
+            rtol=1e-6,
+            atol=1e-9,
             err_msg=f"multi-frame PDF backends disagree for {pair}",
         )
 
@@ -288,9 +285,7 @@ def test_average_density_is_trajectory_average(sodium_silicate_frame):
 
     scattering = Scattering([frame_a, frame_b], disable_progress=True)
     expected_volume = (frame_a.get_volume() + frame_b.get_volume()) / 2
-    expected_density = (
-        len(frame_a) / frame_a.get_volume() + len(frame_b) / frame_b.get_volume()
-    ) / 2
+    expected_density = (len(frame_a) / frame_a.get_volume() + len(frame_b) / frame_b.get_volume()) / 2
 
     assert scattering.volume == pytest.approx(expected_volume)
     assert scattering.aveden == pytest.approx(expected_density)
@@ -326,6 +321,4 @@ def test_geometry_partial_pdf_matches_scattering(silicon_diamond):
     )
     scattering = Scattering([silicon_diamond], rrange=8.0, nbin=400, disable_progress=True)
 
-    np.testing.assert_allclose(
-        direct, scattering.get_partial_pdf(("Si", "Si")), rtol=1e-9, atol=1e-9
-    )
+    np.testing.assert_allclose(direct, scattering.get_partial_pdf(("Si", "Si")), rtol=1e-9, atol=1e-9)

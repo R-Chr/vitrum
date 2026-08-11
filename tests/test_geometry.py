@@ -9,9 +9,7 @@ from vitrum.geometry import distance_matrix, partial_pdf, peak_metrics, require_
 
 def test_distance_matrix_matches_ase_minimum_image(silicon_small):
     """The numba distance kernel must agree with ASE's own MIC distances."""
-    np.testing.assert_allclose(
-        distance_matrix(silicon_small), silicon_small.get_all_distances(mic=True), atol=1e-8
-    )
+    np.testing.assert_allclose(distance_matrix(silicon_small), silicon_small.get_all_distances(mic=True), atol=1e-8)
 
 
 @pytest.mark.parametrize("x", [12.0, 21.5, 25.0, -3.0, -18.0])
@@ -33,9 +31,7 @@ def test_distance_matrix_is_unchanged_by_wrapping(silicon_small):
     unwrapped.positions += unwrapped.get_cell().lengths() * np.array([1.0, -2.0, 3.0])
     wrapped = unwrapped.copy()
     wrapped.wrap()
-    np.testing.assert_allclose(
-        distance_matrix(unwrapped), distance_matrix(wrapped), atol=1e-8
-    )
+    np.testing.assert_allclose(distance_matrix(unwrapped), distance_matrix(wrapped), atol=1e-8)
 
 
 def test_distance_matrix_rejects_triclinic(triclinic_atoms):
@@ -69,8 +65,12 @@ def test_cross_pair_pdf_keeps_first_bin():
     atoms = _si_o_pair()
     # With 1.0 A wide bins, the 0.8 A contact lands in bin 0.
     _, cross = partial_pdf(
-        distance_matrix(atoms), atoms.get_chemical_symbols(), atoms.get_volume(),
-        ["Si", "O"], rrange=10, nbin=10,
+        distance_matrix(atoms),
+        atoms.get_chemical_symbols(),
+        atoms.get_volume(),
+        ["Si", "O"],
+        rrange=10,
+        nbin=10,
     )
     assert cross[0] > 0
 
@@ -79,8 +79,12 @@ def test_like_pair_pdf_with_single_atom_is_zero():
     """A lone atom of a species has no pairs: zeros, not a division by zero."""
     atoms = _si_o_pair()
     _, like = partial_pdf(
-        distance_matrix(atoms), atoms.get_chemical_symbols(), atoms.get_volume(),
-        ["Si", "Si"], rrange=10, nbin=10,
+        distance_matrix(atoms),
+        atoms.get_chemical_symbols(),
+        atoms.get_volume(),
+        ["Si", "Si"],
+        rrange=10,
+        nbin=10,
     )
     assert np.all(like == 0.0)
 
@@ -88,8 +92,11 @@ def test_like_pair_pdf_with_single_atom_is_zero():
 def test_partial_pdf_returns_zeros_for_absent_species(silicon_small):
     """A species that is not in the structure has no pairs to bin."""
     _, absent = partial_pdf(
-        distance_matrix(silicon_small), silicon_small.get_chemical_symbols(),
-        silicon_small.get_volume(), ["Si", "Ge"], nbin=50,
+        distance_matrix(silicon_small),
+        silicon_small.get_chemical_symbols(),
+        silicon_small.get_volume(),
+        ["Si", "Ge"],
+        nbin=50,
     )
     assert np.all(absent == 0.0)
 
@@ -99,12 +106,8 @@ def test_partial_pdf_accepts_numpy_integer_atomic_numbers(silicon_small):
     distances = distance_matrix(silicon_small)
     volume = silicon_small.get_volume()
     numbers = np.unique(silicon_small.get_atomic_numbers())
-    _, from_numpy = partial_pdf(
-        distances, silicon_small.get_atomic_numbers(), volume, [numbers[0], numbers[0]]
-    )
-    _, from_symbol = partial_pdf(
-        distances, silicon_small.get_chemical_symbols(), volume, ["Si", "Si"]
-    )
+    _, from_numpy = partial_pdf(distances, silicon_small.get_atomic_numbers(), volume, [numbers[0], numbers[0]])
+    _, from_symbol = partial_pdf(distances, silicon_small.get_chemical_symbols(), volume, ["Si", "Si"])
     np.testing.assert_allclose(from_numpy, from_symbol)
 
 
@@ -113,12 +116,8 @@ def test_partial_pdf_indices_override_the_pair(silicon_small):
     distances = distance_matrix(silicon_small)
     volume = silicon_small.get_volume()
     all_si = np.arange(len(silicon_small))
-    _, by_index = partial_pdf(
-        distances, None, volume, ["ignored", "ignored"], indices=[all_si, all_si]
-    )
-    _, by_symbol = partial_pdf(
-        distances, silicon_small.get_chemical_symbols(), volume, ["Si", "Si"]
-    )
+    _, by_index = partial_pdf(distances, None, volume, ["ignored", "ignored"], indices=[all_si, all_si])
+    _, by_symbol = partial_pdf(distances, silicon_small.get_chemical_symbols(), volume, ["Si", "Si"])
     np.testing.assert_allclose(by_index, by_symbol)
 
 

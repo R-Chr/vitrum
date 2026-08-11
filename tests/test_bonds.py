@@ -67,9 +67,7 @@ def test_neighbor_list_matches_brute_force_on_silicon(silicon_small, cutoff):
     )
 
 
-@pytest.mark.parametrize(
-    "center, neigh", [("Ca", "F"), ("F", "Ca"), ("F", "F"), (["Ca", "F"], "F")]
-)
+@pytest.mark.parametrize("center, neigh", [("Ca", "F"), ("F", "Ca"), ("F", "F"), (["Ca", "F"], "F")])
 def test_neighbor_list_matches_brute_force_on_fluorite(fluorite_caf2, center, neigh):
     """Cross pairs, like pairs and multi-species selections must all match the reference."""
     bonds = _kd_bonds(fluorite_caf2, center, neigh, CAF2_FIRST_SHELL_CUTOFF)
@@ -148,9 +146,7 @@ def test_exact_cutoff_distance_is_excluded():
 
 def test_coincident_distinct_atoms_bond():
     """Two distinct atoms at the same position are still a bonded pair, not a self-pair."""
-    atoms = Atoms(
-        "H2", positions=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], cell=[10.0] * 3, pbc=True
-    )
+    atoms = Atoms("H2", positions=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], cell=[10.0] * 3, pbc=True)
     assert _kd_bonds(atoms, "H", "H", 1.0).counts().tolist() == [1, 1]
 
 

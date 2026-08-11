@@ -86,9 +86,7 @@ def test_cutoff_auto_runs_end_to_end(silicon_small):
 
 def test_cutoff_dict_restricts_to_the_named_bonds(silicon_small):
     """`bonds` still selects which species pairs enter the graph when `cutoff` is a dict."""
-    rings = find_rings(
-        silicon_small, bonds=[("Si", "Si")], limit=6, cutoff={("Si", "Si"): 3.0}
-    )
+    rings = find_rings(silicon_small, bonds=[("Si", "Si")], limit=6, cutoff={("Si", "Si"): 3.0})
     assert sizes(rings) == {6: 128}
 
 

@@ -62,9 +62,7 @@ def test_radii_scaling_scales_the_radius_not_the_volume(lone_atom):
 def test_radii_overrides_replace_the_tabulated_radius(lone_atom):
     """An override is a base radius in Angstrom, taken instead of the covalent one."""
     expected = (4 / 3) * np.pi * 2.0**3 / BOX**3
-    assert _occupied_fraction(lone_atom, radii_overrides={"Ar": 2.0}) == pytest.approx(
-        expected, rel=0.05
-    )
+    assert _occupied_fraction(lone_atom, radii_overrides={"Ar": 2.0}) == pytest.approx(expected, rel=0.05)
 
 
 def test_the_free_space_around_one_atom_is_a_single_cavity(lone_atom):

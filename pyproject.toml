@@ -12,18 +12,21 @@ authors = [
 ]
 requires-python = ">=3.10"
 dynamic = ["version"]
+# Floors are the oldest release of each project that supports numpy 2.x, which `numpy>=2.0`
+# already forces. pymatgen 2024.8.8 is the first to permit numpy 2 on every platform
+# (2024.7.18 still capped it at <2.0 on Windows).
 dependencies = [
     "numpy>=2.0",
-    "ase",
-    "pandas",
-    "scipy",
-    "pymatgen",
-    "numba",
-    "matplotlib",
-    "tqdm",
+    "ase>=3.23",
+    "pandas>=2.2.2",
+    "scipy>=1.13",
+    "pymatgen>=2024.8.8",
+    "numba>=0.60",
+    "matplotlib>=3.9",
+    "tqdm>=4.66",
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -51,6 +54,13 @@ test = ["pytest", "pytest-cov"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
 [tool.setuptools.dynamic]
 version = { attr = "vitrum.__version__" }
 
@@ -58,4 +68,4 @@ version = { attr = "vitrum.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-vitrum = ["scattering_lengths.csv", "x_ray_scattering_factor_coefficients.csv"]
+vitrum = ["scattering_lengths.csv", "x_ray_scattering_factor_coefficients.csv", "py.typed"]

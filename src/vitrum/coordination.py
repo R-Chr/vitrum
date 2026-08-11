@@ -108,9 +108,7 @@ def _angle_arms(neigh_types: str | Sequence[str]) -> list[str]:
     if len(arms) == 1:
         return [arms[0], arms[0]]
     if len(arms) != 2:
-        raise ValueError(
-            f"neigh_types must be a single symbol or exactly two, got {arms}."
-        )
+        raise ValueError(f"neigh_types must be a single symbol or exactly two, got {arms}.")
     return arms
 
 
@@ -141,9 +139,7 @@ def _angles(
             pairs = np.asarray(list(itertools.product(a, b)))
         sizes.append(len(pairs))
         if len(pairs):
-            triples.append(
-                np.column_stack((pairs[:, 0], np.full(len(pairs), center), pairs[:, 1]))
-            )
+            triples.append(np.column_stack((pairs[:, 0], np.full(len(pairs), center), pairs[:, 1])))
 
     if not triples:
         return [np.zeros(0) for _ in sizes]
@@ -151,14 +147,9 @@ def _angles(
     return list(np.split(measured, np.cumsum(sizes)[:-1]))
 
 
-def _bridging_speciation(
-    frame: _Frame, bridge_type: str, former_cutoffs: dict[str, float]
-) -> np.ndarray:
+def _bridging_speciation(frame: _Frame, bridge_type: str, former_cutoffs: dict[str, float]) -> np.ndarray:
     """Number of network formers bonded to each `bridge_type` atom."""
-    return sum(
-        frame.bonds(former, bridge_type, cut).degrees()
-        for former, cut in former_cutoffs.items()
-    )
+    return sum(frame.bonds(former, bridge_type, cut).degrees() for former, cut in former_cutoffs.items())
 
 
 def _bridging_analysis(
@@ -170,16 +161,10 @@ def _bridging_analysis(
 ) -> np.ndarray:
     """Number of bridging `bridge_type` atoms around each `center_type` atom."""
     formers_per_bridge = _bridging_speciation(frame, bridge_type, former_cutoffs)
-    return (
-        frame.bonds(center_type, bridge_type, center_cutoff)
-        .select_neighs(formers_per_bridge >= 2)
-        .counts()
-    )
+    return frame.bonds(center_type, bridge_type, center_cutoff).select_neighs(formers_per_bridge >= 2).counts()
 
 
-def _neighbors(
-    frame: _Frame, center_type: str, cutoffs: dict[str, float]
-) -> dict[str, list[np.ndarray]]:
+def _neighbors(frame: _Frame, center_type: str, cutoffs: dict[str, float]) -> dict[str, list[np.ndarray]]:
     """Global indices of each `center_type` atom's neighbours, grouped by species."""
     missing = [t for t in frame.species if t not in cutoffs]
     if missing:
@@ -224,6 +209,7 @@ class Coordination:
         species (np.ndarray): The distinct species present in the first frame.
         cutoff_frame (int): Index of the frame an "Auto" cutoff is resolved from.
     """
+
     def __init__(self, atoms_list: Atoms | list[Atoms], cutoff_frame: int = 0):
         """
         Initialize the analysis from one structure or a list of frames.
@@ -249,9 +235,7 @@ class Coordination:
         if wrong:
             raise TypeError(f"atoms_list must contain Atoms objects, got {wrong}.")
         if not -len(frames) <= cutoff_frame < len(frames):
-            raise IndexError(
-                f"cutoff_frame={cutoff_frame} is out of range for {len(frames)} frame(s)."
-            )
+            raise IndexError(f"cutoff_frame={cutoff_frame} is out of range for {len(frames)} frame(s).")
         self.atoms_list = frames
         self.chemical_symbols = frames[0].get_chemical_symbols()
         self.species = np.unique(self.chemical_symbols)
@@ -269,10 +253,7 @@ class Coordination:
             yield frame
 
     def get_bonds(
-        self,
-        center_type: str | list[str],
-        neigh_type: str | list[str],
-        cutoff: Cutoff = "Auto"
+        self, center_type: str | list[str], neigh_type: str | list[str], cutoff: Cutoff = "Auto"
     ) -> list[Bonds]:
         """
         Bonds between two species selections, for every frame.
@@ -312,17 +293,10 @@ class Coordination:
                 f"to {sorted(distinct)}. Call get_bonds once per bond, or pass a number."
             )
         (resolved,) = distinct
-        return [
-            frame.bonds(centers, neighs, resolved)
-            for frame in self._frames(*centers, *neighs)
-        ]
+        return [frame.bonds(centers, neighs, resolved) for frame in self._frames(*centers, *neighs)]
 
     def get_angles(
-        self,
-        center_type: str,
-        neigh_types: str | list[str],
-        cutoff: Cutoff = "Auto",
-        per_atom: bool = False
+        self, center_type: str, neigh_types: str | list[str], cutoff: Cutoff = "Auto", per_atom: bool = False
     ) -> list[np.ndarray] | list[list[np.ndarray]]:
         """
         Calculate the raw bond angles at each central atom, for every frame.
@@ -353,16 +327,10 @@ class Coordination:
         """
         arms = _angle_arms(neigh_types)
         cutoffs = self._cutoffs([(center_type, arm) for arm in arms], cutoff)
-        per_frame = [
-            _angles(frame, center_type, arms, cutoffs)
-            for frame in self._frames(center_type, *arms)
-        ]
+        per_frame = [_angles(frame, center_type, arms, cutoffs) for frame in self._frames(center_type, *arms)]
         if per_atom:
             return per_frame
-        return [
-            np.hstack(frame) if frame else np.array([], dtype=float)
-            for frame in per_frame
-        ]
+        return [np.hstack(frame) if frame else np.array([], dtype=float) for frame in per_frame]
 
     def get_bridging_analysis(
         self,
@@ -412,9 +380,7 @@ class Coordination:
         center_cutoff, *former_list = self._cutoffs(pairs, cutoff)
         former_cutoffs = dict(zip(formers, former_list))
         per_frame = [
-            _bridging_analysis(
-                frame, center_type, bridge_type, center_cutoff, former_cutoffs
-            )
+            _bridging_analysis(frame, center_type, bridge_type, center_cutoff, former_cutoffs)
             for frame in self._frames(center_type, bridge_type, *formers)
         ]
         if per_atom:
@@ -463,18 +429,13 @@ class Coordination:
         cutoffs = self._cutoffs([(f, bridge_type) for f in formers], cutoff)
         former_cutoffs = dict(zip(formers, cutoffs))
         per_frame = [
-            _bridging_speciation(frame, bridge_type, former_cutoffs)
-            for frame in self._frames(bridge_type, *formers)
+            _bridging_speciation(frame, bridge_type, former_cutoffs) for frame in self._frames(bridge_type, *formers)
         ]
         if per_atom:
             return per_frame
         return _fractions(np.concatenate(per_frame))
 
-    def get_neighbors(
-        self,
-        center_type: str,
-        cutoff: Cutoff = "Auto"
-    ) -> list[dict[str, list[np.ndarray]]]:
+    def get_neighbors(self, center_type: str, cutoff: Cutoff = "Auto") -> list[dict[str, list[np.ndarray]]]:
         """
         Find the neighbors of each center atom of a given type, grouped by neighbor species.
 
@@ -497,10 +458,7 @@ class Coordination:
         species = list(self.species)
         pairs = [(center_type, neigh_type) for neigh_type in species]
         cutoffs = dict(zip(species, self._cutoffs(pairs, cutoff)))
-        return [
-            _neighbors(frame, center_type, cutoffs)
-            for frame in self._frames(center_type)
-        ]
+        return [_neighbors(frame, center_type, cutoffs) for frame in self._frames(center_type)]
 
     def get_angle_distribution(
         self,
@@ -509,7 +467,7 @@ class Coordination:
         nbin: int = 70,
         cutoff: Cutoff = "Auto",
         range: tuple[float, float] | None = None,
-        sin_normalised: bool = False
+        sin_normalised: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the angular distribution of a given pair of target atoms within a specified range.
@@ -559,9 +517,7 @@ class Coordination:
         angles = 0.5 * (edges[:-1] + edges[1:])
         total = counts.sum()
         if total == 0:
-            raise ValueError(
-                f"All {angles_all.size} angles fell outside range={range}."
-            )
+            raise ValueError(f"All {angles_all.size} angles fell outside range={range}.")
 
         dist = counts.astype(float)
         if sin_normalised:
@@ -571,11 +527,7 @@ class Coordination:
         return angles, dist
 
     def get_coordination_numbers(
-        self,
-        center_type: str,
-        neigh_type: str | list[str],
-        cutoff: Cutoff = "Auto",
-        per_atom: bool = False
+        self, center_type: str, neigh_type: str | list[str], cutoff: Cutoff = "Auto", per_atom: bool = False
     ) -> dict[int, float] | list[np.ndarray]:
         """
         Calculate the coordination number distribution over multiple frames.
@@ -605,10 +557,7 @@ class Coordination:
         cutoffs = self._cutoffs([(center_type, neigh) for neigh in neigh_types], cutoff)
 
         per_frame = [
-            sum(
-                frame.bonds(center_type, neigh, cut).counts()
-                for neigh, cut in zip(neigh_types, cutoffs)
-            )
+            sum(frame.bonds(center_type, neigh, cut).counts() for neigh, cut in zip(neigh_types, cutoffs))
             for frame in self._frames(center_type, *neigh_types)
         ]
         if per_atom:

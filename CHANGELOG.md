@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - 2026-08-05
+## [1.1.0] - 2026-08-11
 
 This release corrects several bugs that produced silently wrong numbers.
 **Ring statistics and topology metrics, running coordination numbers, partial PDFs for like
@@ -49,6 +49,13 @@ recomputed.**
   `vitrum.io_helpers.get_density`.
 - A `pytest` suite under `tests/`, checked against independent references. Install with
   `pip install -e .[test]`; CI runs it on Python 3.10-3.13.
+- **A `py.typed` marker (PEP 561)**, so the type annotations throughout the package are
+  visible to `mypy`, `pyright` and editors in downstream projects. They were silently ignored
+  before, because an installed distribution without the marker is treated as untyped.
+- Community documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and issue
+  and pull-request templates.
+- Docs for `vitrum.visualization`, the one module whose API reference was not reachable from
+  the documentation nav.
 
 ### Changed
 

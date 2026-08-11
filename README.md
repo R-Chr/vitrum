@@ -59,11 +59,6 @@ See the [`examples`](examples/) folder for runnable Jupyter notebooks demonstrat
 ### 2. Dynamics & Diffusion
 *   **Diffusion Analysis**: Calculate Mean Squared Displacement (MSD), diffusion coefficients, and Van Hove correlation functions (`vitrum.diffusion`).
 
-### 3. Machine Learning & Workflows
-*   **BALACE Framework**: A Batch Active Learning framework for Atomistic Simulations (`vitrum.batch_active`) (requires `workflows` dependencies).
-    *   Automated workflow for training Machine Learning Interatomic Potentials (MLIPs) based on ACE .
-    *   Integration with VASP and LAMMPS for data generation and active learning loops.
-    *   Job management via Fireworks and Jobflow.
 
 
 ## 📑 Citation
@@ -72,8 +67,14 @@ If you use `vitrum` in your work, please cite it. Each GitHub release is archive
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21366368.svg)](https://doi.org/10.5281/zenodo.21366368)
 
 
+## 🤝 Contributing
+Bug reports, test cases and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the development setup and what a mergeable change looks like, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations. Security issues should
+go through [SECURITY.md](SECURITY.md) rather than the public issue tracker.
+
 ## 👥 Author
-Rasmus Christensen (rasmusc@bio.aau.dk)
+Rasmus Christensen (rasmus.christensen.a1@tohoku.ac.jp)
 
 ## ⭐ Acknowledgements
 `vitrum` relies on several powerful open-source packages:

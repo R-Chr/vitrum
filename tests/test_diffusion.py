@@ -16,10 +16,7 @@ from vitrum.trajectory_tools import get_high_low_displacement_index, unwrap_traj
 def test_unwrap_follows_an_atom_across_a_boundary():
     """An atom drifting steadily must unwrap to a straight line, not fold back."""
     box = 4.0
-    frames = [
-        Atoms("Ar", positions=[[x, 0.0, 0.0]], cell=[box] * 3, pbc=True)
-        for x in (3.5, 0.1, 0.7, 1.3)
-    ]
+    frames = [Atoms("Ar", positions=[[x, 0.0, 0.0]], cell=[box] * 3, pbc=True) for x in (3.5, 0.1, 0.7, 1.3)]
     unwrapped = [a.get_positions()[0, 0] for a in unwrap_trajectory(frames)]
     np.testing.assert_allclose(unwrapped, [3.5, 4.1, 4.7, 5.3], atol=1e-9)
 
@@ -30,10 +27,7 @@ def test_unwrap_ignores_a_pure_cell_rescaling():
     Its Cartesian position changes with the cell, so a step measured in Cartesian
     coordinates would report motion that never happened.
     """
-    frames = [
-        Atoms("Ar", positions=[[0.1 * box, 0.0, 0.0]], cell=[box] * 3, pbc=True)
-        for box in (10.0, 9.0, 8.0)
-    ]
+    frames = [Atoms("Ar", positions=[[0.1 * box, 0.0, 0.0]], cell=[box] * 3, pbc=True) for box in (10.0, 9.0, 8.0)]
     unwrapped = [a.get_positions()[0] for a in unwrap_trajectory(frames)]
     np.testing.assert_allclose(unwrapped, [unwrapped[0]] * 3, atol=1e-9)
 
@@ -84,10 +78,7 @@ def test_displacement_split_ignores_other_species():
 @pytest.fixture
 def short_trajectory():
     """A 10-frame trajectory of one atom drifting along x, already unwrapped."""
-    frames = [
-        Atoms("Ar", positions=[[float(i) * 0.1, 0.0, 0.0]], cell=[10, 10, 10], pbc=True)
-        for i in range(10)
-    ]
+    frames = [Atoms("Ar", positions=[[float(i) * 0.1, 0.0, 0.0]], cell=[10, 10, 10], pbc=True) for i in range(10)]
     return frames, list(np.arange(10, dtype=float))
 
 

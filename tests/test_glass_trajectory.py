@@ -80,12 +80,8 @@ def test_bridging_analysis_and_speciation_count_the_same_bonds(sodium_silicate):
     must give twice the number of bridging oxygens.
     """
     coordination = Coordination(sodium_silicate)
-    per_silicon = coordination.get_bridging_analysis(
-        "Si", "O", cutoff=SI_O_CUTOFF, per_atom=True
-    )
-    per_oxygen = coordination.get_bridging_speciation(
-        "O", "Si", cutoff=SI_O_CUTOFF, per_atom=True
-    )
+    per_silicon = coordination.get_bridging_analysis("Si", "O", cutoff=SI_O_CUTOFF, per_atom=True)
+    per_oxygen = coordination.get_bridging_speciation("O", "Si", cutoff=SI_O_CUTOFF, per_atom=True)
     for silicons, oxygens in zip(per_silicon, per_oxygen):
         assert silicons.sum() == 2 * np.count_nonzero(oxygens == 2)
 
@@ -93,9 +89,7 @@ def test_bridging_analysis_and_speciation_count_the_same_bonds(sodium_silicate):
 def test_intratetrahedral_angle_is_tetrahedral(sodium_silicate):
     """O-Si-O peaks at the tetrahedral 109.47 degrees, as a distribution and not a spike."""
     coordination = Coordination(sodium_silicate)
-    angles, distribution = coordination.get_angle_distribution(
-        "Si", ["O", "O"], cutoff=SI_O_CUTOFF, range=(0.0, 180.0)
-    )
+    angles, distribution = coordination.get_angle_distribution("Si", ["O", "O"], cutoff=SI_O_CUTOFF, range=(0.0, 180.0))
     assert angles[np.argmax(distribution)] == pytest.approx(109.47, abs=3.0)
 
 

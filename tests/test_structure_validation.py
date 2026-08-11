@@ -31,9 +31,7 @@ def test_no_dimers_in_well_separated_structure(uniform_lattice):
     assert dimer_checker(uniform_lattice, bond_length=2.0, num_allowed=0) is False
 
 
-@pytest.mark.parametrize(
-    "grid_density", [(2, 2, 2), (3, 3, 3), (4, 4, 4), (5, 5, 5), (2, 3, 4)]
-)
+@pytest.mark.parametrize("grid_density", [(2, 2, 2), (3, 3, 3), (4, 4, 4), (5, 5, 5), (2, 3, 4)])
 def test_homogeneity_checker_handles_any_grid_density(uniform_random, grid_density):
     """Every grid density must work, not just 3x3x3.
 

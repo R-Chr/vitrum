@@ -124,7 +124,5 @@ def test_glass_atoms_is_still_a_drop_in_ase_atoms(silicon_small):
     """Existing scripts pass GlassAtoms straight into ASE and into the analysis classes."""
     atoms = GlassAtoms(silicon_small)
     assert isinstance(atoms, Atoms)
-    numbers = Coordination([atoms]).get_coordination_numbers(
-        "Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF
-    )
+    numbers = Coordination([atoms]).get_coordination_numbers("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF)
     assert numbers == {4: pytest.approx(1.0)}

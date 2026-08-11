@@ -11,7 +11,8 @@ def get_high_low_displacement_index(initial_state, current_state, target_atom, p
         initial_state (Atoms): The initial state of the system.
         current_state (Atoms): The current state of the system.
         target_atom (str or int): The chemical symbol or atomic number of the target atom.
-        percentage (float, optional): The percentage of the highest and lowest displacements to consider. Defaults to 0.25.
+        percentage (float, optional): The percentage of the highest and lowest displacements to consider. Defaults to
+            0.25.
 
     Returns:
         list: A list of two elements, where the first element is the index of the atoms with the highest displacements

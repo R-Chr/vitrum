@@ -1,6 +1,5 @@
 import warnings
 from itertools import combinations, product
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from ase import Atoms
@@ -20,9 +19,9 @@ def compute_occupancy_grid(
     grid_spacing: float = 0.2,
     radii_scaling: float = 1.0,
     probe_radius: float = 0.0,
-    radii_overrides: Optional[Dict[str, float]] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
-    '''
+    radii_overrides: dict[str, float] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
     Classify a fine 3D grid over the (orthorhombic) cell as occupied or free.
 
     A grid point is "occupied" if it lies within some atom's exclusion radius
@@ -47,7 +46,7 @@ def compute_occupancy_grid(
             - occupied: Boolean array of shape (nx, ny, nz). True where the grid
               point falls inside an atom's exclusion sphere.
             - spacing: Array of shape (3,), the actual per-axis grid spacing used.
-    '''
+    """
     atoms = atoms.copy()
     atoms.wrap()
     cell_lengths = require_orthorhombic(atoms.get_cell(), "build_void_grid")
@@ -92,8 +91,8 @@ def compute_occupancy_grid(
 def find_cavities(
     occupied: np.ndarray,
     min_grid_points: int = 4,
-) -> List[np.ndarray]:
-    '''
+) -> list[np.ndarray]:
+    """
     Cluster free (non-occupied) grid points into discrete, periodicity-aware cavities.
 
     Connectivity is face-adjacency only (6-connected): two free voxels that only
@@ -111,7 +110,7 @@ def find_cavities(
         List[np.ndarray]: One array of shape (n, 3) per cavity, the (ix, iy, iz)
             grid indices of its free voxels, already merged across periodic
             boundaries.
-    '''
+    """
     free = ~occupied
     labels, n_labels = ndi_label(free)
 
@@ -142,17 +141,17 @@ def find_cavities(
     return [np.argwhere(labels == lbl) for lbl in surviving]
 
 
-def _cell_edges(cell_lengths: np.ndarray) -> List[Tuple[np.ndarray, np.ndarray]]:
-    '''
+def _cell_edges(cell_lengths: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
+    """
     Pairs of (start, stop) Cartesian points for the 12 edges of an axis-aligned box.
-    '''
+    """
     # Two corners of the box are joined by an edge exactly when they differ along one axis.
     corners = np.array(list(product([0, 1], repeat=3))) * cell_lengths
     return [(a, b) for a, b in combinations(corners, 2) if np.count_nonzero(a != b) == 1]
 
 
 def _add_cell_edges_trace(fig, cell_lengths: np.ndarray) -> None:
-    '''Add the 12 edges of the (orthorhombic) simulation cell to a plotly figure.'''
+    """Add the 12 edges of the (orthorhombic) simulation cell to a plotly figure."""
     import plotly.graph_objects as go
 
     for start, stop in _cell_edges(cell_lengths):
@@ -171,10 +170,10 @@ def _add_cell_edges_trace(fig, cell_lengths: np.ndarray) -> None:
 def _add_atoms_trace(
     fig,
     atoms: Atoms,
-    colors: Optional[Dict[str, str]] = None,
+    colors: dict[str, str] | None = None,
     marker_size: int = 4,
 ) -> None:
-    '''Add one Scatter3d marker trace per chemical species to a plotly figure.'''
+    """Add one Scatter3d marker trace per chemical species to a plotly figure."""
     import plotly.express as px
     import plotly.graph_objects as go
 
@@ -209,13 +208,13 @@ def _add_void_isosurface_trace(
     color: str = "cyan",
     opacity: float = 0.35,
 ) -> None:
-    '''
+    """
     Add a marching-cubes isosurface mesh of the free (void) space to a plotly figure.
 
     The free/occupied grid is optionally Gaussian-smoothed (with periodic wrapping,
     to avoid a seam at the cell boundary) before extracting the isosurface, since
     the raw voxel grid produces a blocky surface.
-    '''
+    """
     import plotly.graph_objects as go
     from scipy.ndimage import gaussian_filter
     from skimage import measure
@@ -246,7 +245,7 @@ def _add_void_isosurface_trace(
     )
 
 
-class Cavity(object):
+class Cavity:
     """
     A discrete free-volume region ("void") in an atomistic system.
     """
@@ -256,7 +255,7 @@ class Cavity(object):
         atoms: Atoms,
         voxel_indices: np.ndarray,
         spacing: np.ndarray,
-        grid_shape: Tuple[int, int, int],
+        grid_shape: tuple[int, int, int],
     ):
         """
         Initialize a Cavity object.
@@ -352,7 +351,7 @@ class VoidAnalysis:
         self,
         atoms: Atoms,
         radii_scaling: float = 1.0,
-        radii_overrides: Optional[Dict[str, float]] = None,
+        radii_overrides: dict[str, float] | None = None,
         probe_radius: float = 0.0,
     ):
         """
@@ -378,15 +377,15 @@ class VoidAnalysis:
         self.radii_scaling = radii_scaling
         self.radii_overrides = radii_overrides
         self.probe_radius = probe_radius
-        self.cavities: Optional[List[Cavity]] = None
-        self._occupied: Optional[np.ndarray] = None
-        self._spacing: Optional[np.ndarray] = None
+        self.cavities: list[Cavity] | None = None
+        self._occupied: np.ndarray | None = None
+        self._spacing: np.ndarray | None = None
 
     def calculate(
         self,
         grid_spacing: float = 0.2,
         min_grid_points: int = 4,
-    ) -> List[Cavity]:
+    ) -> list[Cavity]:
         """
         Compute the occupancy grid and cluster it into cavities.
 
@@ -411,9 +410,7 @@ class VoidAnalysis:
         self._spacing = spacing
 
         voxel_clusters = find_cavities(occupied, min_grid_points=min_grid_points)
-        self.cavities = [
-            Cavity(self.atoms, voxels, spacing, occupied.shape) for voxels in voxel_clusters
-        ]
+        self.cavities = [Cavity(self.atoms, voxels, spacing, occupied.shape) for voxels in voxel_clusters]
         return self.cavities
 
     def get_free_volume_fraction(self) -> float:
@@ -430,9 +427,7 @@ class VoidAnalysis:
             raise ValueError("Occupancy grid has not been calculated yet. Run .calculate() first.")
         return float(np.count_nonzero(~self._occupied) / self._occupied.size)
 
-    def get_cavity_size_distribution(
-        self, by: str = "volume", n_bins: int = 20
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def get_cavity_size_distribution(self, by: str = "volume", n_bins: int = 20) -> tuple[np.ndarray, np.ndarray]:
         """
         Get a histogram of cavity sizes.
 
@@ -507,7 +502,7 @@ class VoidAnalysis:
         isovalue: float = 0.5,
         smoothing_sigma: float = 1.0,
         show_atoms: bool = True,
-        atom_colors: Optional[Dict[str, str]] = None,
+        atom_colors: dict[str, str] | None = None,
         atom_marker_size: int = 4,
         void_color: str = "cyan",
         void_opacity: float = 0.35,

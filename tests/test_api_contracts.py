@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from vitrum.comparison import r_chi
-from vitrum.io_helpers import correct_atom_types, get_LAMMPS_dump_timesteps, get_density
+from vitrum.io_helpers import correct_atom_types, get_density, get_LAMMPS_dump_timesteps
 from vitrum.scattering import Scattering
 
 
@@ -50,9 +50,7 @@ def test_weighted_partials_sum_to_total_for_every_weighting(glass_scattering, ty
     """xray weights are Q-dependent arrays, so a wrong summation axis in the normalisation
     would still return a plausibly shaped S(Q)."""
     partials = glass_scattering.get_weighted_partial_structure_factors(type=type)
-    np.testing.assert_allclose(
-        sum(partials.values()), glass_scattering.get_structure_factor(type=type), rtol=1e-6
-    )
+    np.testing.assert_allclose(sum(partials.values()), glass_scattering.get_structure_factor(type=type), rtol=1e-6)
 
 
 def test_weighted_partials_rejects_bad_type(glass_scattering):

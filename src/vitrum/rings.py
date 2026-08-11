@@ -17,7 +17,7 @@ from vitrum.coordination import Cutoff, _resolve_cutoffs
 
 
 def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
-    '''
+    """
     Check whether a closed path is a true ring rather than one winding around the cell.
 
     The bond vectors of a true ring sum to zero; a path that returns to its starting atom
@@ -29,19 +29,20 @@ def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarr
 
     Returns:
         bool: True if the ring closes within the cell, False if it wraps around it.
-    '''
+    """
     total_offset = np.zeros(3)
     for i in range(len(ring) - 1):
-        total_offset += offsets[(ring[i], ring[i+1])]
+        total_offset += offsets[(ring[i], ring[i + 1])]
     total_offset += offsets[(ring[-1], ring[0])]
     return np.all(total_offset == 0)
+
 
 _MAX_DEGENERATE_PATHS = 4096
 _MAX_SEARCH_STEPS = 200_000
 
 
 def _adjacency_lists(d: csr_array) -> list[np.ndarray]:
-    '''
+    """
     Neighbour index array for each atom, extracted once from the bond graph.
 
     Args:
@@ -49,8 +50,8 @@ def _adjacency_lists(d: csr_array) -> list[np.ndarray]:
 
     Returns:
         List[np.ndarray]: One array of neighbour indices per atom.
-    '''
-    return [d.indices[d.indptr[i]:d.indptr[i + 1]] for i in range(d.shape[0])]
+    """
+    return [d.indices[d.indptr[i] : d.indptr[i + 1]] for i in range(d.shape[0])]
 
 
 def _blocked(
@@ -59,7 +60,7 @@ def _blocked(
     banned_nodes: frozenset[int],
     banned_edge: tuple[int, int] | None,
 ) -> bool:
-    '''Whether the step from atom `u` to atom `v` is removed from the search graph.'''
+    """Whether the step from atom `u` to atom `v` is removed from the search graph."""
     if u in banned_nodes or v in banned_nodes:
         return True
     if banned_edge is None:
@@ -75,7 +76,7 @@ def _bfs_levels(
     banned_nodes: frozenset[int] = frozenset(),
     banned_edge: tuple[int, int] | None = None,
 ) -> dict[int, int]:
-    '''
+    """
     Hop distance from `source` to every atom within `max_depth` hops.
 
     Args:
@@ -87,7 +88,7 @@ def _bfs_levels(
 
     Returns:
         Dict[int, int]: Atom index -> hop distance, for the atoms reached.
-    '''
+    """
     dist = {source: 0}
     frontier = [source]
     depth = 0
@@ -113,7 +114,7 @@ def _backtrack_paths(
     banned_nodes: frozenset[int] = frozenset(),
     banned_edge: tuple[int, int] | None = None,
 ) -> list[list[int]]:
-    '''
+    """
     Every shortest path from `source` to `target`, as [source, ..., target].
 
     A single predecessor chain (what `dijkstra(return_predecessors=True)` gives) keeps
@@ -132,7 +133,7 @@ def _backtrack_paths(
     Returns:
         List[List[int]]: One list per shortest path, each ordered [source, ..., target].
             Empty if `target` was not reached.
-    '''
+    """
     if target not in dist:
         return []
     paths = [[target]]
@@ -157,7 +158,7 @@ def _paths_of_length(
     banned_nodes: frozenset[int],
     banned_edge: tuple[int, int] | None,
 ) -> tuple[list[list[int]], bool]:
-    '''
+    """
     Simple paths from `source` to `target` with exactly `length` bonds.
 
     `dist_to_target` prunes the walk: from an atom that is further from `target` than the
@@ -176,7 +177,7 @@ def _paths_of_length(
     Returns:
         Tuple[List[List[int]], bool]: The paths, each ordered [source, ..., target], and
             whether the search hit its step or path-count ceiling and so may be incomplete.
-    '''
+    """
     results: list[list[int]] = []
     path = [source]
     seen = {source}
@@ -224,7 +225,7 @@ def _shortest_valid_rings(
     banned_edge: tuple[int, int] | None = None,
     banned_nodes: frozenset[int] = frozenset(),
 ) -> tuple[list[list[int]], dict[str, int]]:
-    '''
+    """
     The shortest rings closing `source` to `target` that do not wrap around the cell.
     A closed path whose bond vectors do not sum to zero winds around the periodic cell and
     is not a ring (see `ring_closes_in_cell`).
@@ -244,7 +245,7 @@ def _shortest_valid_rings(
         Tuple[List[List[int]], Dict[str, int]]: The rings, and flags counting whether the
             search had to look past a wrapping candidate ("deepened"), hit its ceiling on
             enumerated paths ("truncated"), and gave up without a valid ring ("exhausted").
-    '''
+    """
     flags = {"deepened": 0, "truncated": 0, "exhausted": 0}
 
     dist_back = _bfs_levels(adj, target, hop_limit, banned_nodes, banned_edge)
@@ -256,9 +257,7 @@ def _shortest_valid_rings(
     longest = int(min(longest, len(adj) - 1))
 
     for length in range(shortest, longest + 1):
-        paths, capped = _paths_of_length(
-            adj, source, target, length, dist_back, banned_nodes, banned_edge
-        )
+        paths, capped = _paths_of_length(adj, source, target, length, dist_back, banned_nodes, banned_edge)
         flags["deepened"] = int(length > shortest)
         flags["truncated"] = int(capped)
         rings = [path + tail for path in paths]
@@ -280,13 +279,13 @@ def _find_guttman_rings(
     offsets: dict[tuple[int, int], np.ndarray],
     limit: float,
 ) -> tuple[list[list[int]], dict[str, int]]:
-    '''
+    """
     Find Guttman rings, in the indices of the (possibly repeated) search cell.
 
     For each bond (i, j), remove that edge and find the shortest paths between i and j in
     the remaining graph. Each path plus the removed edge forms a ring. Every shortest path
     is kept, not just one.
-    '''
+    """
     adj = _adjacency_lists(d)
     hop_limit = limit - 1 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
@@ -296,9 +295,7 @@ def _find_guttman_rings(
             j = int(j)
             if j == i:
                 continue
-            found, flags = _shortest_valid_rings(
-                adj, offsets, i, j, [], hop_limit, banned_edge=(i, j)
-            )
+            found, flags = _shortest_valid_rings(adj, offsets, i, j, [], hop_limit, banned_edge=(i, j))
             rings.extend(found)
             stats.update(flags)
     return rings, stats
@@ -310,14 +307,14 @@ def _find_king_rings(
     offsets: dict[tuple[int, int], np.ndarray],
     limit: float,
 ) -> tuple[list[list[int]], dict[str, int]]:
-    '''
+    """
     Find King's rings, in the indices of the (possibly repeated) search cell.
 
     For each atom c and each pair of its bonded neighbors (n1, n2), remove c from the graph
     and find the shortest paths between n1 and n2 in the remaining graph. Each path plus the
     two edges to c forms a ring. As for the Guttman criterion, every shortest path is kept
     rather than a single predecessor chain.
-    '''
+    """
     adj = _adjacency_lists(d)
     hop_limit = limit - 2 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
@@ -328,7 +325,7 @@ def _find_king_rings(
         if len(neighbors) < 2:
             continue
         for p, n1 in enumerate(neighbors):
-            for n2 in neighbors[p + 1:]:
+            for n2 in neighbors[p + 1 :]:
                 banned = {c} | (shell - {n1, n2})
                 found, flags = _shortest_valid_rings(
                     adj, offsets, n1, n2, [c], hop_limit, banned_nodes=frozenset(banned)
@@ -339,13 +336,13 @@ def _find_king_rings(
 
 
 def _is_shortcut_free(ring: list[int], d: csr_array) -> bool:
-    '''
+    """
     Whether a ring cannot be decomposed into two smaller ones (Franzblau's criterion).
 
     For every pair of atoms in the ring, the shortest path between them in the full bond
     graph must equal the geodesic distance between them measured along the ring. Any pair
     connected by a shorter path (a "shortcut") means the ring decomposes.
-    '''
+    """
     n = len(ring)
     # A shortcut can only matter if it's shorter than the longest possible ring-arc
     # distance (n // 2), so the search never needs to look further than that.
@@ -364,13 +361,13 @@ def _find_primitive_rings(
     offsets: dict[tuple[int, int], np.ndarray],
     limit: float,
 ) -> tuple[list[list[int]], dict[str, int]]:
-    '''
+    """
     Find primitive rings, in the indices of the (possibly repeated) search cell.
     From each root atom, take every pair of equally long shortest
     paths that share no interior atom. If the two paths end on the same atom they close an
     even ring, and if they end on bonded atoms they close an odd one. Candidates are then
     kept only if they are shortcut-free.
-    '''
+    """
     adj = _adjacency_lists(d)
     adj_sets = [{int(x) for x in a} for a in adj]
     max_size = int(limit) if np.isfinite(limit) else d.shape[0]
@@ -428,7 +425,7 @@ def find_rings(
     criterion: str = "guttman",
     cutoff: Cutoff | None = None,
 ) -> list[list[int]]:
-    '''
+    """
     Find rings in the unit cell.
 
     Three ring criteria are supported via `criterion`, each following the corresponding
@@ -455,7 +452,8 @@ def find_rings(
             `criterion="primitive"` on a periodic cell, where it defaults to (3, 3, 3)
             because a single cell cannot represent every primitive ring — the same
             replication R.I.N.G.S. applies for this criterion.
-        bonds (Optional[List[Tuple[str, str]]]): List of allowed bonds, e.g., [('C', 'C'), ('C', 'O')], can be None to allow all bonds.
+        bonds (Optional[List[Tuple[str, str]]]): List of allowed bonds, e.g., [('C', 'C'), ('C', 'O')], can be None to
+            allow all bonds.
             This filters which bonds enter the graph; it is not R.I.N.G.S.'s ABAB option,
             which constrains the ring itself to alternate between two species.
         limit (float): Maximum ring size (number of atoms) to search for. Rings larger than
@@ -475,7 +473,7 @@ def find_rings(
 
     Raises:
         ValueError: If `criterion` is unknown, or `limit` is a finite value below 3.
-    '''
+    """
     if criterion not in ("guttman", "king", "primitive"):
         raise ValueError(f"Unknown ring criterion '{criterion}', expected 'guttman', 'king', or 'primitive'.")
     if np.isfinite(limit) and limit < 3:
@@ -502,10 +500,10 @@ def find_rings(
 
         if bonds is not None:
             elements = set().union(*bonds)
-            radii = [x if el in elements else 0. for el, x in zip(els, radii)]
+            radii = [x if el in elements else 0.0 for el, x in zip(els, radii)]
             radii = np.array(radii, dtype=float)
 
-        nl = NeighborList(radii * radii_factor, self_interaction=False, bothways=False, skin=0.)
+        nl = NeighborList(radii * radii_factor, self_interaction=False, bothways=False, skin=0.0)
         nl.update(s)
 
         for i in range(nat):
@@ -531,8 +529,10 @@ def find_rings(
                     all_offsets[(j, i)] = -o
     else:
         frame = _Frame(ats)
-        pairs = list(bonds) if bonds is not None else list(
-            itertools.combinations_with_replacement(frame.species.tolist(), 2)
+        pairs = (
+            list(bonds)
+            if bonds is not None
+            else list(itertools.combinations_with_replacement(frame.species.tolist(), 2))
         )
         resolved = _resolve_cutoffs(frame, pairs, cutoff)
         # A pair absent from the dict is not searched; key order does not matter.
@@ -549,9 +549,9 @@ def find_rings(
 
     if n_ambiguous:
         warnings.warn(
-            f'{n_ambiguous} bond(s) connect the same pair of atoms through more than one '
-            'periodic image, so the ring graph cannot represent them unambiguously. The '
-            'cell is too small for this bond cutoff — increase `repeat`.'
+            f"{n_ambiguous} bond(s) connect the same pair of atoms through more than one "
+            "periodic image, so the ring graph cannot represent them unambiguously. The "
+            "cell is too small for this bond cutoff — increase `repeat`."
         )
 
     if not d_idx:
@@ -580,51 +580,51 @@ def find_rings(
 
     if n_self_overlapping:
         warnings.warn(
-            f'{n_self_overlapping} ring(s) passed through more than one periodic image of the '
-            'same atom and were discarded. The ring is larger than the primary cell — '
-            'increase `repeat`.'
+            f"{n_self_overlapping} ring(s) passed through more than one periodic image of the "
+            "same atom and were discarded. The ring is larger than the primary cell — "
+            "increase `repeat`."
         )
     if stats["deepened"]:
         warnings.warn(
-            f'{stats["deepened"]} ring search(es) had to look past a candidate that wraps '
-            'around the periodic cell, and returned a larger ring than the bond graph alone '
-            'suggests. The result is correct, but a larger `repeat` avoids the ambiguity.'
+            f"{stats['deepened']} ring search(es) had to look past a candidate that wraps "
+            "around the periodic cell, and returned a larger ring than the bond graph alone "
+            "suggests. The result is correct, but a larger `repeat` avoids the ambiguity."
         )
     if stats["exhausted"]:
         warnings.warn(
-            f'{stats["exhausted"]} ring search(es) found no ring that stays inside the '
-            'periodic cell and returned nothing. The cell is too small for this ring size — '
-            'increase `repeat`.'
+            f"{stats['exhausted']} ring search(es) found no ring that stays inside the "
+            "periodic cell and returned nothing. The cell is too small for this ring size — "
+            "increase `repeat`."
         )
     if stats["truncated"]:
         warnings.warn(
-            f'{stats["truncated"]} ring search(es) hit the ceiling of '
-            f'{_MAX_DEGENERATE_PATHS} equally short paths and may have missed rings. '
-            'Lower `limit` to bound the search.'
+            f"{stats['truncated']} ring search(es) hit the ceiling of "
+            f"{_MAX_DEGENERATE_PATHS} equally short paths and may have missed rings. "
+            "Lower `limit` to bound the search."
         )
     if stats["wrapped"]:
         warnings.warn(
-            f'{stats["wrapped"]} primitive ring candidate(s) wrap around the periodic cell '
-            'and were discarded. Consider increasing `repeat`.'
+            f"{stats['wrapped']} primitive ring candidate(s) wrap around the periodic cell "
+            "and were discarded. Consider increasing `repeat`."
         )
 
     return list(rings.values())
 
 
 def _fit_ellipse_axes(x: np.ndarray, y: np.ndarray) -> tuple[float, float] | None:
-    '''
+    """
     Semi-major and semi-minor axes of the least-squares best-fit ellipse of 2D points.
 
     Returns None when the points do not determine an ellipse: fewer than the five needed to
     fix a conic, or a degenerate configuration (collinear points, or a fit that comes out
     parabolic or hyperbolic).
-    '''
+    """
     if len(x) < 5:
         return None
 
     # The conic fit is badly conditioned on raw Angstrom coordinates; work on points scaled
     # to unit RMS radius and scale the axes back at the end.
-    scale = float(np.sqrt(np.mean(x ** 2 + y ** 2)))
+    scale = float(np.sqrt(np.mean(x**2 + y**2)))
     if not np.isfinite(scale) or scale == 0.0:
         return None
     x, y = x / scale, y / scale
@@ -681,7 +681,8 @@ class Ring:
 
         Args:
             atoms (Atoms): An Atoms object representing the atoms in the ring.
-            indexes (Optional[List[int]], optional): A list of indices of the atoms involved in the ring. Defaults to None.
+            indexes (Optional[List[int]], optional): A list of indices of the atoms involved in the ring. Defaults to
+                None.
         """
         self.atoms = atoms
         self.indexes = indexes
@@ -797,7 +798,7 @@ class Ring:
         """
         if self.ellipsoid_lengths is None:
             self._compute_ellipsoid()
-        return float(np.sqrt(np.sum(self.ellipsoid_lengths ** 2) / self.size()))
+        return float(np.sqrt(np.sum(self.ellipsoid_lengths**2) / self.size()))
 
     def area(self) -> float:
         """
@@ -903,13 +904,13 @@ class RingAnalysis:
 
         Args:
             atoms (Atoms): An Atoms object representing the atoms in the system.
-            included_atoms (List[str]): A list of strings representing the chemical symbols of the atoms to include in the analysis.
+            included_atoms (List[str]): A list of strings representing the chemical symbols of the atoms to include in
+                the analysis.
             bonding_dict (Optional[List[Tuple[str, str]]]): A list of allowed bonds, e.g., [('Si', 'O')].
         """
         self.bonding_dict = bonding_dict
         self.atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
         self.rings = None
-
 
     def calculate(
         self,
@@ -956,7 +957,7 @@ class RingAnalysis:
         self.rings = [Ring(self.atoms[list(r)], list(r)) for r in rings]
         return self.rings
 
-    def write_rings(self, filename: str, format: str = 'extxyz'):
+    def write_rings(self, filename: str, format: str = "extxyz"):
         """
         Write the rings to a file.
 
@@ -967,7 +968,7 @@ class RingAnalysis:
         if self.rings is None:
             raise ValueError("Rings have not been calculated yet.")
         write(filename, [r.atoms for r in self.rings], format=format)
-    
+
     def get_ring_size_distribution(self) -> dict[int, int]:
         """
         Get the distribution of ring sizes.
@@ -979,13 +980,13 @@ class RingAnalysis:
             raise ValueError("Rings have not been calculated yet.")
         ring_sizes = [len(r.atoms) for r in self.rings]
         return dict(Counter(ring_sizes))
-    
+
     def plot_ring_size_distribution(self, ax=None, **plot_kwargs):
         """
         Plots the distribution of ring sizes using matplotlib.
         """
         import matplotlib.pyplot as plt
-        
+
         dist = self.get_ring_size_distribution()
         if not dist:
             print("No rings found. Ensure you have run .calculate() first.")
@@ -997,9 +998,9 @@ class RingAnalysis:
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(9, 6))
-            ax.set_xlabel('Ring Size (N$_{atoms}$)', fontsize=12)
-            ax.set_ylabel('Ring Frequency [N$_{rings}$ / V] (Å$^{-3}$)', fontsize=12)
-            ax.set_xticks(sizes)  
+            ax.set_xlabel("Ring Size (N$_{atoms}$)", fontsize=12)
+            ax.set_ylabel("Ring Frequency [N$_{rings}$ / V] (Å$^{-3}$)", fontsize=12)
+            ax.set_xticks(sizes)
 
         ax.plot(sizes, frequency, **plot_kwargs)
 

@@ -40,20 +40,13 @@ class Bonds:
         self.neighs = np.asarray(neighs, dtype=int)
         self.row = np.asarray(row, dtype=int)
         self.col = np.asarray(col, dtype=int)
-        self.offsets = (
-            np.zeros((len(self.row), 3), dtype=int)
-            if offsets is None
-            else np.asarray(offsets, dtype=int)
-        )
+        self.offsets = np.zeros((len(self.row), 3), dtype=int) if offsets is None else np.asarray(offsets, dtype=int)
 
     def __len__(self) -> int:
         return int(self.row.size)
 
     def __repr__(self) -> str:
-        return (
-            f"Bonds({len(self.centers)} centers, {len(self.neighs)} neighbours, "
-            f"{len(self)} bonds)"
-        )
+        return f"Bonds({len(self.centers)} centers, {len(self.neighs)} neighbours, {len(self)} bonds)"
 
     def counts(self) -> np.ndarray:
         """Bonds at each centre atom, i.e. its coordination number."""
@@ -77,11 +70,7 @@ class Bonds:
             np.ndarray: One distance per bond, aligned with `row` and `col`.
         """
         pos = atoms.get_positions()
-        vectors = (
-            pos[self.neighs[self.col]]
-            - pos[self.centers[self.row]]
-            + self.offsets @ np.asarray(atoms.get_cell())
-        )
+        vectors = pos[self.neighs[self.col]] - pos[self.centers[self.row]] + self.offsets @ np.asarray(atoms.get_cell())
         return np.linalg.norm(vectors, axis=1)
 
     def lists(self) -> list[np.ndarray]:
@@ -93,9 +82,7 @@ class Bonds:
     def select_neighs(self, keep: np.ndarray) -> "Bonds":
         """Drop every bond whose neighbour is False in `keep`, one entry per `neighs` atom."""
         edges = np.asarray(keep, dtype=bool)[self.col]
-        return Bonds(
-            self.centers, self.neighs, self.row[edges], self.col[edges], self.offsets[edges]
-        )
+        return Bonds(self.centers, self.neighs, self.row[edges], self.col[edges], self.offsets[edges])
 
 
 def _as_list(symbols: str | Sequence[str]) -> list[str]:
@@ -104,8 +91,7 @@ def _as_list(symbols: str | Sequence[str]) -> list[str]:
 
 
 class _Frame:
-    """One frame's species lookup, backing the bond and PDF queries made against it.
-    """
+    """One frame's species lookup, backing the bond and PDF queries made against it."""
 
     def __init__(self, atoms: Atoms):
         self.atoms = atoms
@@ -117,10 +103,7 @@ class _Frame:
         present = set(self.species.tolist())
         missing = [s for s in symbols if s not in present]
         if missing:
-            raise ValueError(
-                f"Species {missing} not present in the structure. "
-                f"Available species: {sorted(present)}."
-            )
+            raise ValueError(f"Species {missing} not present in the structure. Available species: {sorted(present)}.")
 
     def index(self, *symbols: str) -> np.ndarray:
         """Sorted global indices of every atom of the given species, each listed once."""
@@ -137,9 +120,7 @@ class _Frame:
         neighs = self.index(*_as_list(neigh_types))
         return _neighbor_list_bonds(self.atoms, centers, neighs, cutoff)
 
-    def partial_pdf(
-        self, pair: tuple[str, str], rrange: float, nbin: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def partial_pdf(self, pair: tuple[str, str], rrange: float, nbin: int) -> tuple[np.ndarray, np.ndarray]:
         """g_ab(r) as `geometry.partial_pdf` defines it, from a neighbor list."""
         volume = self.atoms.get_volume()
         first, second = self.index(pair[0]), self.index(pair[1])
@@ -157,9 +138,7 @@ class _Frame:
         return pdf(d[keep], volume, rrange, nbin, n_pairs=n_pairs, exclude_self=False)
 
 
-def _min_image_edges(
-    atoms: Atoms, cutoff: float
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _min_image_edges(atoms: Atoms, cutoff: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Every directed pair within `cutoff`, deduped to one row per minimum-image bond.
 
     Returns:
@@ -185,9 +164,7 @@ def _min_image_edges(
     return i[first], j[first], d[first], S[first]
 
 
-def _neighbor_list_bonds(
-    atoms: Atoms, centers: np.ndarray, neighs: np.ndarray, cutoff: float
-) -> Bonds:
+def _neighbor_list_bonds(atoms: Atoms, centers: np.ndarray, neighs: np.ndarray, cutoff: float) -> Bonds:
     """Bonds from `ase.neighborlist.neighbor_list`, costing the bond count rather than N^2."""
     empty = np.empty(0, dtype=int)
     empty_offsets = np.empty((0, 3), dtype=int)

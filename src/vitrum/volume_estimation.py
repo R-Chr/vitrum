@@ -12,9 +12,7 @@ from scipy.constants import Avogadro
 IONIC_PACKING_FRACTION = 0.48
 COVALENT_PACKING_FRACTION = 1 / 3
 
-_EXTRA_HINT = (
-    "requires the optional volume_estimation extra: pip install vitrum[volume_estimation]"
-)
+_EXTRA_HINT = "requires the optional volume_estimation extra: pip install vitrum[volume_estimation]"
 
 
 def get_packing_radii(elements, composition, source="covalent"):
@@ -23,11 +21,12 @@ def get_packing_radii(elements, composition, source="covalent"):
         return covalent_radii[symbols2numbers(elements)].copy()
 
     if source == "atomic":
-        return np.array([
-            Element(el).atomic_radius
-            or covalent_radii[symbols2numbers([el])[0]]   # fallback: covalent
-            for el in elements
-        ])
+        return np.array(
+            [
+                Element(el).atomic_radius or covalent_radii[symbols2numbers([el])[0]]  # fallback: covalent
+                for el in elements
+            ]
+        )
 
     if source == "ionic":
         oxi = guess_oxi_states(composition)
@@ -40,8 +39,7 @@ def get_packing_radii(elements, composition, source="covalent"):
                 r = Species(el, state).ionic_radius
             except (KeyError, ValueError):
                 r = None
-            radii.append(r or Element(el).atomic_radius
-                         or covalent_radii[symbols2numbers([el])[0]])
+            radii.append(r or Element(el).atomic_radius or covalent_radii[symbols2numbers([el])[0]])
         return np.array(radii)
 
     raise ValueError(f"unknown radii source: {source}")
@@ -56,17 +54,13 @@ def guess_oxi_states(composition, max_exact_atoms=100, totals=(40, 60, 100)):
         guesses = comp.oxi_state_guesses(max_sites=-1)
         if guesses:
             return {el: round(v) for el, v in guesses[0].items()}
-        warnings.warn(
-            f"No charge-balanced oxidation states for {comp.reduced_formula}; "
-            f"using covalent radii."
-        )
+        warnings.warn(f"No charge-balanced oxidation states for {comp.reduced_formula}; using covalent radii.")
         return None
 
     amts = comp.element_composition.get_el_amt_dict()
     n = sum(amts.values())
     for total in totals:
-        approx = Composition({el: max(1, round(a / n * total))
-                              for el, a in amts.items()})
+        approx = Composition({el: max(1, round(a / n * total)) for el, a in amts.items()})
         guesses = approx.oxi_state_guesses(max_sites=-1)
         if guesses:
             return {el: round(v) for el, v in guesses[0].items()}
@@ -175,9 +169,7 @@ def get_volume(
         cell_vol = float(np.sum(4 / 3 * np.pi * all_radii**3)) / IONIC_PACKING_FRACTION
 
     elif struct_db == "covalent_radius":
-        all_radii = np.hstack(
-            [np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure]
-        )
+        all_radii = np.hstack([np.repeat(covalent_radii[atomic_numbers[key]], structure[key]) for key in structure])
         cell_vol = float(np.sum(4 / 3 * np.pi * all_radii**3)) / COVALENT_PACKING_FRACTION
 
     elif struct_db == "convex_hull":

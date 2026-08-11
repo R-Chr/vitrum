@@ -13,9 +13,7 @@ from vitrum.coordination import (
 def test_silicon_coordination_is_exactly_four(silicon_diamond):
     """Every atom in the diamond structure has exactly 4 nearest neighbours."""
     coordination = Coordination([silicon_diamond])
-    distribution = coordination.get_coordination_numbers(
-        "Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF
-    )
+    distribution = coordination.get_coordination_numbers("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF)
     assert distribution == {4: pytest.approx(1.0)}
 
 
@@ -72,9 +70,7 @@ def test_get_angles_returns_one_array_per_frame(silicon_small):
 
 def test_get_angles_per_atom_groups_by_centre(silicon_small):
     coordination = Coordination([silicon_small, silicon_small])
-    per_frame = coordination.get_angles(
-        "Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF, per_atom=True
-    )
+    per_frame = coordination.get_angles("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF, per_atom=True)
     assert len(per_frame) == 2
     assert all(len(frame) == len(silicon_small) for frame in per_frame)
     assert all(len(entry) == 6 for frame in per_frame for entry in frame)
@@ -84,9 +80,7 @@ def test_get_angles_per_atom_flattens_to_the_default(silicon_small):
     """The two groupings must hold exactly the same angles, in the same order."""
     coordination = Coordination([silicon_small])
     flat = coordination.get_angles("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF)
-    grouped = coordination.get_angles(
-        "Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF, per_atom=True
-    )
+    grouped = coordination.get_angles("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF, per_atom=True)
     np.testing.assert_array_equal(flat[0], np.hstack(grouped[0]))
 
 
@@ -100,9 +94,7 @@ def test_get_angles_ordering_is_deterministic(silicon_small):
 
 def test_coordination_number_per_atom_matches_known_value(silicon_small):
     coordination = Coordination([silicon_small])
-    per_frame = coordination.get_coordination_numbers(
-        "Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF, per_atom=True
-    )
+    per_frame = coordination.get_coordination_numbers("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF, per_atom=True)
     assert len(per_frame) == 1
     assert set(per_frame[0].tolist()) == {4}
 
@@ -110,12 +102,8 @@ def test_coordination_number_per_atom_matches_known_value(silicon_small):
 def test_coordination_number_per_atom_resolves_fluorite_asymmetry(fluorite_caf2):
     """Ca has 8 F neighbours but F has only 4 Ca: the centre/neighbour order matters."""
     coordination = Coordination([fluorite_caf2])
-    ca = coordination.get_coordination_numbers(
-        "Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )
-    f = coordination.get_coordination_numbers(
-        "F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )
+    ca = coordination.get_coordination_numbers("Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)
+    f = coordination.get_coordination_numbers("F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)
     assert set(ca[0].tolist()) == {8}
     assert set(f[0].tolist()) == {4}
 
@@ -123,16 +111,10 @@ def test_coordination_number_per_atom_resolves_fluorite_asymmetry(fluorite_caf2)
 def test_coordination_per_atom_and_distribution_agree(fluorite_caf2):
     """The aggregated dict must be the binned form of the per-atom counts."""
     coordination = Coordination([fluorite_caf2, fluorite_caf2])
-    per_frame = coordination.get_coordination_numbers(
-        "Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )
-    distribution = coordination.get_coordination_numbers(
-        "Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF
-    )
+    per_frame = coordination.get_coordination_numbers("Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)
+    distribution = coordination.get_coordination_numbers("Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF)
     counts = np.concatenate(per_frame)
-    expected = {
-        int(n): float((counts == n).sum() / counts.size) for n in np.unique(counts)
-    }
+    expected = {int(n): float((counts == n).sum() / counts.size) for n in np.unique(counts)}
     assert distribution == pytest.approx(expected)
 
 
@@ -150,17 +132,13 @@ def test_get_neighbors_returns_dict_keyed_by_species(silicon_small):
 
 def test_get_neighbors_returns_global_atom_indices(fluorite_caf2):
     """Entries must index straight into the frame, not into that species' own atoms."""
-    neighbors = Coordination([fluorite_caf2]).get_neighbors(
-        "Ca", CAF2_FIRST_SHELL_CUTOFF
-    )[0]
+    neighbors = Coordination([fluorite_caf2]).get_neighbors("Ca", CAF2_FIRST_SHELL_CUTOFF)[0]
     symbols = np.array(fluorite_caf2.get_chemical_symbols())
     for species, per_center in neighbors.items():
         for entry in per_center:
             assert set(symbols[entry].tolist()) <= {species}
     # A species-relative F index would run 0..n_F-1 and so never reach the last atom.
-    assert max(entry.max() for entry in neighbors["F"] if entry.size) >= len(
-        np.where(symbols == "F")[0]
-    )
+    assert max(entry.max() for entry in neighbors["F"] if entry.size) >= len(np.where(symbols == "F")[0])
 
 
 def test_get_neighbors_auto_cutoff_matches_an_explicit_one(silicon_diamond):
@@ -242,17 +220,13 @@ def test_bridging_analysis_former_types_restricts_what_bridges():
     """With no Si counted as a former, no oxygen can bridge, so everything is Q0."""
     atoms = _q_species_chain()
     # Naming only O as a former means no bridging oxygen has two formers around it.
-    distribution = Coordination([atoms]).get_bridging_analysis(
-        "Si", "O", former_types=["O"], cutoff=2.0
-    )
+    distribution = Coordination([atoms]).get_bridging_analysis("Si", "O", former_types=["O"], cutoff=2.0)
     assert distribution == {0: pytest.approx(1.0)}
 
 
 def test_bridging_analysis_rejects_non_list_former_types():
     with pytest.raises(TypeError, match="former_types"):
-        Coordination([_q_species_chain()]).get_bridging_analysis(
-            "Si", "O", former_types=("Si",), cutoff=2.0
-        )
+        Coordination([_q_species_chain()]).get_bridging_analysis("Si", "O", former_types=("Si",), cutoff=2.0)
 
 
 def test_bridging_analysis_rejects_a_bare_string_former_type():
@@ -262,9 +236,7 @@ def test_bridging_analysis_rejects_a_bare_string_former_type():
     is told those species are missing, rather than that a list was expected.
     """
     with pytest.raises(TypeError, match="former_types"):
-        Coordination([_q_species_chain()]).get_bridging_analysis(
-            "Si", "O", former_types="Si", cutoff=2.0
-        )
+        Coordination([_q_species_chain()]).get_bridging_analysis("Si", "O", former_types="Si", cutoff=2.0)
 
 
 def test_coordination_accepts_plain_ase_atoms(silicon_small):
@@ -286,9 +258,7 @@ def test_get_bonds_is_what_the_other_methods_reduce(fluorite_caf2):
     coordination = Coordination([fluorite_caf2])
     bonds = coordination.get_bonds("Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF)[0]
 
-    per_atom = coordination.get_coordination_numbers(
-        "Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )[0]
+    per_atom = coordination.get_coordination_numbers("Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)[0]
     np.testing.assert_array_equal(bonds.counts(), per_atom)
 
     neighbors = coordination.get_neighbors("Ca", CAF2_FIRST_SHELL_CUTOFF)[0]
@@ -321,9 +291,7 @@ def test_a_single_atoms_object_is_treated_as_one_frame(silicon_small):
     """Atoms is sized and indexable, so an unwrapped frame would iterate into Atom objects."""
     coordination = Coordination(silicon_small)
     assert coordination.atoms_list == [silicon_small]
-    assert coordination.get_coordination_numbers(
-        "Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF
-    ) == {4: pytest.approx(1.0)}
+    assert coordination.get_coordination_numbers("Si", "Si", cutoff=SI_FIRST_SHELL_CUTOFF) == {4: pytest.approx(1.0)}
 
 
 def test_non_atoms_frames_are_rejected(silicon_small):
@@ -348,9 +316,7 @@ def test_boolean_cutoff_is_rejected(silicon_small):
 def test_numpy_scalar_cutoff_is_accepted(silicon_small):
     """np.int64 is not an int, so a cutoff read out of an array must still work."""
     coordination = Coordination([silicon_small])
-    distribution = coordination.get_coordination_numbers(
-        "Si", "Si", cutoff=np.int64(3)
-    )
+    distribution = coordination.get_coordination_numbers("Si", "Si", cutoff=np.int64(3))
     assert distribution == {4: pytest.approx(1.0)}
 
 
@@ -394,18 +360,14 @@ def test_fluorite_fluorine_is_bonded_to_four_calcium(fluorite_caf2):
     fixed in the code.
     """
     coordination = Coordination([fluorite_caf2])
-    speciation = coordination.get_bridging_speciation(
-        "F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF
-    )
+    speciation = coordination.get_bridging_speciation("F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF)
     assert speciation == {4: pytest.approx(1.0)}
 
 
 def test_bridging_speciation_counts_every_bridge_atom(fluorite_caf2):
     """per_atom gives one entry per bridge atom in the frame, not per former."""
     coordination = Coordination([fluorite_caf2])
-    per_atom = coordination.get_bridging_speciation(
-        "F", ["Ca"], cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )
+    per_atom = coordination.get_bridging_speciation("F", ["Ca"], cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)
     n_fluorine = sum(1 for s in fluorite_caf2.get_chemical_symbols() if s == "F")
     assert len(per_atom) == 1
     assert per_atom[0].shape == (n_fluorine,)
@@ -416,12 +378,8 @@ def test_bridging_speciation_agrees_with_bridging_analysis(fluorite_caf2):
     counted per F must equal the number counted per Ca.
     """
     coordination = Coordination([fluorite_caf2])
-    per_bridge = coordination.get_bridging_speciation(
-        "F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )
-    per_former = coordination.get_coordination_numbers(
-        "Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True
-    )
+    per_bridge = coordination.get_bridging_speciation("F", "Ca", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)
+    per_former = coordination.get_coordination_numbers("Ca", "F", cutoff=CAF2_FIRST_SHELL_CUTOFF, per_atom=True)
     assert per_bridge[0].sum() == per_former[0].sum()
 
 
@@ -437,9 +395,7 @@ def test_sin_normalisation_divides_out_exactly_sin_theta(sodium_silicate):
     spread around the tetrahedral value, which is exactly the case the weighting is for.
     """
     coordination = Coordination(sodium_silicate)
-    angles, plain = coordination.get_angle_distribution(
-        "Si", "O", cutoff=SI_O_CUTOFF, range=(0.0, 180.0)
-    )
+    angles, plain = coordination.get_angle_distribution("Si", "O", cutoff=SI_O_CUTOFF, range=(0.0, 180.0))
     _, normalised = coordination.get_angle_distribution(
         "Si", "O", cutoff=SI_O_CUTOFF, range=(0.0, 180.0), sin_normalised=True
     )
@@ -468,9 +424,7 @@ def test_get_bonds_rejects_a_multi_species_selection_with_differing_cutoffs(fluo
     dropped and every bond silently measured at the Ca-F cutoff.
     """
     with pytest.raises(ValueError, match="one cutoff"):
-        Coordination([fluorite_caf2]).get_bonds(
-            ["Ca", "F"], "F", cutoff={("Ca", "F"): 2.5, ("F", "F"): 3.5}
-        )
+        Coordination([fluorite_caf2]).get_bonds(["Ca", "F"], "F", cutoff={("Ca", "F"): 2.5, ("F", "F"): 3.5})
 
 
 def test_get_coordination_numbers_ignores_a_repeated_neighbour(fluorite_caf2):
@@ -500,9 +454,7 @@ def test_cutoff_frame_chooses_which_frame_auto_is_measured_from(silicon_diamond)
     frames = [silicon_diamond, stretched]
 
     from_first = Coordination(frames).get_coordination_numbers("Si", "Si", per_atom=True)[0]
-    from_last = Coordination(frames, cutoff_frame=-1).get_coordination_numbers(
-        "Si", "Si", per_atom=True
-    )[0]
+    from_last = Coordination(frames, cutoff_frame=-1).get_coordination_numbers("Si", "Si", per_atom=True)[0]
     assert from_first.tolist() == [4] * len(silicon_diamond)
     assert np.all(from_last > from_first)
 

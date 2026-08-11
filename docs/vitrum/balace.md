@@ -1,5 +1,13 @@
 # Batch active learning ACE (BALACE) 
 
+!!! warning "Stale and unsupported"
+
+    `vitrum.batch_active` is shipped as-is. It has confirmed bugs and no test
+    coverage, it is excluded from vitrum's semantic-versioning promise, and it will be split
+    into a separate distribution or removed in a future release. Importing it emits a
+    `DeprecationWarning`. See [known issues](known_issues.md) for the specific defects before
+    relying on it.
+
 Automated framework for parameterizing interatomic potential using ACE for disordered material systems.
 
 ## Overview:

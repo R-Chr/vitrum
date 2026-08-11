@@ -121,9 +121,7 @@ def test_bridging_analysis_judges_each_former_at_its_own_cutoff(borosilicate):
     coordination = Coordination([borosilicate])
     formers = ["Si", "B"]
 
-    shared = coordination.get_bridging_analysis(
-        "Si", "O", former_types=formers, cutoff=2.0, per_atom=True
-    )
+    shared = coordination.get_bridging_analysis("Si", "O", former_types=formers, cutoff=2.0, per_atom=True)
     assert shared[0].tolist() == [1]
 
     per_bond = coordination.get_bridging_analysis(
@@ -139,24 +137,16 @@ def test_bridging_analysis_judges_each_former_at_its_own_cutoff(borosilicate):
 def test_bridging_analysis_species_key_still_applies_to_every_bond(borosilicate):
     """{"O": x} keys on the bridge, which every measured bond shares, so it means one cutoff."""
     coordination = Coordination([borosilicate])
-    shared = coordination.get_bridging_analysis(
-        "Si", "O", former_types=["Si", "B"], cutoff={"O": 2.0}, per_atom=True
-    )
-    number = coordination.get_bridging_analysis(
-        "Si", "O", former_types=["Si", "B"], cutoff=2.0, per_atom=True
-    )
+    shared = coordination.get_bridging_analysis("Si", "O", former_types=["Si", "B"], cutoff={"O": 2.0}, per_atom=True)
+    number = coordination.get_bridging_analysis("Si", "O", former_types=["Si", "B"], cutoff=2.0, per_atom=True)
     np.testing.assert_array_equal(shared[0], number[0])
 
 
 def test_bridging_analysis_ignores_a_repeated_former(borosilicate):
     """Each former contributes its bonds once, so naming one twice must not double it."""
     coordination = Coordination([borosilicate])
-    once = coordination.get_bridging_analysis(
-        "Si", "O", former_types=["Si", "B"], cutoff=2.0, per_atom=True
-    )
-    twice = coordination.get_bridging_analysis(
-        "Si", "O", former_types=["Si", "B", "B"], cutoff=2.0, per_atom=True
-    )
+    once = coordination.get_bridging_analysis("Si", "O", former_types=["Si", "B"], cutoff=2.0, per_atom=True)
+    twice = coordination.get_bridging_analysis("Si", "O", former_types=["Si", "B", "B"], cutoff=2.0, per_atom=True)
     np.testing.assert_array_equal(once[0], twice[0])
 
 
@@ -228,9 +218,7 @@ def test_a_key_matching_no_bond_is_reported_as_a_missing_cutoff(silicon_small):
 def test_auto_resolves_each_bond_once(silicon_small):
     """A bond named twice must not be resolved twice, and must resolve to one value."""
     coordination = Coordination([silicon_small])
-    auto = coordination.get_bridging_analysis(
-        "Si", "Si", former_types=["Si"], cutoff="Auto", per_atom=True
-    )
+    auto = coordination.get_bridging_analysis("Si", "Si", former_types=["Si"], cutoff="Auto", per_atom=True)
     assert len(auto) == 1
 
 

@@ -1,7 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from ase import Atoms
 from scipy.interpolate import interpn
-import matplotlib.pyplot as plt
 
 
 def get_dimer_radial_energy(calc, formula, cutoff=8, num_data_points=100):
@@ -84,5 +84,5 @@ def eval_plot(reference_data, predicted_data, ax=None):
     ax.set_xlim(min_max[0], min_max[1])
     ax.set_ylim(min_max[0], min_max[1])
     rmse = float(np.sqrt(np.mean((reference_data - predicted_data) ** 2)))
-    ax.set_title(f"RMSE: {rmse*1000:.2f} meV/atom", loc="left", x=0.05, y=0.90, fontsize=9)
+    ax.set_title(f"RMSE: {rmse * 1000:.2f} meV/atom", loc="left", x=0.05, y=0.90, fontsize=9)
     return ep

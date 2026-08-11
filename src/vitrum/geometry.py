@@ -62,9 +62,7 @@ def find_min_after_peak(padf, context: str = ""):
     return int(after_peak[0])
 
 
-def peak_metrics(
-    x: np.ndarray, y: np.ndarray, window: tuple[float, float] | None = None
-) -> tuple[float, float, float]:
+def peak_metrics(x: np.ndarray, y: np.ndarray, window: tuple[float, float] | None = None) -> tuple[float, float, float]:
     """
     Position, width and height of the first peak of a tabulated function.
 
@@ -276,9 +274,12 @@ def get_dist_numba(pos, cell):
             dz = pos[i, 2] - pos[j, 2]
 
             # Apply Periodic Boundary Conditions (Minimum Image Convention)
-            if lx > 0.0: dx -= lx * np.rint(dx / lx)
-            if ly > 0.0: dy -= ly * np.rint(dy / ly)
-            if lz > 0.0: dz -= lz * np.rint(dz / lz)
+            if lx > 0.0:
+                dx -= lx * np.rint(dx / lx)
+            if ly > 0.0:
+                dy -= ly * np.rint(dy / ly)
+            if lz > 0.0:
+                dz -= lz * np.rint(dz / lz)
 
             d = np.sqrt(dx**2 + dy**2 + dz**2)
 

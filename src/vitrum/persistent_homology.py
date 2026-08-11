@@ -1,5 +1,3 @@
-from typing import Dict, List, Optional, Tuple, Union
-
 import diode
 import dionysus
 import numpy as np
@@ -34,9 +32,9 @@ class PersistenceDiagram:
     def __init__(
         self,
         atoms: Atoms,
-        weights: Optional[Union[Dict[str, float], List[float], np.ndarray]] = None,
+        weights: dict[str, float] | list[float] | np.ndarray | None = None,
         weight_scaling: float = 1.0,
-        exclude_atoms: Optional[List[str]] = None,
+        exclude_atoms: list[str] | None = None,
     ):
         """
         Initialize the PersistenceDiagram class.
@@ -68,10 +66,10 @@ class PersistenceDiagram:
         self.atoms = atoms
         self.weights = weights
         self.weight_scaling = weight_scaling
-        self.diagrams: Optional[Dict[int, pd.DataFrame]] = None
+        self.diagrams: dict[int, pd.DataFrame] | None = None
         self._filtration = None
         self._persistence = None
-        self._birth_indices: Optional[Dict[int, List[int]]] = None
+        self._birth_indices: dict[int, list[int]] | None = None
 
     def _get_radii(self) -> np.ndarray:
         """
@@ -90,7 +88,7 @@ class PersistenceDiagram:
                 )
         return radii * self.weight_scaling
 
-    def calculate(self, dimensions: Tuple[int, ...] = (1, 2)) -> Dict[int, pd.DataFrame]:
+    def calculate(self, dimensions: tuple[int, ...] = (1, 2)) -> dict[int, pd.DataFrame]:
         """
         Calculate the persistence diagram(s) of the structure.
 
@@ -164,7 +162,7 @@ class PersistenceDiagram:
             )
         return self.diagrams[dimension]
 
-    def _get_cycle_atoms(self, birth_index: int) -> Optional[np.ndarray]:
+    def _get_cycle_atoms(self, birth_index: int) -> np.ndarray | None:
         """
         Resolve the atom indices making up the representative cycle of the
         homology class born at filtration index `birth_index`.
@@ -294,10 +292,10 @@ class PersistenceDiagram:
     def get_sph(
         self,
         dimension: int = 1,
-        q_values: Optional[np.ndarray] = None,
-        reference_radius: Optional[float] = None,
+        q_values: np.ndarray | None = None,
+        reference_radius: float | None = None,
         reference_symbol: str = "O",
-        sigma: Optional[float] = None,
+        sigma: float | None = None,
     ) -> pd.DataFrame:
         """
         Calculate the S_PH(Q) function of a persistence diagram.
@@ -313,7 +311,7 @@ class PersistenceDiagram:
         Args:
             dimension (int): Homology dimension of the diagram to summarize.
             q_values (Optional[np.ndarray]): Q values (Angstrom^-1) to
-                evaluate S_PH(Q) on. 
+                evaluate S_PH(Q) on.
             reference_radius (Optional[float]): Radius (Angstrom) of the
                 reference atom used in the diameter conversion l(d). Defaults
                 to None, which resolves `reference_symbol`'s radius from
@@ -351,9 +349,7 @@ class PersistenceDiagram:
                     )
                 reference_radius = self.weights[reference_symbol] * self.weight_scaling
             elif self.weights is None:
-                reference_radius = (
-                    float(covalent_radii[symbols2numbers([reference_symbol])[0]]) * self.weight_scaling
-                )
+                reference_radius = float(covalent_radii[symbols2numbers([reference_symbol])[0]]) * self.weight_scaling
             else:
                 raise ValueError(
                     "`self.weights` is a per-atom list/array, which does not identify a radius "
@@ -385,10 +381,10 @@ class PersistenceDiagram:
         self,
         dimension: int = 1,
         resolution: int = 20,
-        sigma: Optional[float] = None,
-        birth_range: Optional[Tuple[float, float]] = None,
-        persistence_range: Optional[Tuple[float, float]] = None,
-    ) -> Tuple[np.ndarray, Tuple[float, float, float, float]]:
+        sigma: float | None = None,
+        birth_range: tuple[float, float] | None = None,
+        persistence_range: tuple[float, float] | None = None,
+    ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
         """
         Calculate the persistence image of a persistence diagram.
 
@@ -511,10 +507,10 @@ class PersistenceDiagram:
     def plot_sph(
         self,
         dimension: int = 1,
-        q_values: Optional[np.ndarray] = None,
-        reference_radius: Optional[float] = None,
+        q_values: np.ndarray | None = None,
+        reference_radius: float | None = None,
         reference_symbol: str = "O",
-        sigma: Optional[float] = None,
+        sigma: float | None = None,
         ax=None,
         **plot_kwargs,
     ):
@@ -561,9 +557,9 @@ class PersistenceDiagram:
         self,
         dimension: int = 1,
         resolution: int = 20,
-        sigma: Optional[float] = None,
-        birth_range: Optional[Tuple[float, float]] = None,
-        persistence_range: Optional[Tuple[float, float]] = None,
+        sigma: float | None = None,
+        birth_range: tuple[float, float] | None = None,
+        persistence_range: tuple[float, float] | None = None,
         ax=None,
         **imshow_kwargs,
     ):

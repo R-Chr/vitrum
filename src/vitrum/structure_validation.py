@@ -25,8 +25,10 @@ def homogeneity_checker(
         target_species (str or list, optional): Species to check. "all" checks all present species. Defaults to "all".
         upper_bound (float, optional): Multiplier for average density to consider a box over-dense. Defaults to 1.5.
         lower_bound (float, optional): Multiplier for average density to consider a box under-dense. Defaults to 0.5.
-        box_threshold (float, optional): Fraction of boxes allowed to be out of bounds before flagging a species. Defaults to 0.1.
-        separated_species_threshold (float, optional): Fraction of species allowed to be phase separated before the structure is flagged. Defaults to 0.5.
+        box_threshold (float, optional): Fraction of boxes allowed to be out of bounds before flagging a species.
+            Defaults to 0.1.
+        separated_species_threshold (float, optional): Fraction of species allowed to be phase separated before the
+            structure is flagged. Defaults to 0.5.
 
     Returns:
         bool: True if the structure is considered homogeneous, False otherwise.

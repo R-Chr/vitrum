@@ -45,7 +45,7 @@ from vitrum.packing import get_random_packed
 # Internal constants
 # ---------------------------------------------------------------------------
 
-_ROUND = 4           # decimal places for mole-fraction output
+_ROUND = 4  # decimal places for mole-fraction output
 _ZERO_THRESH = 1e-6  # values below this are treated as zero
 _META_COLUMNS = ("n_components", "former_sum")
 # Relative sampling weights per subsystem order for the "sobol" scheme
@@ -118,9 +118,7 @@ class Compositions:
                 formulas.append(formula_unit(mol_string, integers=integers))
             else:
                 comp = Composition(active)
-                formulas.append(
-                    comp.get_integer_formula_and_factor()[0] if integers else comp.formula
-                )
+                formulas.append(comp.get_integer_formula_and_factor()[0] if integers else comp.formula)
         return formulas
 
     def get_structures(self, target_atoms=100, datatype="ase", max_atoms=None, **packing_kwargs):
@@ -141,9 +139,7 @@ class Compositions:
         for comp in tqdm(self.to_pymatgen()):
             if max_atoms is not None and _packed_cell_size(comp, target_atoms) > max_atoms:
                 continue
-            structures.append(
-                get_random_packed(comp, target_atoms=target_atoms, datatype=datatype, **packing_kwargs)
-            )
+            structures.append(get_random_packed(comp, target_atoms=target_atoms, datatype=datatype, **packing_kwargs))
         return structures
 
 
@@ -215,17 +211,14 @@ class GlassGenerator:
             unknown = set(elements) - set(self._ELEMENT_GROUPS)
             if unknown:
                 raise ValueError(
-                    f"Unknown element group(s) {sorted(unknown)}; "
-                    f"expected any of {list(self._ELEMENT_GROUPS)}."
+                    f"Unknown element group(s) {sorted(unknown)}; expected any of {list(self._ELEMENT_GROUPS)}."
                 )
             self.units = None
             self.formers = list(elements.get("formers", []))
             self.modifiers = list(elements.get("modifiers", []))
             self.anions = list(elements.get("anions", []))
             if not (self.formers or self.modifiers or self.anions):
-                raise ValueError(
-                    f"elements must contain at least one of {list(self._ELEMENT_GROUPS)}."
-                )
+                raise ValueError(f"elements must contain at least one of {list(self._ELEMENT_GROUPS)}.")
             self._elements = list(dict.fromkeys(self.modifiers + self.formers + self.anions))
             self._charges = self._resolve_charges(charges)
 
@@ -242,9 +235,8 @@ class GlassGenerator:
         for el in self.formers + self.modifiers:
             charges[el] = resolve(el, -1)  # most positive tabulated state
         for el in self.anions:
-            charges[el] = resolve(el, 0)   # most negative tabulated state
+            charges[el] = resolve(el, 0)  # most negative tabulated state
         return charges
-
 
     # -- public API ----------------------------------------------------------
 
@@ -284,15 +276,12 @@ class GlassGenerator:
         scheme = scheme.lower()
         if self._mode == "unit":
             if scheme not in self._UNIT_SCHEMES:
-                raise ValueError(
-                    f"Unknown unit-mode scheme '{scheme}'. Choose from {list(self._UNIT_SCHEMES)}."
-                )
+                raise ValueError(f"Unknown unit-mode scheme '{scheme}'. Choose from {list(self._UNIT_SCHEMES)}.")
             df = self._sample_continuous(n, scheme, dedup=dedup, **scheme_kwargs)
         else:
             if scheme not in self._ELEMENTAL_SCHEMES:
                 raise ValueError(
-                    f"Unknown elemental-mode scheme '{scheme}'. "
-                    f"Choose from {list(self._ELEMENTAL_SCHEMES)}."
+                    f"Unknown elemental-mode scheme '{scheme}'. Choose from {list(self._ELEMENTAL_SCHEMES)}."
                 )
             df = self._sample_random(n, weights=scheme_kwargs.get("weights", {}), dedup=dedup)
 
@@ -306,9 +295,7 @@ class GlassGenerator:
 
     # -- sampling schemes ----------------------------------------------------
 
-    def _sample_continuous(
-        self, n, scheme, dedup=True, order_weights=None, require_former=None, spacing=10
-    ):
+    def _sample_continuous(self, n, scheme, dedup=True, order_weights=None, require_former=None, spacing=10):
         """Place points on the unit-composition simplex, then constrain and finalize.
 
         The raw points come from a scheme-specific generator (``"grid"`` enumerates
@@ -349,8 +336,7 @@ class GlassGenerator:
 
         if not rows:
             raise RuntimeError(
-                "No compositions passed constraints. Try lowering min_former_sum or x_min, "
-                "or a finer grid spacing."
+                "No compositions passed constraints. Try lowering min_former_sum or x_min, or a finer grid spacing."
             )
         return pd.DataFrame(rows, columns=units)
 
@@ -379,9 +365,7 @@ class GlassGenerator:
                 pool.append(sub)
                 weights.append(w)
         if not pool:
-            raise ValueError(
-                "No valid subsystems to sample. Check units, order weights, and require_former."
-            )
+            raise ValueError("No valid subsystems to sample. Check units, order weights, and require_former.")
         largest_order = max(len(sub) for sub in pool)
         if largest_order * self.x_min > 1.0:
             raise ValueError(
@@ -454,9 +438,7 @@ class GlassGenerator:
             chosen_anions = rng.choice(anions, num_anion, replace=False, p=bias_anions) if num_anion else []
 
             mod_form_ratio = (
-                _random_partition(2, rng)
-                if num_mod and num_former
-                else [int(bool(num_mod)), int(bool(num_former))]
+                _random_partition(2, rng) if num_mod and num_former else [int(bool(num_mod)), int(bool(num_former))]
             )
             mod_ratio = _random_partition(num_mod, rng)
             form_ratio = _random_partition(num_former, rng)
@@ -509,8 +491,10 @@ class GlassGenerator:
 # Backwards-compatible wrapper
 # ---------------------------------------------------------------------------
 
-def gen_random_glasses(modifiers, formers, anions, weights=None, num_structures=30, target_atoms=100,
-                       max_atoms=200, **kwargs):
+
+def gen_random_glasses(
+    modifiers, formers, anions, weights=None, num_structures=30, target_atoms=100, max_atoms=200, **kwargs
+):
     """Generate random glass structures from given modifiers, formers and anions.
 
     Thin wrapper around ``GlassGenerator(...).sample("random")`` followed by
@@ -531,26 +515,21 @@ def gen_random_glasses(modifiers, formers, anions, weights=None, num_structures=
     Returns:
         list: Random-packed structures (ASE ``Atoms`` or pymatgen ``Structure``).
     """
-    generator = GlassGenerator(
-        elements={"formers": formers, "modifiers": modifiers, "anions": anions}
-    )
+    generator = GlassGenerator(elements={"formers": formers, "modifiers": modifiers, "anions": anions})
     # `sample` already dedups and retries; oversample so the max_atoms filter, which is
     # applied after sampling, still has a chance of leaving num_structures behind.
     comps = generator.sample("random", n=num_structures * 3, weights=weights or {})
-    structures = comps.get_structures(
-        target_atoms=target_atoms, max_atoms=max_atoms, **kwargs
-    )[:num_structures]
+    structures = comps.get_structures(target_atoms=target_atoms, max_atoms=max_atoms, **kwargs)[:num_structures]
 
     if len(structures) < num_structures:
-        warnings.warn(
-            f"Only generated {len(structures)} of {num_structures} requested structures."
-        )
+        warnings.warn(f"Only generated {len(structures)} of {num_structures} requested structures.")
     return structures
 
 
 # ---------------------------------------------------------------------------
 # Private sampling helpers
 # ---------------------------------------------------------------------------
+
 
 def _packed_cell_size(composition, target_atoms):
     """Number of atoms :func:`vitrum.packing.get_random_packed` would build for a composition.

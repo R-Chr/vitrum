@@ -1,12 +1,12 @@
 """Render ase.Atoms glass structures to static images or Jupyter widgets via OVITO."""
 
-from typing import Dict, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
 
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap, Normalize, to_rgb
 from ase import Atoms
+from matplotlib.colors import LinearSegmentedColormap, Normalize, to_rgb
 from ovito.data import DataCollection
 from ovito.io.ase import ase_to_ovito
 from ovito.modifiers import CreateBondsModifier
@@ -18,7 +18,9 @@ _DEFAULT_COLOR_MAP = {"c_min": "#FF0000", "c_max": "#0000FF"}
 _RENDERERS = {"tachyon": TachyonRenderer}
 
 
-def _colors_by_element(symbols: Sequence[str], element_colors: Dict[str, Union[str, Tuple[float, float, float]]]) -> np.ndarray:
+def _colors_by_element(
+    symbols: Sequence[str], element_colors: dict[str, str | tuple[float, float, float]]
+) -> np.ndarray:
     """
     Build a per-atom (N, 3) RGB array by looking each atom's symbol up in a color map.
 
@@ -58,10 +60,10 @@ class StructureRenderer:
     def __init__(
         self,
         atoms: Atoms,
-        radii: Optional[Dict[str, float]] = None,
-        bonds: Optional[Dict[Tuple[str, str], float]] = None,
-        colors: Optional[Union[Dict[str, str], Sequence[float]]] = None,
-        color_map: Optional[Dict[str, str]] = None,
+        radii: dict[str, float] | None = None,
+        bonds: dict[tuple[str, str], float] | None = None,
+        colors: dict[str, str] | Sequence[float] | None = None,
+        color_map: dict[str, str] | None = None,
         bond_width: float = 1.0,
     ) -> None:
         """
@@ -101,7 +103,7 @@ class StructureRenderer:
         """
         return self.pipeline.compute()
 
-    def set_particle_radii(self, radii: Dict[str, float]) -> None:
+    def set_particle_radii(self, radii: dict[str, float]) -> None:
         """
         Set the display radius of each particle type by chemical symbol.
 
@@ -117,7 +119,7 @@ class StructureRenderer:
 
         self.pipeline.modifiers.append(apply_radii)
 
-    def set_bonds(self, cutoffs: Dict[Tuple[str, str], float], width: float = 1.0) -> None:
+    def set_bonds(self, cutoffs: dict[tuple[str, str], float], width: float = 1.0) -> None:
         """
         Create bonds between nearby particles using per-element-pair cutoff distances.
 
@@ -132,7 +134,7 @@ class StructureRenderer:
         modifier.vis.width = width
         self.pipeline.modifiers.append(modifier)
 
-    def set_particle_colors(self, colors: Union[Dict[str, str], Sequence[float]]) -> None:
+    def set_particle_colors(self, colors: dict[str, str] | Sequence[float]) -> None:
         """
         Color particles either per chemical symbol or by mapping a per-atom scalar through `color_map`.
 
@@ -165,8 +167,8 @@ class StructureRenderer:
         ambient_occlusion_brightness: float = 0.7,
         ambient_occlusion_samples: int = 24,
         direction: Sequence[float] = (3, 2, -1),
-        distance: Optional[float] = None,
-        fov: Optional[float] = None,
+        distance: float | None = None,
+        fov: float | None = None,
         look_at_shift: Sequence[float] = (0, 0, 0),
         perspective: bool = False,
     ) -> None:
@@ -232,11 +234,11 @@ class StructureRenderer:
         self,
         target: str = "image",
         filename: str = "atoms.png",
-        size: Tuple[int, int] = (1024, 1024),
+        size: tuple[int, int] = (1024, 1024),
         alpha: bool = True,
         show: bool = True,
         crop: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Render the structure to a static image file or an interactive Jupyter widget.
 

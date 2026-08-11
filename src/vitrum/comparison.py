@@ -8,7 +8,8 @@ def r_chi(function_1, function_2, x_min=0, x_max=np.inf, steps=100):
 
     Parameters:
         function_1 (dict): Dictionary with keys 'x' and 'y' representing the first function, usually from simulations
-        function_2 (dict): Dictionary with keys 'x' and 'y' representing the second function, usually from experimental meassurements.
+        function_2 (dict): Dictionary with keys 'x' and 'y' representing the second function, usually from experimental
+            meassurements.
 
     Returns:
         Tuple[float, np.ndarray, np.ndarray, np.ndarray]:

@@ -107,10 +107,7 @@ class GlassAtoms(Atoms):
         )
 
     def get_all_angles(
-        self,
-        center_type: str,
-        neigh_types: str | list[str],
-        cutoff: float | dict | str = "Auto"
+        self, center_type: str, neigh_types: str | list[str], cutoff: float | dict | str = "Auto"
     ) -> list[np.ndarray]:
         """
         Deprecated. Use `Coordination([atoms]).get_angles(...)`.
@@ -131,16 +128,9 @@ class GlassAtoms(Atoms):
                 if neigh_types does not have exactly one or two entries.
         """
         _deprecated("GlassAtoms.get_all_angles", "Coordination([atoms]).get_angles(...)")
-        return Coordination([self]).get_angles(
-            center_type, neigh_types, cutoff, per_atom=True
-        )[0]
+        return Coordination([self]).get_angles(center_type, neigh_types, cutoff, per_atom=True)[0]
 
-    def get_coordination_number(
-        self,
-        center_type: str,
-        neigh_type: str,
-        cutoff: float | str = "Auto"
-    ) -> list[int]:
+    def get_coordination_number(self, center_type: str, neigh_type: str, cutoff: float | str = "Auto") -> list[int]:
         """
         Deprecated. Use `Coordination([atoms]).get_coordination_numbers(..., per_atom=True)`.
 
@@ -160,9 +150,7 @@ class GlassAtoms(Atoms):
             "GlassAtoms.get_coordination_number",
             "Coordination([atoms]).get_coordination_numbers(..., per_atom=True)",
         )
-        return Coordination([self]).get_coordination_numbers(
-            center_type, neigh_type, cutoff, per_atom=True
-        )[0].tolist()
+        return Coordination([self]).get_coordination_numbers(center_type, neigh_type, cutoff, per_atom=True)[0].tolist()
 
     def get_bridging_analysis(
         self,
@@ -194,9 +182,11 @@ class GlassAtoms(Atoms):
             "GlassAtoms.get_bridging_analysis",
             "Coordination([atoms]).get_bridging_analysis(...)",
         )
-        return Coordination([self]).get_bridging_analysis(
-            center_type, bridge_type, former_types, cutoff, per_atom=True
-        )[0].tolist()
+        return (
+            Coordination([self])
+            .get_bridging_analysis(center_type, bridge_type, former_types, cutoff, per_atom=True)[0]
+            .tolist()
+        )
 
     def get_density(self) -> float:
         """
@@ -208,9 +198,7 @@ class GlassAtoms(Atoms):
         _deprecated("GlassAtoms.get_density", "vitrum.io_helpers.get_density(atoms)")
         return get_density(self)
 
-    def get_neighbors(
-        self, center_type: str, cutoff: float | dict
-    ) -> dict[str, list[np.ndarray]]:
+    def get_neighbors(self, center_type: str, cutoff: float | dict) -> dict[str, list[np.ndarray]]:
         """
         Deprecated. Use `Coordination([atoms]).get_neighbors(...)`.
 
@@ -240,8 +228,6 @@ class GlassAtoms(Atoms):
         # subset of them, so searchsorted inverts the mapping exactly.
         types = np.array(self.get_chemical_symbols())
         return {
-            species: [
-                np.searchsorted(np.where(types == species)[0], entry) for entry in per_center
-            ]
+            species: [np.searchsorted(np.where(types == species)[0], entry) for entry in per_center]
             for species, per_center in neighbors.items()
         }
