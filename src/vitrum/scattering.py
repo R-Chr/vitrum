@@ -1,25 +1,23 @@
+import functools
 import itertools
-import logging
 import math
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from ase import Atom, Atoms
-from ase.neighborlist import neighbor_list
+from ase.data import atomic_numbers
 from scipy import integrate
-from scipy.stats import norm
 from tqdm import tqdm
 
 from vitrum.geometry import (
+    cell_list_pair_counts,
     distance_matrix,
+    minimum_image_limit,
     partial_pdf,
     pdf,
     radial_bins,
-    require_orthorhombic,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndarray:
@@ -45,7 +43,9 @@ def gaussian_broadening(g_r: np.ndarray, r: np.ndarray, Q_max: float) -> np.ndar
     sum_r = r[np.newaxis, :] + r[:, np.newaxis]
     FWHM = 5.437 / Q_max
     sigma = FWHM / 2.355
-    foubroad = r * g_r * (norm.pdf(delta_r, 0, sigma) - norm.pdf(sum_r, 0, sigma))
+    # G(r - r') - G(r + r'), zero-mean Gaussians sharing the 1 / (sigma sqrt(2 pi)) factor.
+    gauss = np.exp(-0.5 * (delta_r / sigma) ** 2) - np.exp(-0.5 * (sum_r / sigma) ** 2)
+    foubroad = r * g_r * gauss / (sigma * math.sqrt(2 * math.pi))
     dist_broad = np.trapezoid(foubroad, r) / r
     return dist_broad
 
@@ -65,16 +65,18 @@ class Scattering:
         neutron_scattering_coef: list[float] | None = None,
         x_ray_scattering_coef: np.ndarray | None = None,
         disable_progress: bool = False,
-        use_neighborhood: bool = False,
     ):
         """
         Initializes a new instance of the class with the given atoms.
 
         Args:
-            atoms (Union[List[Atoms], Atoms]): A list of Atoms objects or a single Atoms object.
+            atoms (Union[List[Atoms], Atoms]): A list of Atoms objects or a single Atoms object,
+                periodic along all three axes.
             qmin (float, optional): The minimum q-value to use. Defaults to 0.5.
             qmax (float, optional): The maximum q-value to use. Defaults to 20.
-            rrange (float, optional): The range of r-values to use. If None, defaults to min(cell_dim)/2.
+            rrange (float, optional): The range of r-values to use. If None, defaults to the
+                minimum image limit, capped at 20 A. A value passed here is used as given, cap
+                included.
             nbin (int, optional): The number of bins to use. Defaults to 500.
             neutron_scattering_coef (List[float], optional): A list of custom neutron scattering lengths. Defaults to
                 None.
@@ -84,6 +86,12 @@ class Scattering:
               If None, the default coefficients from International Tables for Crystallography (2006). Vol. C. ch. 6.1,
               pp. 554-595 are used.
             disable_progress (bool, optional): Whether to disable the progress bar. Defaults to False.
+
+        Partial PDFs come from `calculate_partial_pdfs_cell_list`.
+
+        Raises:
+            ValueError: If any frame is not periodic along all three axes, or if `rrange`
+                exceeds the minimum image limit.
         """
 
         if isinstance(atoms, list):
@@ -94,22 +102,19 @@ class Scattering:
         self.atom_list = list(atom_list)
         script_dir = Path(__file__).parent
 
-        # Every frame is binned with the same rrange, so every frame has to support it.
-        half_min_dims = [np.min(require_orthorhombic(atom.get_cell(), "Scattering")) / 2 for atom in atom_list]
-        half_min_dim = float(np.min(half_min_dims))
+        half_min_dim = float(np.min([minimum_image_limit(atom.get_cell(), atom.pbc) for atom in atom_list]))
 
         if rrange:
             if rrange > half_min_dim:
-                logger.warning(
-                    "Specified rrange (%.2f) exceeds half the shortest cell length "
-                    "(%.2f). This may violate the Minimum Image Convention.",
-                    rrange,
-                    half_min_dim,
+                raise ValueError(
+                    f"rrange ({rrange:.2f} A) exceeds the minimum image limit "
+                    f"({half_min_dim:.2f} A), beyond which g(r) describes periodic images "
+                    f"rather than real neighbours. Pass rrange of at most {half_min_dim:.2f}, "
+                    "or use a larger cell."
                 )
             self.rrange = rrange
         else:
-            # Default to half the shortest cell dimension over the trajectory
-            self.rrange = half_min_dim
+            self.rrange = min(half_min_dim, 20.0)
 
         self.nbin = nbin
         self.xval, self.volbin = radial_bins(self.rrange, self.nbin)
@@ -121,8 +126,12 @@ class Scattering:
         self.pairs = [pair for pair in itertools.product(self.species, repeat=2)]
         self.c = [self.chemical_symbols.count(i) / len(self.chemical_symbols) for i in self.species]
 
-        # The composition is assumed constant across the trajectory: self.chemical_symbols,
-        # self.species, self.pairs and self.c are all derived from the first frame alone.
+        # Atomic number -> species code, so a frame's codes come from `atoms.numbers` by
+        # fancy indexing rather than a dict lookup per atom.
+        self._code_lut = np.zeros(max(atomic_numbers[s] for s in self.species) + 1, dtype=np.int64)
+        for symbol, code in self.species_code.items():
+            self._code_lut[atomic_numbers[symbol]] = code
+
         reference_composition = sorted(self.chemical_symbols)
         for frame_ind, atom in enumerate(atom_list[1:], start=1):
             if sorted(atom.get_chemical_symbols()) != reference_composition:
@@ -131,8 +140,6 @@ class Scattering:
                     "assumes a fixed composition across the trajectory."
                 )
 
-        # Trajectory averages, so that NPT runs with a varying cell are weighted consistently
-        # with the per-frame partial PDFs.
         volumes = np.array([atom.get_volume() for atom in atom_list])
         self.volume = float(volumes.mean())
         self.aveden = float(np.mean([len(atom) / vol for atom, vol in zip(atom_list, volumes)]))
@@ -189,10 +196,7 @@ class Scattering:
             "approx_xray": np.asarray(self.approx_xray_timesby, dtype=float),
         }
 
-        if use_neighborhood:
-            self.partial_pdfs = self.calculate_partial_pdfs_neighborhood()
-        else:
-            self.partial_pdfs = self.calculate_partial_pdfs()
+        self.partial_pdfs = self.calculate_partial_pdfs_cell_list()
 
     def _form_factors(self, q: np.ndarray) -> np.ndarray:
         """Cromer-Mann x-ray form factors f_i(Q) for every species, shape (n_species, nq)."""
@@ -203,30 +207,22 @@ class Scattering:
         """
         Weights W_ij / sum_ij W_ij for every ordered pair in self.pairs.
 
-        Args:
-            type (str): The weighting scheme, one of "neutron", "xray" or "approx_xray".
-
         Returns:
             np.ndarray: Shape (n_pairs,) for the Q-independent schemes, and (n_pairs, nbin)
                 for "xray", whose f_i(Q) are tabulated on self.qval.
-
-        Raises:
-            ValueError: If type is not a known weighting scheme.
         """
         if type not in self._weights:
             raise ValueError(f"Invalid type {type!r}. Choose one of {sorted(self._weights)}.")
         w = self._weights[type]
         return w / w.sum(axis=0)
 
-    def calculate_partial_pdfs(self) -> np.ndarray:
+    def _partial_pdfs_dense(self) -> np.ndarray:
         """
         Calculate partial PDFs for all pairs from the full distance matrix.
 
-        Builds an N x N distance matrix per frame, so time and memory both scale as
-        O(N^2) regardless of `rrange`. This is the faster backend at the default
-        `rrange` of half the shortest cell length, where a neighbour list holds nearly
-        every pair anyway; see `calculate_partial_pdfs_neighborhood` for the small-cutoff
-        alternative.
+        Not public API, and not the backend: the slower O(N^2) route, kept so the test suite
+        can check `calculate_partial_pdfs_cell_list` against numbers reached by a path that
+        shares no code with it.
 
         Returns:
             np.ndarray: Array of partial PDFs.
@@ -235,7 +231,7 @@ class Scattering:
         n_frames = len(self.atom_list)
 
         for atom in tqdm(self.atom_list, disable=self.disable_progress):
-            distances = distance_matrix(atom, "Scattering")
+            distances = distance_matrix(atom)
             symbols = np.array(atom.get_chemical_symbols())
             volume = atom.get_volume()
 
@@ -244,62 +240,44 @@ class Scattering:
                 pdf_sum[pair_ind, :] += current_pdf
         return pdf_sum / n_frames
 
-    def calculate_partial_pdfs_neighborhood(self) -> np.ndarray:
+    def calculate_partial_pdfs_cell_list(self) -> np.ndarray:
         """
-        Calculate partial PDFs from a neighbour list, avoiding the full distance matrix.
-
-        Cost scales with the number of pairs within `rrange` rather than with N^2, so this
-        wins only when `rrange` is small compared with the cell: at the default `rrange` of
-        half the shortest cell length the neighbour sphere covers much of the cell and this
-        is slower than `calculate_partial_pdfs`. It is the memory-frugal option either way,
-        since no N x N matrix is built.
+        Calculate partial PDFs from a cell list, avoiding the full distance matrix.
 
         Returns:
             np.ndarray: Array of partial PDFs.
         """
-        all_frame_data: dict[tuple[str, str], list[np.ndarray]] = {pair: [] for pair in self.pairs}
         n_species = len(self.species)
-        for atom in tqdm(self.atom_list, disable=self.disable_progress):
-            symbols = np.array(atom.get_chemical_symbols())
-            volume = atom.get_volume()
-            i_list, j_list, d_list = neighbor_list("ijd", a=atom, cutoff=self.rrange)
-            # Label each neighbour pair by an unordered pair of species codes, so the frame
-            # splits into per-pair distance arrays with one boolean mask each.
-            codes = np.array([self.species_code[s] for s in symbols])
-            code_i, code_j = codes[i_list], codes[j_list]
-            pair_keys = np.minimum(code_i, code_j) * n_species + np.maximum(code_i, code_j)
+        n_frames = len(self.atom_list)
 
-            for pair in self.pairs:
-                el1, el2 = pair
-                # g_ij == g_ji, so both orderings of a cross pair share a key.
-                low, high = sorted((self.species_code[el1], self.species_code[el2]))
-                distances = d_list[pair_keys == low * n_species + high]
-                n1 = int(np.sum(symbols == el1))
-                n2 = int(np.sum(symbols == el2))
-                # `neighbor_list` reports both (i, j) and (j, i), so a cross pair's distances
-                # appear twice. A like pair's n1 * (n1 - 1) ordered pairs already account for it.
-                if el1 == el2:
-                    n_pairs = n1 * (n1 - 1)
-                else:
-                    n_pairs = 2 * n1 * n2
+        # `__init__` rejects frames that differ in composition, so the row key and the pair
+        # normalisation are the same in every frame. The cell list reports both directions,
+        # hence the factor of two on a cross pair.
+        n = {symbol: self.chemical_symbols.count(symbol) for symbol in self.species}
+        norm = []
+        for e1, e2 in self.pairs:
+            low, high = sorted((self.species_code[e1], self.species_code[e2]))
+            n_pairs = n[e1] * (n[e1] - 1) if e1 == e2 else 2 * n[e1] * n[e2]
+            norm.append((low * n_species + high, n_pairs))
+
+        pdf_sum = np.zeros((len(self.pairs), self.nbin))
+        for atom in tqdm(self.atom_list, disable=self.disable_progress):
+            volume = atom.get_volume()
+            codes = self._code_lut[atom.numbers]
+            counts = cell_list_pair_counts(atom, codes, self.rrange, self.nbin, n_species)
+
+            for pair_ind, (key, n_pairs) in enumerate(norm):
                 _, current_pdf = pdf(
-                    distances,
+                    None,
                     volume,
                     self.rrange,
                     self.nbin,
                     n_pairs=n_pairs,
-                    exclude_self=False,  # a neighbour list never contains self-distances
+                    exclude_self=False,  # a cell list never reports self-distances
+                    counts=counts[key],
                 )
-                all_frame_data[pair].append(current_pdf)
-        pdfs = np.zeros((len(self.pairs), self.nbin))
-
-        for pair_ind, pair in enumerate(self.pairs):
-            if all_frame_data[pair]:
-                pdfs[pair_ind] = np.mean(all_frame_data[pair], axis=0)
-            else:
-                pdfs[pair_ind] = np.zeros(self.nbin)
-
-        return pdfs
+                pdf_sum[pair_ind, :] += current_pdf
+        return pdf_sum / n_frames
 
     def get_partial_pdf(self, pair: tuple[str, str]) -> np.ndarray:
         """
@@ -336,7 +314,13 @@ class Scattering:
 
         dr = self.rrange / self.nbin
         s = np.arange(2 * self.nbin) * dr
+        # eq 61 is a trapezoid over a uniform q, so it is a dot with the trapezoid weights.
+        # Folding them in turns each pair's transform into one matrix-vector product against
+        # `cos_qs`, where broadcasting the integrand across it would copy the whole array.
         cos_qs = np.cos(np.outer(s, q))
+        q_weights = np.full(q.size, q[1] - q[0])
+        q_weights[0] *= 0.5
+        q_weights[-1] *= 0.5
         delta_r = np.abs(self.xval[np.newaxis, :] - self.xval[:, np.newaxis])
         sum_r = self.xval[np.newaxis, :] + self.xval[:, np.newaxis]
 
@@ -347,7 +331,7 @@ class Scattering:
             i, j = self.species_code[pair[0]], self.species_code[pair[1]]
             key = (min(i, j), max(i, j))
             if key not in kernels:
-                kernels[key] = np.trapezoid(f[i] * f[j] / f_norm * mod * cos_qs, q) / math.pi  # eqs 57, 61
+                kernels[key] = cos_qs @ (q_weights * f[i] * f[j] / f_norm * mod) / math.pi  # eqs 57, 61
             j_ij = kernels[key]
             # eq 60; r'(g-1) extended odd, folding r' < 0 onto the j_ij(r + r') term.
             d = self.xval * (self.get_partial_pdf(pair) - 1.0)
@@ -402,6 +386,11 @@ class Scattering:
 
         return gr_tot
 
+    @functools.cached_property
+    def _sinc_qr(self) -> np.ndarray:
+        """sin(qr)/qr on the fixed (qval, xval) grid; every partial transform reuses it."""
+        return np.sinc(np.outer(self.qval, self.xval) / np.pi)
+
     def get_partial_structure_factor(self, target_atoms: tuple[str, str], lorch: bool = False) -> np.ndarray:
         """
         Calculate the partial structure factor for a given target atoms within a specified range.
@@ -415,9 +404,7 @@ class Scattering:
         """
 
         pdf_val = self.get_partial_pdf(pair=target_atoms)
-        # np.sinc(x) is sin(pi x)/(pi x), which is 1 at x = 0, so r = 0 needs no special case.
-        kernel = np.sinc(np.outer(self.qval, self.xval) / np.pi)
-        integrand = 4 * math.pi * self.xval**2 * (pdf_val - 1) * kernel
+        integrand = 4 * math.pi * self.xval**2 * (pdf_val - 1) * self._sinc_qr
         if lorch:
             integrand = integrand * np.sinc(self.xval / self.rrange)
         return 1 + self.aveden * np.trapezoid(integrand, self.xval)
@@ -512,11 +499,7 @@ class Scattering:
         where rho_0 is the average number density.
 
         Args:
-            type (str, optional): The type of scattering, one of "neutron", "xray" or
-                "approx_xray". Defaults to "neutron".
-            broaden (Union[bool, int, float], optional): Broadening parameter. Defaults to False.
-            lorch (bool, optional): Apply the Lorch modification function; type="xray" only.
-                Passed through to get_total_rdf(). Defaults to False.
+            As `get_total_rdf`, which this is a weighting of.
 
         Returns:
             np.ndarray: The T(r) function values.
@@ -534,11 +517,7 @@ class Scattering:
         function to read at small r.
 
         Args:
-            type (str, optional): The type of scattering, one of "neutron", "xray" or
-                "approx_xray". Defaults to "neutron".
-            broaden (Union[bool, int, float], optional): Broadening parameter. Defaults to False.
-            lorch (bool, optional): Apply the Lorch modification function; type="xray" only.
-                Passed through to get_total_rdf(). Defaults to False.
+            As `get_total_rdf`, which this is a weighting of.
 
         Returns:
             np.ndarray: The D(r) function values.

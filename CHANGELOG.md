@@ -60,11 +60,34 @@ recomputed.**
   and pull-request templates.
 - Docs for `vitrum.visualization`, the one module whose API reference was not reachable from
   the documentation nav.
+- **Triclinic cells in `vitrum.geometry.distance_matrix`**, and so in `Scattering` and
+  `GlassAtoms.get_pdf`. The cell is reduced to a Minkowski basis and the nearest periodic image
+  searched for; a cell with perpendicular axes needs no search and costs what it always did.
+  Verified against `ase`'s own minimum-image distances. `vitrum.geometry.get_dist`.
+- `vitrum.geometry.perpendicular_widths`: the distance between each pair of opposite cell
+  faces, which is what bounds the minimum image convention. Equal to the cell diagonal for
+  an orthorhombic cell.
+- **`vitrum.geometry.cell_list_pair_counts`, the cell-list kernel now backing `Scattering`'s
+  PDFs.** Distances are histogrammed as they are found, so memory is O(N) rather than one
+  record per pair: 10⁶ atoms at `rrange` = 20 Å bins 1.7 × 10⁹ pairs in seconds, which
+  previously did not fit in memory. It needs a cell periodic along all three axes and `rrange`
+  within the minimum image limit, and raises otherwise.
+- **`Scattering` has one PDF backend, the cell list, used at every cell size.** Nothing to
+  select and nothing to configure. Results are unchanged, and it is 8-20× faster than the
+  distance matrix on a 3,000-atom cell while allocating much less memory.
+- `vitrum.geometry.minimum_image_limit`: the largest radius at which the minimum image
+  convention holds, and the bound `Scattering` and `cell_list_pair_counts` enforce `rrange`
+  against. It is the narrower of the cell as given and its Minkowski reduction, since neither
+  is reliably the tighter of the two.
 
 ### Changed
 
 Each of the following changes the numbers the package returns.
 
+- **`Scattering` rejects an `rrange` above half the shortest perpendicular cell width**, where
+  it previously warned and returned numbers anyway. Run a larger cell to tabulate further.
+- **`Scattering`'s default `rrange` is capped at 20 Å**. Cells up to 40 Å across are
+  unaffected; above that the default no longer tracks the cell.
 - **The default `vol_per_atom_source` for `get_volume` and `get_random_packed` is now
   `"ionic_radius"`, not `"mp"`**, so the default path needs no Materials Project API key.
 - **Partial PDFs for like pairs (e.g. Si-Si) are normalised by `N_a * (N_a - 1)`** rather than
@@ -95,6 +118,22 @@ Each of the following changes the numbers the package returns.
 
 ### Removed
 
+- **`Scattering(use_neighborhood=...)`.** There is one backend now, so there is nothing to
+  select; passing the argument raises `TypeError`. It only ever traded speed, and the cell list
+  is the faster of the two.
+- **`Scattering.calculate_partial_pdfs_neighborhood` is now
+  `Scattering.calculate_partial_pdfs_cell_list`**, which is what it does; the
+  `ase.neighborlist` path it was named for is gone.
+- **`Scattering.calculate_partial_pdfs` is now private, `_partial_pdfs_dense`.** It stopped
+  being the backend in this release and was only a slower route to the same numbers, with no
+  effect unless its result was assigned over `partial_pdfs`. It is kept to cross-check the cell
+  list in the test suite.
+- **`Scattering` requires a cell periodic along all three axes** and raises `ValueError`
+  otherwise. The minimum image convention is applied unconditionally, so a free surface was
+  silently folded in rather than left alone.
+- **`vitrum.geometry.get_dist_numba`**, the orthorhombic-only distance kernel.
+  `get_dist_numba_triclinic` covers it at the same cost — a perpendicular cell needs no image
+  search — and `distance_matrix` now takes that one path.
 - **A cutoff can no longer be given as a bare list** such as `cutoff=[1.6, 2.4]`; pass a number
   or a dict keyed by bond or by neighbour species. It follows that the two arms of a
   same-species angle always share one cutoff.

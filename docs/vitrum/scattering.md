@@ -53,6 +53,17 @@ Cutting the $j_{ij}(r)$ integral off sharply at `qmax` leaves ripples in $G'(r)$
 - **`lorch=True`**, on `get_total_rdf`, `get_T_r_pdf` and `get_reduced_pdf`. $M(Q) = \frac{\sin(\pi Q / Q_{max})}{\pi Q / Q_{max}}$ multiplies the $j_{ij}(r)$ integrand, tapering it to zero at `qmax` rather than cutting it off.
 - **Read $D(r)$ rather than $G'(r)$ at small $r$.** `get_reduced_pdf` carries a factor of $r$ that cancels the $1/r$ amplifying the ripple as $r \to 0$.
 
+## Choosing `rrange`
+
+`rrange` sets how far $g(r)$ is tabulated, and it is the single number that decides whether a large structure is analysable at all: the number of pairs inside the range grows as $r_{max}^3$.
+
+When `rrange` is not given it defaults to **half the shortest perpendicular cell width, capped at 20 Å**. An explicitly passed `rrange` is not subject to the 20 Å cap, but it *is* subject to the hard limit below.
+
+### `rrange` cannot exceed half the shortest perpendicular width
+
+Past that radius, every pair still to be counted is a periodic replica of a pair already counted, and there is no honest $g(r)$ to report — so `Scattering` raises `ValueError` rather than returning one. To tabulate further, run a larger cell.
+
+
 ## Peak metrics
 
 The derived scalars usually quoted from these functions — the bond length and its static disorder from the first peak of a partial $g(r)$, and the position, width and intensity of the first sharp diffraction peak of $S(Q)$ — are the same measurement made on two different arrays, so one function in `vitrum.geometry` does both:

@@ -155,6 +155,24 @@ def cube_graph():
     return Atoms("Si8", positions=positions, cell=[30.0] * 3, pbc=False)
 
 
+@pytest.fixture(scope="session")
+def sodium_silicate_triclinic(sodium_silicate_frame):
+    """The melt frame carried into a sheared cell, for the general-cell code paths.
+
+    `scale_atoms=True` moves the atoms with the cell, so this is still a physical glass --
+    the same network at the same density, measured in a cell that is no longer
+    orthorhombic. Shearing without scaling would leave atoms overlapping across the faces
+    and the PDF would be measuring the damage rather than the structure.
+    """
+    atoms = sodium_silicate_frame.copy()
+    cell = np.array(atoms.get_cell())
+    cell[1, 0] += 8.0
+    cell[2, 0] += 5.0
+    cell[2, 1] += 6.0
+    atoms.set_cell(cell, scale_atoms=True)
+    return atoms
+
+
 @pytest.fixture
 def triclinic_atoms():
     """A structure with a genuinely triclinic cell, for the orthorhombic guard."""

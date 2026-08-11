@@ -4,7 +4,15 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-from vitrum.geometry import distance_matrix, partial_pdf, peak_metrics, require_orthorhombic
+from vitrum.geometry import (
+    _minkowski_basis,
+    distance_matrix,
+    minimum_image_limit,
+    partial_pdf,
+    peak_metrics,
+    perpendicular_widths,
+    require_orthorhombic,
+)
 
 
 def test_distance_matrix_matches_ase_minimum_image(silicon_small):
@@ -34,10 +42,90 @@ def test_distance_matrix_is_unchanged_by_wrapping(silicon_small):
     np.testing.assert_allclose(distance_matrix(unwrapped), distance_matrix(wrapped), atol=1e-8)
 
 
-def test_distance_matrix_rejects_triclinic(triclinic_atoms):
-    """A triclinic cell must raise rather than silently give wrong distances."""
+# Rounding the fractional separation alone does not find the nearest image once the axes
+# are far from perpendicular, so the shapes here are chosen to be progressively worse for
+# it: a hexagonal cell, a monoclinic one, one sheared beyond any physical cell, and one
+# long thin cell whose shortest width is a fraction of its longest axis.
+GENERAL_CELLS = {
+    "hexagonal": [[12.0, 0.0, 0.0], [-6.0, 10.392, 0.0], [0.0, 0.0, 19.0]],
+    "monoclinic": [[10.0, 0.0, 0.0], [0.0, 13.0, 0.0], [-4.2, 0.0, 11.0]],
+    "extreme shear": [[12.0, 0.0, 0.0], [23.0, 12.0, 0.0], [17.0, 19.0, 12.0]],
+    "long thin": [[40.0, 0.0, 0.0], [3.0, 6.0, 0.0], [2.0, 1.0, 6.5]],
+}
+
+
+@pytest.mark.parametrize("cell", GENERAL_CELLS.values(), ids=list(GENERAL_CELLS))
+def test_distance_matrix_matches_ase_for_general_cells(cell):
+    """Every cell shape must agree with ASE, for positions well outside the box.
+
+    The positions span three cell lengths in each direction, so the minimum image has to
+    hold for separations of several cells and not merely within one, exactly as it must
+    for the unwrapped coordinates a LAMMPS dump stores.
+    """
+    cell = np.asarray(cell, dtype=float)
+    rng = np.random.default_rng(0)
+    positions = (rng.random((60, 3)) * 3 - 1) @ cell
+    atoms = Atoms("Si60", positions=positions, cell=cell, pbc=True)
+    np.testing.assert_allclose(distance_matrix(atoms), atoms.get_all_distances(mic=True), atol=1e-8)
+
+
+def test_orthorhombic_cells_skip_the_image_search():
+    """Perpendicular axes need no images searched; the shortcut is most of the kernel's cost.
+
+    Correctness of the shortcut is covered by every orthorhombic distance test, which all
+    go through it. This pins that it is actually taken.
+    """
+    assert _minkowski_basis(np.diag([9.0, 14.0, 11.0]), [True] * 3)[2].shape == (1, 3)
+    assert _minkowski_basis(GENERAL_CELLS["hexagonal"], [True] * 3)[2].shape == (27, 3)
+
+
+def test_perpendicular_widths_are_the_diagonal_for_an_orthorhombic_cell():
+    """The general bound must reduce to the old one, or every default rrange shifts."""
+    np.testing.assert_allclose(perpendicular_widths(np.diag([10.0, 12.0, 14.0])), [10.0, 12.0, 14.0])
+
+
+def test_perpendicular_widths_shrink_under_shear():
+    """Shearing an axis leaves its length alone but narrows the cell across it."""
+    cell = np.array([[10.0, 0.0, 0.0], [6.0, 10.0, 0.0], [0.0, 0.0, 10.0]])
+    widths = perpendicular_widths(cell)
+    # The b axis is still sqrt(6^2 + 10^2) = 11.66 long, but the a-c faces it spans are
+    # only 10 apart; it is the a direction that narrows, to V / |b x c| = 1000 / 116.6.
+    np.testing.assert_allclose(widths, [1000 / np.linalg.norm(np.cross(cell[1], cell[2])), 10.0, 10.0])
+    assert widths.min() < 10.0
+
+
+def test_minimum_image_limit_is_half_the_width_for_an_orthorhombic_cell():
+    """Reduction is a no-op on an orthorhombic cell, so the limit is just half the shortest."""
+    assert minimum_image_limit(np.diag([10.0, 12.0, 14.0]), [True] * 3) == pytest.approx(5.0)
+
+
+def test_minimum_image_limit_never_exceeds_either_basis():
+    """The limit must hold for the cell as given *and* for its Minkowski reduction.
+
+    Reduction shortens the basis vectors, but shortening one can narrow the cell across a
+    face -- measured at up to 10% narrower over random skewed cells. Taking only the
+    unreduced widths would let `Scattering` accept an rrange that `cell_list_pair_counts`,
+    which grids on the reduced basis, refuses. With no fallback backend that is a crash, so
+    the two have to agree by construction rather than by luck.
+    """
+    rng = np.random.default_rng(0)
+    narrowed = 0
+    for _ in range(2000):
+        cell = np.eye(3) * 10 + rng.normal(0, 6, (3, 3))
+        if abs(np.linalg.det(cell)) < 50:
+            continue
+        limit = minimum_image_limit(cell, [True] * 3)
+        unreduced = perpendicular_widths(cell).min() / 2
+        reduced = perpendicular_widths(_minkowski_basis(cell, [True] * 3)[0]).min() / 2
+        assert limit <= unreduced + 1e-12 and limit <= reduced + 1e-12
+        narrowed += reduced < unreduced - 1e-9
+    assert narrowed > 0, "no cell in this sample had a narrower reduction; the test proves nothing"
+
+
+def test_require_orthorhombic_still_rejects_triclinic(triclinic_atoms):
+    """`distance_matrix` accepts a general cell now, but the void/unwrap guard must not."""
     with pytest.raises(NotImplementedError, match="orthorhombic"):
-        distance_matrix(triclinic_atoms)
+        require_orthorhombic(triclinic_atoms.get_cell(), "build_void_grid")
 
 
 def test_require_orthorhombic_returns_diagonal():

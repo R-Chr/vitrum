@@ -17,21 +17,26 @@ loop/void statistics of the bulk.
 
 ## Orthorhombic cells only
 
-Distance calculations (`vitrum.geometry.distance_matrix`), trajectory unwrapping, void grids
-and ring centres all apply the minimum image convention using only the cell diagonal, so
-they are valid only for orthorhombic cells. Positions need not be wrapped into the cell.
+Trajectory unwrapping (`unwrap_trajectory`), void grids (`build_void_grid`,
+`VoidAnalysis`), the homogeneity checker and ring centres still apply the minimum image
+convention using only the cell diagonal, so they are valid only for orthorhombic cells.
+This is checked rather than assumed: passing a triclinic cell raises `NotImplementedError`
+via `vitrum.geometry.require_orthorhombic` instead of silently returning
+plausible-looking but wrong numbers. Full triclinic support is not implemented for these
+routines. Positions need not be wrapped into the cell.
 
-As of 1.1.0 this is checked rather than assumed: passing a triclinic cell raises
-`NotImplementedError` via `vitrum.geometry.require_orthorhombic` instead of
-silently returning plausible-looking but wrong numbers. Full triclinic support
-is not implemented for these routines.
+The following are **not** subject to this restriction:
 
-`Coordination`, the underlying `vitrum.bonds.Bonds`/`_Frame`, and `find_rings`/
-`RingAnalysis.calculate` given an explicit `cutoff` are no longer subject to this
-restriction: their bond graph is built entirely with `ase.neighborlist.neighbor_list`, which
-takes a general cell matrix, so `cutoff="Auto"` and every other cutoff spelling work on a
-triclinic cell. `find_rings`'s covalent-radii default (`cutoff=None`) was never subject to
-this restriction in the first place — it already built its graph from a general cell matrix.
+- **Distances** — `vitrum.geometry.distance_matrix` takes any cell as of 1.1.0. 
+- **`Scattering`** — both PDF backends work on a general cell. `rrange` is bounded by the
+  perpendicular cell widths rather than the cell lengths, which is the correct minimum-image
+  limit. `Scattering` does require a cell periodic along all three axes as of 1.1.0.
+- **`Coordination`**, the underlying `vitrum.bonds.Bonds`/`_Frame`, and `find_rings`/
+  `RingAnalysis.calculate` given an explicit `cutoff` — their bond graph is built entirely
+  with `ase.neighborlist.neighbor_list`, which takes a general cell matrix, so
+  `cutoff="Auto"` and every other cutoff spelling work on a triclinic cell. `find_rings`'s
+  covalent-radii default (`cutoff=None`) was never subject to this restriction in the first
+  place — it already built its graph from a general cell matrix.
 
 ## `Diffusion` — limitations
 

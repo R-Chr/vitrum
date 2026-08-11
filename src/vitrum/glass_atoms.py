@@ -51,7 +51,7 @@ class GlassAtoms(Atoms):
             NotImplementedError: If the cell is not orthorhombic.
         """
         _deprecated("GlassAtoms.get_dist", "vitrum.geometry.distance_matrix(atoms)")
-        return distance_matrix(self, "GlassAtoms.get_dist")
+        return distance_matrix(self)
 
     def set_new_chemical_symbols(self, symbol_map: dict[int, str]) -> None:
         """
@@ -104,7 +104,7 @@ class GlassAtoms(Atoms):
             symbols = None
 
         return partial_pdf(
-            distance_matrix(self, "GlassAtoms.get_pdf"),
+            distance_matrix(self),
             symbols,
             self.get_volume(),
             target_atoms,
