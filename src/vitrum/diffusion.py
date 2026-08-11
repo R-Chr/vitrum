@@ -140,8 +140,8 @@ class Diffusion:
             )
 
         if t_window is None:
-            start_indicies = [0]
-            end_indicies = [-1]
+            start_indicies = np.array([0])
+            end_indicies = np.array([-1])
         else:
             start_indicies = np.arange(0, len(self.sample_times) - t_window, t_window)
             end_indicies = np.arange(t_window, len(self.sample_times), t_window)

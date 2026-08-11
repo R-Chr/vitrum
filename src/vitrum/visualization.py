@@ -1,6 +1,6 @@
 """Render ase.Atoms glass structures to static images or Jupyter widgets via OVITO."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
@@ -19,7 +19,7 @@ _RENDERERS = {"tachyon": TachyonRenderer}
 
 
 def _colors_by_element(
-    symbols: Sequence[str], element_colors: dict[str, str | tuple[float, float, float]]
+    symbols: Sequence[str], element_colors: Mapping[str, str | tuple[float, float, float]]
 ) -> np.ndarray:
     """
     Build a per-atom (N, 3) RGB array by looking each atom's symbol up in a color map.
@@ -115,7 +115,8 @@ class StructureRenderer:
         def apply_radii(frame: int, data: DataCollection) -> None:
             types = data.particles_.particle_types_
             for symbol, radius in self.radii.items():
-                types.type_by_name_(symbol).radius = radius
+                # ElementType.radius is documented OVITO API but missing from its type stubs.
+                types.type_by_name_(symbol).radius = radius  # type: ignore[attr-defined]
 
         self.pipeline.modifiers.append(apply_radii)
 
@@ -217,14 +218,14 @@ class StructureRenderer:
         scale = self.atoms.get_volume() ** (1.0 / 3.0)
         if distance is None:
             distance = scale * 3.0
-        direction = np.asarray(direction, dtype=float)
-        look_at_shift = np.asarray(look_at_shift, dtype=float)
-        unit_direction = direction / np.linalg.norm(direction)
+        camera_dir = np.asarray(direction, dtype=float)
+        shift = np.asarray(look_at_shift, dtype=float)
+        unit_direction = camera_dir / np.linalg.norm(camera_dir)
 
         self.viewport = Viewport()
         self.viewport.type = Viewport.Type.Perspective if perspective else Viewport.Type.Ortho
-        self.viewport.camera_dir = direction
-        self.viewport.camera_pos = look_at_shift + self.atoms.get_center_of_mass() - unit_direction * distance
+        self.viewport.camera_dir = tuple(camera_dir)
+        self.viewport.camera_pos = shift + self.atoms.get_center_of_mass() - unit_direction * distance
         if fov is not None:
             self.viewport.fov = fov
         elif not perspective:
@@ -290,6 +291,7 @@ class StructureRenderer:
         import ipywidgets
         from IPython.display import display
 
-        widget = self.viewport.create_jupyter_widget()
+        # Documented OVITO API, but missing from its type stubs.
+        widget = self.viewport.create_jupyter_widget()  # type: ignore[attr-defined]
         widget.layout = ipywidgets.Layout(width="500px", height="400px")
         display(widget)

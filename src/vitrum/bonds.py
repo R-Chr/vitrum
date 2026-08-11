@@ -11,6 +11,7 @@ from collections.abc import Sequence
 import numpy as np
 from ase import Atoms
 from ase.neighborlist import neighbor_list
+from numpy.typing import ArrayLike
 
 from vitrum.geometry import pdf, radial_bins
 
@@ -35,7 +36,14 @@ class Bonds:
 
     __slots__ = ("centers", "col", "neighs", "offsets", "row")
 
-    def __init__(self, centers, neighs, row, col, offsets=None):
+    def __init__(
+        self,
+        centers: ArrayLike,
+        neighs: ArrayLike,
+        row: ArrayLike,
+        col: ArrayLike,
+        offsets: ArrayLike | None = None,
+    ):
         self.centers = np.asarray(centers, dtype=int)
         self.neighs = np.asarray(neighs, dtype=int)
         self.row = np.asarray(row, dtype=int)

@@ -2,7 +2,13 @@ import numpy as np
 from scipy.interpolate import interp1d
 
 
-def r_chi(function_1, function_2, x_min=0, x_max=np.inf, steps=100):
+def r_chi(
+    function_1: dict[str, np.ndarray],
+    function_2: dict[str, np.ndarray],
+    x_min: float = 0,
+    x_max: float = np.inf,
+    steps: int = 100,
+) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate the Wright coefficient (https://doi.org/10.1016/0022-3093(93)90232-M) between two functions
 

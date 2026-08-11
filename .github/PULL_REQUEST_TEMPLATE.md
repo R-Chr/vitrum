@@ -11,6 +11,7 @@ is the right one. -->
 
 - [ ] `pytest` passes
 - [ ] `ruff check src tests` and `ruff format --check src tests` pass
+- [ ] `mypy` passes, and any new function is fully annotated
 - [ ] Added a test that fails without this change
 - [ ] Updated the docs under `docs/` if behaviour changed
 - [ ] Added a `CHANGELOG.md` entry

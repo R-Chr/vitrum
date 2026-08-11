@@ -30,7 +30,9 @@ import itertools
 import math
 import warnings
 from collections import defaultdict
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -71,18 +73,18 @@ class Compositions:
     df: pd.DataFrame
     mode: str
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.df)
 
-    def _value_columns(self):
+    def _value_columns(self) -> list[str]:
         return [c for c in self.df.columns if c not in _META_COLUMNS]
 
     @staticmethod
-    def _units_to_composition(unit_fracs):
+    def _units_to_composition(unit_fracs: dict[str, float]) -> Composition:
         comps = [Composition(u) * f for u, f in unit_fracs.items()]
         return sum(comps[1:], start=comps[0])
 
-    def to_pymatgen(self):
+    def to_pymatgen(self) -> list[Composition]:
         """Convert the sampled rows to pymatgen ``Composition`` objects.
 
         Each mole-fraction row is reduced to its smallest whole-number formula so
@@ -100,7 +102,7 @@ class Compositions:
             comps.append(Composition(integer_formula))
         return comps
 
-    def to_formulas(self, integers=True):
+    def to_formulas(self, integers: bool = True) -> list[str]:
         """Convert the sampled rows to formula strings.
 
         Args:
@@ -121,7 +123,13 @@ class Compositions:
                 formulas.append(comp.get_integer_formula_and_factor()[0] if integers else comp.formula)
         return formulas
 
-    def get_structures(self, target_atoms=100, datatype="ase", max_atoms=None, **packing_kwargs):
+    def get_structures(
+        self,
+        target_atoms: int = 100,
+        datatype: str = "ase",
+        max_atoms: int | None = None,
+        **packing_kwargs: Any,
+    ) -> list:
         """Realize the compositions as random-packed structures.
 
         Args:
@@ -176,13 +184,13 @@ class GlassGenerator:
 
     def __init__(
         self,
-        units=None,
-        elements=None,
-        charges=None,
-        network_formers=None,
-        x_min=0.05,
-        min_former_sum=0.0,
-        seed=None,
+        units: list[str] | None = None,
+        elements: dict[str, list[str]] | None = None,
+        charges: dict[str, float] | None = None,
+        network_formers: set[str] | None = None,
+        x_min: float = 0.05,
+        min_former_sum: float = 0.0,
+        seed: int | None = None,
     ):
         charges = charges or {}
         self.x_min = x_min
@@ -192,28 +200,23 @@ class GlassGenerator:
         # Fixed base seed for the Sobol engines so runs are reproducible.
         self._sobol_base = int(self._rng.integers(0, 2**30))
 
-        if (units is None) == (elements is None):
-            raise ValueError(
-                "Specify exactly one of units=[...] (unit mode) or "
-                "elements={'formers': [...], 'modifiers': [...], 'anions': [...]} "
-                "(elemental mode)."
-            )
-
-        if units is not None:
+        # The mode that does not apply gets empty containers rather than None, so
+        # `self._mode` stays the single place the mode is decided.
+        if units is not None and elements is None:
             self._mode = "unit"
             self.units = list(units)
             self.formers = self.modifiers = self.anions = []
             self._network_formers = set(network_formers) if network_formers is not None else set()
-            self._elements = None
-            self._charges = None
-        else:
+            self._elements: list[str] = []
+            self._charges: dict[str, float] = {}
+        elif elements is not None and units is None:
             self._mode = "elemental"
             unknown = set(elements) - set(self._ELEMENT_GROUPS)
             if unknown:
                 raise ValueError(
                     f"Unknown element group(s) {sorted(unknown)}; expected any of {list(self._ELEMENT_GROUPS)}."
                 )
-            self.units = None
+            self.units = []
             self.formers = list(elements.get("formers", []))
             self.modifiers = list(elements.get("modifiers", []))
             self.anions = list(elements.get("anions", []))
@@ -221,13 +224,19 @@ class GlassGenerator:
                 raise ValueError(f"elements must contain at least one of {list(self._ELEMENT_GROUPS)}.")
             self._elements = list(dict.fromkeys(self.modifiers + self.formers + self.anions))
             self._charges = self._resolve_charges(charges)
+        else:
+            raise ValueError(
+                "Specify exactly one of units=[...] (unit mode) or "
+                "elements={'formers': [...], 'modifiers': [...], 'anions': [...]} "
+                "(elemental mode)."
+            )
 
     # -- charge resolution ---------------------------------------------------
 
-    def _resolve_charges(self, overrides):
+    def _resolve_charges(self, overrides: dict[str, float]) -> dict[str, float]:
         charges = {}
 
-        def resolve(el, fallback_index):
+        def resolve(el: str, fallback_index: int) -> float:
             if el in overrides:
                 return overrides[el]
             return Element(el).oxidation_states[fallback_index]
@@ -244,7 +253,7 @@ class GlassGenerator:
     _UNIT_SCHEMES = ("sobol", "lhs", "random", "grid")
     _ELEMENTAL_SCHEMES = ("random",)
 
-    def sample(self, scheme="sobol", n=100, dedup=True, **scheme_kwargs):
+    def sample(self, scheme: str = "sobol", n: int = 100, dedup: bool = True, **scheme_kwargs: Any) -> Compositions:
         """Sample glass compositions using the given scheme.
 
         The valid schemes depend on the generator's mode:
@@ -295,7 +304,15 @@ class GlassGenerator:
 
     # -- sampling schemes ----------------------------------------------------
 
-    def _sample_continuous(self, n, scheme, dedup=True, order_weights=None, require_former=None, spacing=10):
+    def _sample_continuous(
+        self,
+        n: int,
+        scheme: str,
+        dedup: bool = True,
+        order_weights: dict[int, float] | None = None,
+        require_former: bool | None = None,
+        spacing: float = 10,
+    ) -> pd.DataFrame:
         """Place points on the unit-composition simplex, then constrain and finalize.
 
         The raw points come from a scheme-specific generator (``"grid"`` enumerates
@@ -340,7 +357,7 @@ class GlassGenerator:
             )
         return pd.DataFrame(rows, columns=units)
 
-    def _grid_candidates(self, spacing):
+    def _grid_candidates(self, spacing: float) -> Iterator[np.ndarray]:
         """Yield full unit-fraction vectors on a regular lattice summing to 1."""
         units = self.units
         axis = np.linspace(0, 100, int(100 / spacing + 1))
@@ -349,18 +366,21 @@ class GlassGenerator:
                 continue
             yield np.array(combo) / 100.0
 
-    def _stochastic_candidates(self, n, scheme, order_weights, require_former):
+    def _stochastic_candidates(
+        self, n: int, scheme: str, order_weights: dict[int, float] | None, require_former: bool | None
+    ) -> Iterator[np.ndarray]:
         """Yield ``n`` full unit-fraction vectors drawn from subsystem simplices."""
         units = self.units
         n_dim = len(units)
-        order_weights = order_weights or _DEFAULT_ORDER_WEIGHTS
+        resolved_weights: dict[int, float] = dict(order_weights or _DEFAULT_ORDER_WEIGHTS)
         former_set = self._network_formers
-        require_former = require_former and bool(former_set)
+        require_former = bool(require_former) and bool(former_set)
 
-        subs_by_order = _enumerate_subsystems(units, order_weights, require_former, former_set)
-        pool, weights = [], []
+        subs_by_order = _enumerate_subsystems(units, resolved_weights, require_former, former_set)
+        pool: list[tuple[int, ...]] = []
+        weights: list[float] = []
         for order, sub_list in subs_by_order.items():
-            w = float(order_weights[order])
+            w = float(resolved_weights[order])
             for sub in sub_list:
                 pool.append(sub)
                 weights.append(w)
@@ -374,10 +394,10 @@ class GlassGenerator:
                 f"sums to {largest_order * self.x_min:.3f} > 1. Lower x_min to at most "
                 f"{1.0 / largest_order:.3f}, or restrict order_weights to smaller subsystems."
             )
-        weights = np.array(weights)
-        weights /= weights.sum()
+        probabilities = np.array(weights)
+        probabilities /= probabilities.sum()
 
-        chosen = self._rng.choice(len(pool), size=n, replace=True, p=weights)
+        chosen = self._rng.choice(len(pool), size=n, replace=True, p=probabilities)
         chosen_subs = [pool[i] for i in chosen]
 
         # Group draws by subsystem size so each engine draws a proper batch: LHS
@@ -386,7 +406,7 @@ class GlassGenerator:
         for draw_i, sub in enumerate(chosen_subs):
             by_size[len(sub)].append(draw_i)
 
-        simplex_points = [None] * n
+        simplex_points: list[np.ndarray] = [np.empty(0)] * n
         for size in sorted(by_size):
             positions = by_size[size]
             seed = int((self._sobol_base + size) % (2**30))
@@ -403,11 +423,10 @@ class GlassGenerator:
                 full[gidx] = comp_sub[j]
             yield full
 
-    def _sample_random(self, n, weights, dedup=True):
+    def _sample_random(self, n: int, weights: dict[str, Any], dedup: bool = True) -> pd.DataFrame:
         rng = self._rng
         modifiers, formers, anions = self.modifiers, self.formers, self.anions
-        charges = self._charges
-        elements = self._elements
+        elements, charges = self._elements, self._charges
 
         num_mod_weights = weights.get("num_mod_weights", [0.5, 0.5, 0, 0])
         num_former_weights = weights.get("num_former_weights", [0.05, 0.65, 0.3, 0])
@@ -420,7 +439,8 @@ class GlassGenerator:
         bias_anions = np.array(weights.get("bias_anions", [1] * len(anions)), dtype=float)
         bias_anions = bias_anions / bias_anions.sum() if len(anions) else bias_anions
 
-        rows, seen = [], set()
+        rows: list[dict[str, float]] = []
+        seen: set[str] = set()
         attempts, max_attempts = 0, n * 1000 + 1000
         while len(rows) < n and attempts < max_attempts:
             attempts += 1
@@ -433,11 +453,17 @@ class GlassGenerator:
             if num_mod > len(modifiers) or num_former > len(formers) or num_anion > len(anions):
                 continue
 
-            chosen_mods = rng.choice(modifiers, num_mod, replace=False, p=bias_modifiers) if num_mod else []
-            chosen_formers = rng.choice(formers, num_former, replace=False, p=bias_formers) if num_former else []
-            chosen_anions = rng.choice(anions, num_anion, replace=False, p=bias_anions) if num_anion else []
+            chosen_mods: Sequence[str] | np.ndarray = (
+                rng.choice(modifiers, num_mod, replace=False, p=bias_modifiers) if num_mod else []
+            )
+            chosen_formers: Sequence[str] | np.ndarray = (
+                rng.choice(formers, num_former, replace=False, p=bias_formers) if num_former else []
+            )
+            chosen_anions: Sequence[str] | np.ndarray = (
+                rng.choice(anions, num_anion, replace=False, p=bias_anions) if num_anion else []
+            )
 
-            mod_form_ratio = (
+            mod_form_ratio: Sequence[float] | np.ndarray = (
                 _random_partition(2, rng) if num_mod and num_former else [int(bool(num_mod)), int(bool(num_former))]
             )
             mod_ratio = _random_partition(num_mod, rng)
@@ -493,8 +519,15 @@ class GlassGenerator:
 
 
 def gen_random_glasses(
-    modifiers, formers, anions, weights=None, num_structures=30, target_atoms=100, max_atoms=200, **kwargs
-):
+    modifiers: list[str],
+    formers: list[str],
+    anions: list[str],
+    weights: dict[str, Any] | None = None,
+    num_structures: int = 30,
+    target_atoms: int = 100,
+    max_atoms: int = 200,
+    **kwargs: Any,
+) -> list:
     """Generate random glass structures from given modifiers, formers and anions.
 
     Thin wrapper around ``GlassGenerator(...).sample("random")`` followed by
@@ -531,7 +564,7 @@ def gen_random_glasses(
 # ---------------------------------------------------------------------------
 
 
-def _packed_cell_size(composition, target_atoms):
+def _packed_cell_size(composition: Composition | str, target_atoms: int) -> int:
     """Number of atoms :func:`vitrum.packing.get_random_packed` would build for a composition.
 
     It packs whole formula units, so the cell holds the smallest multiple of the integer
@@ -542,25 +575,25 @@ def _packed_cell_size(composition, target_atoms):
     return int(integer_composition.num_atoms * math.ceil(target_atoms / integer_composition.num_atoms))
 
 
-def _my_round(x):
+def _my_round(x: float) -> float:
     """Round a value to the nearest 0.01, with 3 decimal places of precision."""
     return round(0.01 * round(x / 0.01), 3)
 
 
-def _is_multiple(c, total, tol=1e-9):
+def _is_multiple(c: float, total: float, tol: float = 1e-9) -> bool:
     """Return True if ``total`` is (approximately) an integer multiple of ``c``."""
     ratio = total / c
     return math.isclose(ratio, round(ratio), abs_tol=tol)
 
 
-def _choose_count(weights, rng):
+def _choose_count(weights: Sequence[float], rng: np.random.Generator) -> int:
     """Randomly choose an index (interpreted as a count) according to ``weights``."""
     w = np.asarray(weights, dtype=float)
     w = w / w.sum()
     return int(rng.choice(len(w), p=w))
 
 
-def _random_partition(x, rng, total=10):
+def _random_partition(x: int, rng: np.random.Generator, total: int = 10) -> np.ndarray:
     """Randomly partition ``total`` into ``x`` positive parts, returned as fractions summing to 1."""
     if x <= 1:
         return np.array([1.0])
@@ -569,7 +602,7 @@ def _random_partition(x, rng, total=10):
     return parts / total
 
 
-def _balance_charge(amounts, atoms, charges_dict):
+def _balance_charge(amounts: list[int], atoms: list[str], charges_dict: dict[str, float]) -> tuple[list[int], float]:
     """Adjust one atom's amount so the total ionic charge is closer to zero.
 
     Args:
@@ -593,7 +626,7 @@ def _balance_charge(amounts, atoms, charges_dict):
     return amounts, new_charge
 
 
-def _unit_hypercube(scheme, dim, m, rng, seed):
+def _unit_hypercube(scheme: str, dim: int, m: int, rng: np.random.Generator, seed: int) -> np.ndarray:
     """Draw ``m`` points in the ``[0, 1]^dim`` hypercube using the chosen engine.
 
     Args:
@@ -622,7 +655,7 @@ def _unit_hypercube(scheme, dim, m, rng, seed):
         return engine.random(m)
 
 
-def _simplex_from_unit(u):
+def _simplex_from_unit(u: np.ndarray) -> np.ndarray:
     """Map rows of a ``[0, 1]^(d-1)`` sample onto the ``(d-1)``-simplex.
 
     Uses the order-statistics transform (sort, pad with 0 and 1, take successive
@@ -636,10 +669,12 @@ def _simplex_from_unit(u):
     return np.diff(aug, axis=1)
 
 
-def _enumerate_subsystems(units, order_weights, require_former, former_set):
+def _enumerate_subsystems(
+    units: Sequence[str], order_weights: dict[int, float], require_former: bool, former_set: set[str]
+) -> dict[int, list[tuple[int, ...]]]:
     """Enumerate index-combinations of each order, optionally requiring a network former."""
     former_positions = {i for i, u in enumerate(units) if u in former_set}
-    subs = {}
+    subs: dict[int, list[tuple[int, ...]]] = {}
     for order in order_weights:
         if order > len(units):
             subs[order] = []
@@ -647,6 +682,6 @@ def _enumerate_subsystems(units, order_weights, require_former, former_set):
         valid = []
         for combo in itertools.combinations(range(len(units)), order):
             if not require_former or former_positions.intersection(combo):
-                valid.append(list(combo))
+                valid.append(combo)
         subs[order] = valid
     return subs

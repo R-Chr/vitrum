@@ -63,6 +63,17 @@ pre-commit install
 Public functions and classes carry Google-style docstrings with an `Args:` and `Returns:`
 section, and type annotations on the signature. New public API should match.
 
+## Type annotations
+
+`vitrum` ships a `py.typed` marker, so its annotations are a promise to downstream users'
+type checkers. CI enforces that promise with `mypy` under `disallow_untyped_defs` and
+`disallow_incomplete_defs`, configured in `pyproject.toml`:
+
+```bash
+pip install mypy
+mypy
+```
+
 ## Pull requests
 
 - Branch off `main` and keep the change focused on one thing.

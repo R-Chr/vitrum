@@ -1,9 +1,15 @@
 import numpy as np
+from ase import Atoms
 
 from vitrum.geometry import require_orthorhombic
 
 
-def get_high_low_displacement_index(initial_state, current_state, target_atom, percentage=0.25):
+def get_high_low_displacement_index(
+    initial_state: Atoms,
+    current_state: Atoms,
+    target_atom: str | int,
+    percentage: float = 0.25,
+) -> list[np.ndarray]:
     """
     Calculates the indices of the atoms with the high and low displacements between an initial and current state.
 
@@ -29,7 +35,7 @@ def get_high_low_displacement_index(initial_state, current_state, target_atom, p
     return [low_ind, high_ind]
 
 
-def unwrap_trajectory(atoms_list):
+def unwrap_trajectory(atoms_list: list[Atoms]) -> list[Atoms]:
     """
     Unwraps a list of Atoms objects to remove periodic boundary crossings.
 

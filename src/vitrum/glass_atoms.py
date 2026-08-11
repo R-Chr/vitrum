@@ -11,6 +11,7 @@ old-to-new mapping.
 
 import warnings
 from numbers import Integral
+from typing import cast
 
 import numpy as np
 from ase import Atoms
@@ -52,7 +53,7 @@ class GlassAtoms(Atoms):
         _deprecated("GlassAtoms.get_dist", "vitrum.geometry.distance_matrix(atoms)")
         return distance_matrix(self, "GlassAtoms.get_dist")
 
-    def set_new_chemical_symbols(self, symbol_map: dict[int, str]):
+    def set_new_chemical_symbols(self, symbol_map: dict[int, str]) -> None:
         """
         Deprecated. Use `vitrum.io_helpers.correct_atom_types(atoms, symbol_map)`.
 
@@ -65,7 +66,13 @@ class GlassAtoms(Atoms):
         )
         correct_atom_types(self, symbol_map)
 
-    def get_pdf(self, target_atoms, rrange=10, nbin=100, indicies=None):
+    def get_pdf(
+        self,
+        target_atoms: list[str | int],
+        rrange: float = 10,
+        nbin: int = 100,
+        indicies: tuple[np.ndarray, np.ndarray] | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Deprecated. Use `Scattering(atoms).get_partial_pdf(pair)`, or
         `vitrum.geometry.partial_pdf` for one pair from a precomputed distance matrix.
@@ -128,7 +135,10 @@ class GlassAtoms(Atoms):
                 if neigh_types does not have exactly one or two entries.
         """
         _deprecated("GlassAtoms.get_all_angles", "Coordination([atoms]).get_angles(...)")
-        return Coordination([self]).get_angles(center_type, neigh_types, cutoff, per_atom=True)[0]
+        per_frame = cast(
+            list[list[np.ndarray]], Coordination([self]).get_angles(center_type, neigh_types, cutoff, per_atom=True)
+        )
+        return per_frame[0]
 
     def get_coordination_number(self, center_type: str, neigh_type: str, cutoff: float | str = "Auto") -> list[int]:
         """
@@ -150,7 +160,11 @@ class GlassAtoms(Atoms):
             "GlassAtoms.get_coordination_number",
             "Coordination([atoms]).get_coordination_numbers(..., per_atom=True)",
         )
-        return Coordination([self]).get_coordination_numbers(center_type, neigh_type, cutoff, per_atom=True)[0].tolist()
+        per_frame = cast(
+            list[np.ndarray],
+            Coordination([self]).get_coordination_numbers(center_type, neigh_type, cutoff, per_atom=True),
+        )
+        return per_frame[0].tolist()
 
     def get_bridging_analysis(
         self,
@@ -182,11 +196,11 @@ class GlassAtoms(Atoms):
             "GlassAtoms.get_bridging_analysis",
             "Coordination([atoms]).get_bridging_analysis(...)",
         )
-        return (
-            Coordination([self])
-            .get_bridging_analysis(center_type, bridge_type, former_types, cutoff, per_atom=True)[0]
-            .tolist()
+        per_frame = cast(
+            list[np.ndarray],
+            Coordination([self]).get_bridging_analysis(center_type, bridge_type, former_types, cutoff, per_atom=True),
         )
+        return per_frame[0].tolist()
 
     def get_density(self) -> float:
         """

@@ -1,9 +1,13 @@
+from collections.abc import Sequence
+
 import numpy as np
+from ase import Atoms
 from numba import njit, prange
+from numpy.typing import ArrayLike
 from scipy.signal import argrelextrema
 
 
-def require_orthorhombic(cell, caller: str = "") -> np.ndarray:
+def require_orthorhombic(cell: ArrayLike, caller: str = "") -> np.ndarray:
     """
     Return the cell diagonal, raising if the cell is not orthorhombic.
 
@@ -31,7 +35,7 @@ def require_orthorhombic(cell, caller: str = "") -> np.ndarray:
     return np.diagonal(c).copy()
 
 
-def find_min_after_peak(padf, context: str = ""):
+def find_min_after_peak(padf: ArrayLike, context: str = "") -> int:
     """
     Find the index of the first local minimum after the first peak in a function.
     Useful for determining cutoffs from PDFs.
@@ -119,7 +123,7 @@ def peak_metrics(x: np.ndarray, y: np.ndarray, window: tuple[float, float] | Non
     return float(x[top]), float(fwhm), height
 
 
-def _crossing(x, y, start: int, level: float, step: int) -> float | None:
+def _crossing(x: np.ndarray, y: np.ndarray, start: int, level: float, step: int) -> float | None:
     """Where `y` first falls to `level` walking from `start`, interpolated; None if never."""
     for i in range(start, -1 if step < 0 else len(y) - 1, step):
         nxt = i + step
@@ -132,7 +136,7 @@ def _crossing(x, y, start: int, level: float, step: int) -> float | None:
     return None
 
 
-def radial_bins(rrange=10, nbin=100):
+def radial_bins(rrange: float = 10, nbin: int = 100) -> tuple[np.ndarray, np.ndarray]:
     """
     Bin centres and shell volumes for a radial histogram.
 
@@ -150,7 +154,14 @@ def radial_bins(rrange=10, nbin=100):
     return xval, volbin
 
 
-def pdf(dist_list, volume, rrange=10, nbin=100, n_pairs=None, exclude_self=True):
+def pdf(
+    dist_list: ArrayLike,
+    volume: float,
+    rrange: float = 10,
+    nbin: int = 100,
+    n_pairs: int | None = None,
+    exclude_self: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate the pair distribution function (PDF) of a list of distances.
 
@@ -194,7 +205,15 @@ def pdf(dist_list, volume, rrange=10, nbin=100, n_pairs=None, exclude_self=True)
     return xval, (h / volbin) / (n_pairs / volume)
 
 
-def partial_pdf(distances, symbols, volume, pair, rrange=10, nbin=100, indices=None):
+def partial_pdf(
+    distances: np.ndarray,
+    symbols: ArrayLike,
+    volume: float,
+    pair: Sequence[str | int],
+    rrange: float = 10,
+    nbin: int = 100,
+    indices: tuple[np.ndarray, np.ndarray] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Partial pair distribution function g_ab(r) from a precomputed distance matrix.
 
@@ -246,7 +265,7 @@ def partial_pdf(distances, symbols, volume, pair, rrange=10, nbin=100, indices=N
 
 
 @njit(parallel=True)
-def get_dist_numba(pos, cell):
+def get_dist_numba(pos: np.ndarray, cell: np.ndarray) -> np.ndarray:
     """
     Calculate the distance matrix between atoms using Numba for performance.
 
@@ -267,7 +286,7 @@ def get_dist_numba(pos, cell):
     # Extract cell dimensions for faster access
     lx, ly, lz = cell[0], cell[1], cell[2]
 
-    for i in prange(n):
+    for i in prange(n):  # type: ignore[attr-defined]
         for j in range(i + 1, n):  # Only calculate the upper triangle
             dx = pos[i, 0] - pos[j, 0]
             dy = pos[i, 1] - pos[j, 1]
@@ -290,7 +309,7 @@ def get_dist_numba(pos, cell):
     return dist_matrix
 
 
-def distance_matrix(atoms, caller: str = "") -> np.ndarray:
+def distance_matrix(atoms: Atoms, caller: str = "") -> np.ndarray:
     """
     Minimum-image distance matrix between all pairs of atoms in a structure.
     Positions need not be wrapped into the cell.
@@ -309,7 +328,7 @@ def distance_matrix(atoms, caller: str = "") -> np.ndarray:
     return get_dist_numba(atoms.get_positions(), dim)
 
 
-def get_dist(list, cell):
+def get_dist(list: np.ndarray, cell: Sequence[float] | np.ndarray) -> np.ndarray:
     """
     Calculate the pairwise distance matrix for atoms in a periodic simulation box.
 

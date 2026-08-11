@@ -52,6 +52,10 @@ recomputed.**
 - **A `py.typed` marker (PEP 561)**, so the type annotations throughout the package are
   visible to `mypy`, `pyright` and editors in downstream projects. They were silently ignored
   before, because an installed distribution without the marker is treated as untyped.
+- **The public API is now fully annotated**, and CI enforces it with `mypy` under
+  `disallow_untyped_defs` and `disallow_incomplete_defs` — the marker above would otherwise
+  promise type information the package did not have. Every function outside the unsupported
+  `vitrum.batch_active` carries argument and return annotations.
 - Community documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and issue
   and pull-request templates.
 - Docs for `vitrum.visualization`, the one module whose API reference was not reachable from

@@ -154,7 +154,7 @@ class Scattering:
                 [self.scattering_lengths[self.scattering_lengths["Isotope"] == i]["b"] for i in self.species]
             ).flatten()
         else:
-            self.b = neutron_scattering_coef
+            self.b = np.asarray(neutron_scattering_coef, dtype=float)
 
         self.cb = [i * j for i, j in zip(self.c, self.b)]
         self.timesby = [pair[0] * pair[1] for pair in itertools.product(self.cb, repeat=2)]
@@ -244,7 +244,7 @@ class Scattering:
                 pdf_sum[pair_ind, :] += current_pdf
         return pdf_sum / n_frames
 
-    def calculate_partial_pdfs_neighborhood(self):
+    def calculate_partial_pdfs_neighborhood(self) -> np.ndarray:
         """
         Calculate partial PDFs from a neighbour list, avoiding the full distance matrix.
 
@@ -257,7 +257,7 @@ class Scattering:
         Returns:
             np.ndarray: Array of partial PDFs.
         """
-        all_frame_data = {pair: [] for pair in self.pairs}
+        all_frame_data: dict[tuple[str, str], list[np.ndarray]] = {pair: [] for pair in self.pairs}
         n_species = len(self.species)
         for atom in tqdm(self.atom_list, disable=self.disable_progress):
             symbols = np.array(atom.get_chemical_symbols())
@@ -345,7 +345,7 @@ class Scattering:
         g_x = np.zeros(self.nbin)
         for pair in self.pairs:
             i, j = self.species_code[pair[0]], self.species_code[pair[1]]
-            key = tuple(sorted((i, j)))
+            key = (min(i, j), max(i, j))
             if key not in kernels:
                 kernels[key] = np.trapezoid(f[i] * f[j] / f_norm * mod * cos_qs, q) / math.pi  # eqs 57, 61
             j_ij = kernels[key]

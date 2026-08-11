@@ -1,6 +1,8 @@
 """Cell-volume estimation, and the per-atom radii the estimators are built on."""
 
 import warnings
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 from ase.data import atomic_masses, atomic_numbers, covalent_radii
@@ -15,7 +17,7 @@ COVALENT_PACKING_FRACTION = 1 / 3
 _EXTRA_HINT = "requires the optional volume_estimation extra: pip install vitrum[volume_estimation]"
 
 
-def get_packing_radii(elements, composition, source="covalent"):
+def get_packing_radii(elements: Sequence[str], composition: Composition, source: str = "covalent") -> np.ndarray:
     """Per-atom radii in Å. source: 'covalent' | 'atomic' | 'ionic'."""
     if source == "covalent":
         return covalent_radii[symbols2numbers(elements)].copy()
@@ -45,7 +47,9 @@ def get_packing_radii(elements, composition, source="covalent"):
     raise ValueError(f"unknown radii source: {source}")
 
 
-def guess_oxi_states(composition, max_exact_atoms=100, totals=(40, 60, 100)):
+def guess_oxi_states(
+    composition: Composition, max_exact_atoms: int = 100, totals: tuple[int, ...] = (40, 60, 100)
+) -> dict[str, float] | None:
     """Guess oxidation states, rounding the composition first only if it's large.
     Returns {element: state} or None."""
     comp = composition.reduced_composition
@@ -71,7 +75,7 @@ def guess_oxi_states(composition, max_exact_atoms=100, totals=(40, 60, 100)):
     return None
 
 
-def _import_atomate2_volume_helpers():
+def _import_atomate2_volume_helpers() -> tuple[Any, Any]:
     """Import the atomate2 database helpers lazily.
 
     atomate2 is an optional extra, and `vitrum/__init__.py` reaches this module through
@@ -95,7 +99,7 @@ def get_volume(
     db_kwargs: dict | None = None,
     density: float | None = None,
     MP_API_KEY: str | None = None,
-):
+) -> float:
     """
     Get the volume of the cell based on the composition and various estimation methods.
 
@@ -178,7 +182,7 @@ def get_volume(
         except ImportError as e:
             raise ImportError(f"vol_per_atom_source='convex_hull' {_EXTRA_HINT}") from e
         try:
-            vol_per_atom = get_average_volume_convex_hull(composition, MP_API_KEY=MP_API_KEY)
+            vol_per_atom = get_average_volume_convex_hull(Composition(composition), MP_API_KEY=MP_API_KEY)
         except MPRestError as e:
             raise ValueError(f"Could not retrieve volume from convex hull. Check your MP_API_KEY. Error: {e}")
 
@@ -191,7 +195,7 @@ def get_volume(
     return cell_vol
 
 
-def get_average_volume_convex_hull(composition, MP_API_KEY=None):
+def get_average_volume_convex_hull(composition: Composition, MP_API_KEY: str | None = None) -> float:
     """
     Get the average volume per atom from the convex hull on Materials Project.
 
@@ -214,5 +218,9 @@ def get_average_volume_convex_hull(composition, MP_API_KEY=None):
         )
     pd = PhaseDiagram(entries)
     decomp = pd.get_decomposition(composition)
-    volume = sum([d.structure.volume / d.composition.num_atoms * decomp[d] for d in decomp])
+    # get_entries_in_chemsys returns ComputedStructureEntry, which carries `.structure`;
+    # PhaseDiagram's decomposition is typed with the plainer PDEntry base.
+    volume = sum(
+        [d.structure.volume / d.composition.num_atoms * decomp[d] for d in decomp]  # type: ignore[attr-defined]
+    )
     return volume

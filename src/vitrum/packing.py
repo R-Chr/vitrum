@@ -1,4 +1,5 @@
 import warnings
+from typing import Any
 
 import numpy as np
 from ase import Atoms
@@ -27,8 +28,8 @@ def get_random_packed(
     seed: int | None = None,
     side_ratios: list | None = None,
     algorithm: str = "sobol",
-    **kwargs,
-):
+    **kwargs: Any,
+) -> Atoms | Structure:
     """
     Generate a random packed structure based on the given composition.
 
@@ -63,14 +64,14 @@ def get_random_packed(
 
     side_ratios = [1, 1, 1] if side_ratios is None else side_ratios
     composition = Composition(composition)
-    elements, factor = composition.get_integer_formula_and_factor()
-    integer_composition = Composition(elements)
+    formula, factor = composition.get_integer_formula_and_factor()
+    integer_composition = Composition(formula)
     full_cell_composition = integer_composition * np.ceil(target_atoms / integer_composition.num_atoms)
 
-    structure = {}
+    structure: dict[str, int] = {}
     for el in full_cell_composition:
         structure[str(el)] = int(full_cell_composition.element_composition.get(el))
-    elements = sum([[i] * structure[i] for i in structure], [])
+    symbols = sum([[i] * structure[i] for i in structure], [])
     rng = np.random.default_rng(seed)
 
     cell_vol = get_volume(composition, structure, vol_per_atom_source, db_kwargs, density, **kwargs)
@@ -80,11 +81,11 @@ def get_random_packed(
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])
     cell = np.diag(cell)
 
-    radii = get_packing_radii(elements, composition, source=radii_source) * radii_scaling
+    radii = get_packing_radii(symbols, composition, source=radii_source) * radii_scaling
 
     if min_distance:
         radii = np.maximum(radii, min_distance / 2)
-    nat = len(elements)
+    nat = len(symbols)
 
     if algorithm == "sobol":
         frac = qmc.Sobol(d=3, seed=seed).random(nat)
@@ -94,7 +95,7 @@ def get_random_packed(
     else:
         raise ValueError(f"Unknown algorithm {algorithm!r}; choose 'sobol' or 'random'.")
 
-    ats = Atoms(elements, cell=cell, pbc=True, positions=pos)
+    ats = Atoms(symbols, cell=cell, pbc=True, positions=pos)
     skin_init = 0.2  # Å of extra buffer at the start (~10% of a typical radius)
     decay_iters = 50  # skin reaches zero by this iteration
 
@@ -127,20 +128,18 @@ def get_random_packed(
         warnings.warn(f"Cell packing not converged after 500 iterations, final overlap sum {dsum:.3e}")
 
     ats.wrap()
-    if datatype == "pymatgen":
-        structure = Structure(
-            lattice=ats.get_cell(),
-            species=ats.get_chemical_symbols(),
-            coords=ats.get_scaled_positions(),
-            to_unit_cell=True,
-            coords_are_cartesian=False,
-        )
-    else:
-        structure = ats
-    return structure
+    if datatype != "pymatgen":
+        return ats
+    return Structure(
+        lattice=ats.get_cell(),
+        species=ats.get_chemical_symbols(),
+        coords=ats.get_scaled_positions(),
+        to_unit_cell=True,
+        coords_are_cartesian=False,
+    )
 
 
-def apply_strain_to_structure(structure, deformations: list) -> list:
+def apply_strain_to_structure(structure: Structure, deformations: list) -> list:
     """
     Apply strain(s) to input structure and return transformation(s) as list.
 

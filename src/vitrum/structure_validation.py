@@ -1,20 +1,22 @@
+from collections.abc import Sequence
 from itertools import product
 
 import numpy as np
+from ase import Atoms
 
 from vitrum.geometry import require_orthorhombic
 
 
 def homogeneity_checker(
-    atoms,
-    grid_density,
-    slide_steps=2,
-    target_species="all",
-    upper_bound=1.5,
-    lower_bound=0.5,
-    box_threshold=0.1,
-    separated_species_threshold=0.5,
-):
+    atoms: Atoms,
+    grid_density: Sequence[int],
+    slide_steps: int = 2,
+    target_species: str | list[str] = "all",
+    upper_bound: float = 1.5,
+    lower_bound: float = 0.5,
+    box_threshold: float = 0.1,
+    separated_species_threshold: float = 0.5,
+) -> bool:
     """
     Check the homogeneity of the atomic structure by analyzing atom density in grid boxes.
 
@@ -40,7 +42,7 @@ def homogeneity_checker(
     atoms.wrap()
 
     if isinstance(target_species, str) and target_species == "all":
-        species = np.unique(atoms.get_chemical_symbols())
+        species = list(np.unique(atoms.get_chemical_symbols()))
     elif isinstance(target_species, str):
         species = [target_species]
     else:
@@ -108,7 +110,7 @@ def homogeneity_checker(
     return phase_seperated_species <= separated_species_threshold * checked_species
 
 
-def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
+def dimer_checker(atoms: Atoms, bond_length: float = 2.0, num_allowed: int = 2) -> bool:
     """
     Check for the presence of dimers (e.g., O2, N2, F2, Cl2, Br2, I2) in the structure.
 

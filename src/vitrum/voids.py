@@ -1,5 +1,6 @@
 import warnings
 from itertools import combinations, product
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from ase import Atoms
@@ -12,6 +13,12 @@ from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
 from vitrum.geometry import require_orthorhombic
+
+if TYPE_CHECKING:
+    # matplotlib and plotly are imported lazily inside the plotting methods, so these
+    # names exist for annotations only and cost nothing at import time.
+    from matplotlib.axes import Axes
+    from plotly.graph_objects import Figure
 
 
 def compute_occupancy_grid(
@@ -114,7 +121,7 @@ def find_cavities(
     free = ~occupied
     labels, n_labels = ndi_label(free)
 
-    edges = set()
+    edges: set[tuple[int, int]] = set()
     for axis in range(3):
         first = np.take(labels, 0, axis=axis)
         last = np.take(labels, -1, axis=axis)
@@ -150,7 +157,7 @@ def _cell_edges(cell_lengths: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]
     return [(a, b) for a, b in combinations(corners, 2) if np.count_nonzero(a != b) == 1]
 
 
-def _add_cell_edges_trace(fig, cell_lengths: np.ndarray) -> None:
+def _add_cell_edges_trace(fig: "Figure", cell_lengths: np.ndarray) -> None:
     """Add the 12 edges of the (orthorhombic) simulation cell to a plotly figure."""
     import plotly.graph_objects as go
 
@@ -168,7 +175,7 @@ def _add_cell_edges_trace(fig, cell_lengths: np.ndarray) -> None:
 
 
 def _add_atoms_trace(
-    fig,
+    fig: "Figure",
     atoms: Atoms,
     colors: dict[str, str] | None = None,
     marker_size: int = 4,
@@ -200,7 +207,7 @@ def _add_atoms_trace(
 
 
 def _add_void_isosurface_trace(
-    fig,
+    fig: "Figure",
     occupied: np.ndarray,
     spacing: np.ndarray,
     isovalue: float = 0.5,
@@ -274,7 +281,7 @@ class Cavity:
         self.voxel_indices = voxel_indices
         self.spacing = spacing
         self.grid_shape = grid_shape
-        self._center_cache = None
+        self._center_cache: np.ndarray | None = None
 
     def n_grid_points(self) -> int:
         """
@@ -461,7 +468,9 @@ class VoidAnalysis:
         counts, bin_edges = np.histogram(sizes, bins=n_bins)
         return bin_edges, counts
 
-    def plot_cavity_size_distribution(self, by: str = "volume", n_bins: int = 20, ax=None, **plot_kwargs):
+    def plot_cavity_size_distribution(
+        self, by: str = "volume", n_bins: int = 20, ax: "Axes | None" = None, **plot_kwargs: Any
+    ) -> "Axes":
         """
         Plot the distribution of cavity sizes using matplotlib.
 
@@ -478,6 +487,13 @@ class VoidAnalysis:
         """
         import matplotlib.pyplot as plt
 
+        # Built before the empty-data guard so that an Axes is returned either way.
+        if ax is None:
+            _, ax = plt.subplots(figsize=(9, 6))
+            xlabel = "Cavity volume (Å$^3$)" if by == "volume" else "Cavity effective radius (Å)"
+            ax.set_xlabel(xlabel, fontsize=12)
+            ax.set_ylabel("N$_{cavities}$", fontsize=12)
+
         if not self.cavities:
             print("No cavities found. Ensure you have run .calculate() first.")
             return ax
@@ -486,19 +502,13 @@ class VoidAnalysis:
         centers = (bin_edges[1:] + bin_edges[:-1]) / 2
         widths = np.diff(bin_edges)
 
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(9, 6))
-            xlabel = "Cavity volume (Å$^3$)" if by == "volume" else "Cavity effective radius (Å)"
-            ax.set_xlabel(xlabel, fontsize=12)
-            ax.set_ylabel("N$_{cavities}$", fontsize=12)
-
         ax.bar(centers, counts, width=widths, **plot_kwargs)
 
         return ax
 
     def plot_3d(
         self,
-        fig=None,
+        fig: "Figure | None" = None,
         isovalue: float = 0.5,
         smoothing_sigma: float = 1.0,
         show_atoms: bool = True,
@@ -507,7 +517,7 @@ class VoidAnalysis:
         void_color: str = "cyan",
         void_opacity: float = 0.35,
         title: str = "Void analysis",
-    ):
+    ) -> "Figure":
         """
         Build an interactive 3D plot of the void space together with the atoms.
 
@@ -550,7 +560,7 @@ class VoidAnalysis:
             cell boundaries, so a cavity that wraps the cell will appear visually
             "cut" at the box faces even though it is a single connected void.
         """
-        if self._occupied is None:
+        if self._occupied is None or self._spacing is None:
             raise ValueError("Occupancy grid has not been calculated yet. Run .calculate() first.")
 
         import plotly.graph_objects as go
@@ -592,7 +602,7 @@ class VoidAnalysis:
 
         return fig
 
-    def write_cavities(self, filename: str, format: str = "extxyz", dummy_symbol: str = "X"):
+    def write_cavities(self, filename: str, format: str = "extxyz", dummy_symbol: str = "X") -> None:
         """
         Write the structure together with a dummy pseudo-atom at each cavity center.
 

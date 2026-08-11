@@ -1,10 +1,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from ase import Atoms
+from ase.calculators.calculator import Calculator
+from matplotlib.axes import Axes
+from matplotlib.collections import PathCollection
 from scipy.interpolate import interpn
 
 
-def get_dimer_radial_energy(calc, formula, cutoff=8, num_data_points=100):
+def get_dimer_radial_energy(
+    calc: Calculator, formula: str, cutoff: float = 8, num_data_points: int = 100
+) -> tuple[np.ndarray, list[float]]:
     """
     Calculate the predicted energy of a dimer as a function of separation distance.
 
@@ -26,7 +31,7 @@ def get_dimer_radial_energy(calc, formula, cutoff=8, num_data_points=100):
     return distances, pred_energy
 
 
-def get_pred_energy_forces(atoms, calc):
+def get_pred_energy_forces(atoms: list[Atoms], calc: Calculator) -> tuple[list[float], np.ndarray]:
     """
     Calculate predicted per-atom energies and forces for a list of structures.
 
@@ -43,11 +48,10 @@ def get_pred_energy_forces(atoms, calc):
         a.calc = calc
         pred_energy.append(a.get_potential_energy() / len(a))
         pred_forces.append(a.get_forces())
-    pred_forces = np.vstack(pred_forces).flatten()
-    return pred_energy, pred_forces
+    return pred_energy, np.vstack(pred_forces).flatten()
 
 
-def eval_plot(reference_data, predicted_data, ax=None):
+def eval_plot(reference_data: np.ndarray, predicted_data: np.ndarray, ax: Axes | None = None) -> PathCollection:
     """
     Plot a density-colored parity plot of predicted vs. reference data, annotated with RMSE.
 

@@ -1,6 +1,7 @@
 import itertools
 import warnings
 from collections import Counter
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from ase import Atoms
@@ -14,6 +15,10 @@ from scipy.sparse.csgraph import dijkstra
 
 from vitrum.bonds import _Frame
 from vitrum.coordination import Cutoff, _resolve_cutoffs
+
+if TYPE_CHECKING:
+    # matplotlib is imported lazily inside the plotting method.
+    from matplotlib.axes import Axes
 
 
 def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
@@ -34,7 +39,7 @@ def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarr
     for i in range(len(ring) - 1):
         total_offset += offsets[(ring[i], ring[i + 1])]
     total_offset += offsets[(ring[-1], ring[0])]
-    return np.all(total_offset == 0)
+    return bool(np.all(total_offset == 0))
 
 
 _MAX_DEGENERATE_PATHS = 4096
@@ -289,7 +294,7 @@ def _find_guttman_rings(
     adj = _adjacency_lists(d)
     hop_limit = limit - 1 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
-    stats = Counter()
+    stats: Counter[str] = Counter()
     for i in range(len_ats):
         for j in adj[i]:
             j = int(j)
@@ -318,7 +323,7 @@ def _find_king_rings(
     adj = _adjacency_lists(d)
     hop_limit = limit - 2 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
-    stats = Counter()
+    stats: Counter[str] = Counter()
     for c in range(len_ats):
         shell = {int(n) for n in adj[c]} - {c}
         neighbors = sorted(shell)
@@ -373,7 +378,7 @@ def _find_primitive_rings(
     max_size = int(limit) if np.isfinite(limit) else d.shape[0]
     kmax = max_size // 2
 
-    stats = Counter()
+    stats: Counter[str] = Counter()
     candidates: dict[tuple[int, ...], list[int]] = {}
     for root in range(len_ats):
         dist = _bfs_levels(adj, root, kmax)
@@ -500,8 +505,7 @@ def find_rings(
 
         if bonds is not None:
             elements = set().union(*bonds)
-            radii = [x if el in elements else 0.0 for el, x in zip(els, radii)]
-            radii = np.array(radii, dtype=float)
+            radii = np.array([x if el in elements else 0.0 for el, x in zip(els, radii)], dtype=float)
 
         nl = NeighborList(radii * radii_factor, self_interaction=False, bothways=False, skin=0.0)
         nl.update(s)
@@ -686,10 +690,11 @@ class Ring:
         """
         self.atoms = atoms
         self.indexes = indexes
-        self._unwrapped_positions_cache = None
-        self.ellipsoid_lengths = None
-        self._principal_axes = None
-        self._ellipse_axes_cache = None
+        self._unwrapped_positions_cache: np.ndarray | None = None
+        self.ellipsoid_lengths: np.ndarray | None = None
+        self._principal_axes: np.ndarray | None = None
+        # Wrapped in a 1-tuple so that a None fit result is still cached rather than refitted.
+        self._ellipse_axes_cache: tuple[tuple[float, float] | None] | None = None
 
     def _unwrapped_positions(self) -> np.ndarray:
         """
@@ -745,7 +750,7 @@ class Ring:
         edges = np.diff(xyz, axis=0, append=xyz[:1])
         return float(np.linalg.norm(edges, axis=1).sum())
 
-    def _compute_ellipsoid(self) -> None:
+    def _compute_ellipsoid(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Fit the ring atoms with a best-fit ellipsoid via the SVD of their centered,
         PBC-unwrapped positions. The resulting singular values (descending) are the
@@ -755,12 +760,19 @@ class Ring:
         The right singular vectors are kept as well: the first two span the ring's
         best-fit plane and the third is its normal, which `planeness` and
         `ellipse_eccentricity` need.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: The ellipsoid axis lengths and the principal
+                axes, computed on first call and cached thereafter.
         """
+        if self.ellipsoid_lengths is not None and self._principal_axes is not None:
+            return self.ellipsoid_lengths, self._principal_axes
         xyz = self._unwrapped_positions()
         xyz = xyz - xyz.mean(axis=0)
         _, singular_values, right_vectors = np.linalg.svd(xyz)
         self.ellipsoid_lengths = singular_values
         self._principal_axes = right_vectors
+        return singular_values, right_vectors
 
     def roundness(self) -> float:
         """
@@ -771,9 +783,8 @@ class Ring:
         Returns:
             float: The roundness of the ring.
         """
-        if self.ellipsoid_lengths is None:
-            self._compute_ellipsoid()
-        return self.ellipsoid_lengths[1] / self.ellipsoid_lengths[0]
+        lengths, _ = self._compute_ellipsoid()
+        return float(lengths[1] / lengths[0])
 
     def roughness(self) -> float:
         """
@@ -784,9 +795,8 @@ class Ring:
         Returns:
             float: The roughness of the ring.
         """
-        if self.ellipsoid_lengths is None:
-            self._compute_ellipsoid()
-        return self.ellipsoid_lengths[2] / np.sqrt(self.ellipsoid_lengths[0] * self.ellipsoid_lengths[1])
+        lengths, _ = self._compute_ellipsoid()
+        return float(lengths[2] / np.sqrt(lengths[0] * lengths[1]))
 
     def radius_of_gyration(self) -> float:
         """
@@ -796,9 +806,8 @@ class Ring:
         Returns:
             float: The radius of gyration of the ring.
         """
-        if self.ellipsoid_lengths is None:
-            self._compute_ellipsoid()
-        return float(np.sqrt(np.sum(self.ellipsoid_lengths**2) / self.size()))
+        lengths, _ = self._compute_ellipsoid()
+        return float(np.sqrt(np.sum(lengths**2) / self.size()))
 
     def area(self) -> float:
         """
@@ -847,11 +856,10 @@ class Ring:
         Returns:
             float: The mean point-to-plane distance, in Å.
         """
-        if self._principal_axes is None:
-            self._compute_ellipsoid()
+        _, axes = self._compute_ellipsoid()
         spokes = self._unwrapped_positions()
         spokes = spokes - spokes.mean(axis=0)
-        return float(np.abs(spokes @ self._principal_axes[2]).mean())
+        return float(np.abs(spokes @ axes[2]).mean())
 
     def _ellipse_axes(self) -> tuple[float, float] | None:
         """
@@ -860,11 +868,10 @@ class Ring:
         not determine one.
         """
         if self._ellipse_axes_cache is None:
-            if self._principal_axes is None:
-                self._compute_ellipsoid()
+            _, axes = self._compute_ellipsoid()
             spokes = self._unwrapped_positions()
             spokes = spokes - spokes.mean(axis=0)
-            in_plane = spokes @ self._principal_axes[:2].T
+            in_plane = spokes @ axes[:2].T
             self._ellipse_axes_cache = (_fit_ellipse_axes(in_plane[:, 0], in_plane[:, 1]),)
         return self._ellipse_axes_cache[0]
 
@@ -910,7 +917,7 @@ class RingAnalysis:
         """
         self.bonding_dict = bonding_dict
         self.atoms = atoms[[atom.symbol in included_atoms for atom in atoms]]
-        self.rings = None
+        self.rings: list[Ring] | None = None
 
     def calculate(
         self,
@@ -957,7 +964,7 @@ class RingAnalysis:
         self.rings = [Ring(self.atoms[list(r)], list(r)) for r in rings]
         return self.rings
 
-    def write_rings(self, filename: str, format: str = "extxyz"):
+    def write_rings(self, filename: str, format: str = "extxyz") -> None:
         """
         Write the rings to a file.
 
@@ -981,26 +988,28 @@ class RingAnalysis:
         ring_sizes = [len(r.atoms) for r in self.rings]
         return dict(Counter(ring_sizes))
 
-    def plot_ring_size_distribution(self, ax=None, **plot_kwargs):
+    def plot_ring_size_distribution(self, ax: "Axes | None" = None, **plot_kwargs: Any) -> "Axes":
         """
         Plots the distribution of ring sizes using matplotlib.
         """
         import matplotlib.pyplot as plt
 
         dist = self.get_ring_size_distribution()
-        if not dist:
-            print("No rings found. Ensure you have run .calculate() first.")
-            return
-
         sizes = sorted(dist.keys())
-        counts = np.array([dist[size] for size in sizes])
-        frequency = counts / self.atoms.get_volume()  # Normalize by volume to get frequency
 
+        # Built before the empty-data guard so that an Axes is returned either way.
         if ax is None:
-            fig, ax = plt.subplots(figsize=(9, 6))
+            _, ax = plt.subplots(figsize=(9, 6))
             ax.set_xlabel("Ring Size (N$_{atoms}$)", fontsize=12)
             ax.set_ylabel("Ring Frequency [N$_{rings}$ / V] (Å$^{-3}$)", fontsize=12)
             ax.set_xticks(sizes)
+
+        if not dist:
+            print("No rings found. Ensure you have run .calculate() first.")
+            return ax
+
+        counts = np.array([dist[size] for size in sizes])
+        frequency = counts / self.atoms.get_volume()  # Normalize by volume to get frequency
 
         ax.plot(sizes, frequency, **plot_kwargs)
 

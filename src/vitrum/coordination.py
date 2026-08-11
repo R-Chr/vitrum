@@ -1,5 +1,5 @@
 import itertools
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from numbers import Real
 
 import numpy as np
@@ -149,7 +149,7 @@ def _angles(
 
 def _bridging_speciation(frame: _Frame, bridge_type: str, former_cutoffs: dict[str, float]) -> np.ndarray:
     """Number of network formers bonded to each `bridge_type` atom."""
-    return sum(frame.bonds(former, bridge_type, cut).degrees() for former, cut in former_cutoffs.items())
+    return np.sum([frame.bonds(former, bridge_type, cut).degrees() for former, cut in former_cutoffs.items()], axis=0)
 
 
 def _bridging_analysis(
@@ -245,7 +245,7 @@ class Coordination:
         """Resolve `cutoff` to one float per bond in `pairs`, using `cutoff_frame`."""
         return _resolve_cutoffs(_Frame(self.atoms_list[self.cutoff_frame]), pairs, cutoff)
 
-    def _frames(self, *required: str):
+    def _frames(self, *required: str) -> Iterator[_Frame]:
         """Yield one checked `_Frame` at a time, so peak memory stays at one frame's worth."""
         for atoms in self.atoms_list:
             frame = _Frame(atoms)
@@ -557,7 +557,7 @@ class Coordination:
         cutoffs = self._cutoffs([(center_type, neigh) for neigh in neigh_types], cutoff)
 
         per_frame = [
-            sum(frame.bonds(center_type, neigh, cut).counts() for neigh, cut in zip(neigh_types, cutoffs))
+            np.sum([frame.bonds(center_type, neigh, cut).counts() for neigh, cut in zip(neigh_types, cutoffs)], axis=0)
             for frame in self._frames(center_type, *neigh_types)
         ]
         if per_atom:

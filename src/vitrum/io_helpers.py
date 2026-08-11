@@ -3,11 +3,12 @@ from fractions import Fraction
 from functools import reduce
 from math import gcd
 
+from ase import Atoms
 from pymatgen.core import Composition
 from scipy.constants import Avogadro
 
 
-def get_LAMMPS_dump_timesteps(filename: str):
+def get_LAMMPS_dump_timesteps(filename: str) -> list[int]:
     """
     Retrieves the timesteps from a LAMMPS dump file.
 
@@ -29,7 +30,7 @@ def get_LAMMPS_dump_timesteps(filename: str):
     return timesteps
 
 
-def correct_atom_types(atoms_list, atom_to_type_map):
+def correct_atom_types(atoms_list: Atoms | list[Atoms], atom_to_type_map: dict[int, str]) -> None:
     """
     Correct the atom types in a list of Atoms objects.
 
@@ -49,7 +50,7 @@ def correct_atom_types(atoms_list, atom_to_type_map):
         atoms.set_chemical_symbols(corr_symbols)
 
 
-def get_density(atoms) -> float:
+def get_density(atoms: Atoms) -> float:
     """
     Calculate the mass density of a structure.
 
@@ -95,10 +96,10 @@ def number_density_to_mass_density(composition: str | dict | Composition, number
     return number_density * 1e24 * mass_per_atom / Avogadro
 
 
-def _parse_oxide(formula):
+def _parse_oxide(formula: str) -> dict[str, Fraction]:
     """'Al2O3' -> {'Al': Fraction(2), 'O': Fraction(3)} (no parentheses support)."""
     _TOKEN = re.compile(r"([A-Z][a-z]?)(\d*\.?\d*)")
-    counts = {}
+    counts: dict[str, Fraction] = {}
     pos = 0
     for m in _TOKEN.finditer(formula):
         if m.start() != pos or not m.group(1):
@@ -111,7 +112,7 @@ def _parse_oxide(formula):
     return counts
 
 
-def formula_unit(formula, integers=False, anions_last=True):
+def formula_unit(formula: str, integers: bool = False, anions_last: bool = True) -> str:
     """Convert a mol% oxide formula string into a single formula-unit string.
     Example:
     "60.2SiO2-16.0B2O3-12.6Na2O-3.8Al2O3-5.7CaO-1.7ZrO2"
@@ -130,21 +131,25 @@ def formula_unit(formula, integers=False, anions_last=True):
     if not parts:
         # No components at all: every total below is empty and the result is a bare "".
         raise ValueError(f"Cannot parse formula: {formula!r}")
-    totals, order = {}, []
+    totals: dict[str, Fraction] = {}
+    order: list[str] = []
+    mol_fractions = []
     for part in parts:
         m = re.match(r"^(\d*\.?\d*)\s*(.+)$", part)
+        assert m is not None, f"Cannot parse formula: {formula!r}"  # `.+` matches any non-empty part
         frac = Fraction(m.group(1)) if m.group(1) else Fraction(1)
+        mol_fractions.append(frac)
         for el, n in _parse_oxide(m.group(2)).items():
             if el not in totals:
                 totals[el] = Fraction(0)
                 order.append(el)
             totals[el] += frac * n
 
-    total_mol = sum(Fraction(re.match(r"^(\d*\.?\d*)", p).group(1) or 1) for p in parts)
+    total_mol = sum(mol_fractions, Fraction(0))
     coeffs = {el: v / total_mol for el, v in totals.items()}  # per one formula unit
 
     if anions_last:
-        anions = [el for el in ("O", "S", "Se", "F", "Cl", "Br", "I") if el in order]
+        anions: list[str] = [el for el in ("O", "S", "Se", "F", "Cl", "Br", "I") if el in order]
         order = [el for el in order if el not in anions] + anions
 
     if integers:
@@ -153,7 +158,7 @@ def formula_unit(formula, integers=False, anions_last=True):
         g = reduce(gcd, ints)
         return "".join(f"{el}{n // g if n // g != 1 else ''}" for el, n in zip(order, ints))
 
-    def fmt(x):
+    def fmt(x: float | Fraction) -> str:
         s = f"{float(x):.6g}"
         return "" if s == "1" else s
 

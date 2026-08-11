@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING, Any
+
 import diode
 import dionysus
 import numpy as np
@@ -5,6 +7,10 @@ import pandas as pd
 from ase import Atoms
 from ase.data import covalent_radii
 from ase.symbols import symbols2numbers
+
+if TYPE_CHECKING:
+    # matplotlib is imported lazily inside the plotting methods.
+    from matplotlib.axes import Axes
 
 
 class PersistenceDiagram:
@@ -67,9 +73,16 @@ class PersistenceDiagram:
         self.weights = weights
         self.weight_scaling = weight_scaling
         self.diagrams: dict[int, pd.DataFrame] | None = None
-        self._filtration = None
-        self._persistence = None
+        # dionysus objects; the package ships no type information, so Any is their real type.
+        self._filtration: Any = None
+        self._persistence: Any = None
         self._birth_indices: dict[int, list[int]] | None = None
+
+    def _birth_index(self, dimension: int, index: int) -> int:
+        """Filtration index of the birth simplex behind row `index` of the `dimension` diagram."""
+        if self._birth_indices is None:
+            raise ValueError("Persistence diagrams have not been calculated yet. Run .calculate() first.")
+        return self._birth_indices[dimension][index]
 
     def _get_radii(self) -> np.ndarray:
         """
@@ -211,7 +224,7 @@ class PersistenceDiagram:
         if not 0 <= index < len(dgm):
             raise ValueError(f"`index` {index} out of range for dimension {dimension} diagram of length {len(dgm)}.")
 
-        atoms = self._get_cycle_atoms(self._birth_indices[dimension][index])
+        atoms = self._get_cycle_atoms(self._birth_index(dimension, index))
         if atoms is None:
             raise ValueError(
                 f"Point {index} in dimension {dimension} has infinite persistence (Death = inf); "
@@ -249,7 +262,7 @@ class PersistenceDiagram:
         symbols = np.array(self.atoms.get_chemical_symbols())
         species = np.unique(symbols)
 
-        cycles = [self._get_cycle_atoms(birth_index) for birth_index in self._birth_indices[dimension]]
+        cycles = [self._get_cycle_atoms(self._birth_index(dimension, i)) for i in range(len(dgm))]
 
         dgm["Lifetime"] = dgm["Death"] - dgm["Birth"]
         dgm["Mean_age"] = (dgm["Birth"] + dgm["Death"]) / 2
@@ -447,7 +460,7 @@ class PersistenceDiagram:
         image = (gaussians * persistences[None, None, :]).sum(axis=2)
         return image, extent
 
-    def plot_diagram(self, dimension: int = 1, ax=None, **plot_kwargs):
+    def plot_diagram(self, dimension: int = 1, ax: "Axes | None" = None, **plot_kwargs: Any) -> "Axes":
         """
         Plot the persistence diagram (birth vs. death scatter) using matplotlib.
 
@@ -478,7 +491,7 @@ class PersistenceDiagram:
         ax.scatter(finite["Birth"], finite["Death"], **plot_kwargs)
         return ax
 
-    def plot_apf(self, dimension: int = 1, ax=None, **plot_kwargs):
+    def plot_apf(self, dimension: int = 1, ax: "Axes | None" = None, **plot_kwargs: Any) -> "Axes":
         """
         Plot the accumulated persistence function (APF) using matplotlib.
 
@@ -511,9 +524,9 @@ class PersistenceDiagram:
         reference_radius: float | None = None,
         reference_symbol: str = "O",
         sigma: float | None = None,
-        ax=None,
-        **plot_kwargs,
-    ):
+        ax: "Axes | None" = None,
+        **plot_kwargs: Any,
+    ) -> "Axes":
         """
         Plot the S_PH(Q) function using matplotlib.
 
@@ -560,9 +573,9 @@ class PersistenceDiagram:
         sigma: float | None = None,
         birth_range: tuple[float, float] | None = None,
         persistence_range: tuple[float, float] | None = None,
-        ax=None,
-        **imshow_kwargs,
-    ):
+        ax: "Axes | None" = None,
+        **imshow_kwargs: Any,
+    ) -> "Axes":
         """
         Plot the persistence image using matplotlib.
 
