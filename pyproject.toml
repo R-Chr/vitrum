@@ -49,6 +49,10 @@ volume_estimation = ["atomate2", "mp_api"]
 # see docs/vitrum/install.md for its manual install instructions.
 persistent_homology = ["dionysus"]
 visualization = ["plotly", "scikit-image", "ovito", "ipywidgets"]
+# A drop-in C++ neighbour search, several times faster than the ASE one the bond, angle,
+# coordination and PDF code otherwise spends most of its time in. Results are unchanged.
+# LGPL-2.1, unlike the rest of the tree, which is why it is opt-in.
+fast = ["matscipy>=1.0"]
 test = ["pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]

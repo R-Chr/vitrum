@@ -6,6 +6,7 @@ references: brute-force minimum images, and `ase.geometry.find_mic`.
 """
 
 import itertools
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -18,15 +19,13 @@ from conftest import (
     SI_O_CUTOFF,
 )
 
-from vitrum.bonds import Bonds, _Frame, _neighbor_list_bonds
+import vitrum.bonds as bonds_module
+from vitrum.bonds import Bonds, _Frame, _min_image_edges
 
 
 def _kd_bonds(atoms, center_type, neigh_type, cutoff):
-    """Bonds via the neighbor list, bypassing the frame's species lookup for convenience."""
-    frame = _Frame(atoms)
-    centers = frame.index(*([center_type] if isinstance(center_type, str) else center_type))
-    neighs = frame.index(*([neigh_type] if isinstance(neigh_type, str) else neigh_type))
-    return _neighbor_list_bonds(atoms, centers, neighs, cutoff)
+    """Bonds via the neighbor list, on a throwaway frame."""
+    return _Frame(atoms).bonds(center_type, neigh_type, cutoff)
 
 
 def _same(a: Bonds, b: Bonds) -> bool:
@@ -237,3 +236,42 @@ def test_lengths_match_find_mic(silicon_small, cutoff):
 def test_lengths_of_no_bonds_is_empty(silicon_small):
     bonds = _Frame(silicon_small).bonds("Si", "Si", 0.5)
     assert bonds.lengths(silicon_small).shape == (0,)
+
+
+@pytest.mark.skipif(bonds_module._matscipy_neighbour_list is None, reason="matscipy not installed")
+@pytest.mark.parametrize("cutoff", [2.5, 6.0])
+@pytest.mark.parametrize(
+    "structure",
+    ["silicon_small", "silicon_cubic_cell", "triclinic_atoms", "one_dimer", "cube_graph"],
+)
+def test_matscipy_and_ase_backends_agree(request, structure, cutoff):
+    """The optional fast backend must be a drop-in, not an approximation.
+
+    `_min_image_edges` is the one place a neighbour search happens, and everything else in
+    the module is a reduction of what it returns, so agreeing here is agreeing everywhere.
+
+    The offsets are checked by what they promise -- that they reconstruct a bond of length
+    `d` -- rather than for equality. Past half the smallest cell width a pair can have two
+    images at the same distance, and the two backends can disagree in the last bit of `d`
+    over which is nearer; both answers are then correct minimum images.
+    """
+    atoms = request.getfixturevalue(structure)
+    with patch.object(bonds_module, "_matscipy_neighbour_list", None):
+        ase_edges = _min_image_edges(atoms, cutoff)
+    matscipy_edges = _min_image_edges(atoms, cutoff)
+
+    for name, want, got in zip("ijd", ase_edges, matscipy_edges):
+        np.testing.assert_allclose(got, want, atol=1e-12, err_msg=f"backends disagree on {name!r}")
+
+    positions = atoms.get_positions()
+    for i, j, d, offsets in (ase_edges, matscipy_edges):
+        vectors = positions[j] - positions[i] + offsets @ np.array(atoms.get_cell())
+        np.testing.assert_allclose(np.linalg.norm(vectors, axis=1), d, atol=1e-10)
+
+
+@pytest.mark.skipif(bonds_module._matscipy_neighbour_list is None, reason="matscipy not installed")
+def test_a_cell_matscipy_cannot_invert_falls_back(silicon_small):
+    """matscipy inverts the cell, so a structure without three cell vectors must use ASE."""
+    cluster = Atoms("H3", positions=[[0, 0, 0], [1.0, 0, 0], [5.0, 0, 0]])
+    assert cluster.cell.rank < 3
+    assert _Frame(cluster).bonds("H", "H", 2.0).counts().tolist() == [1, 1, 0]

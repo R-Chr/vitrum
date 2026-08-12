@@ -5,6 +5,7 @@ cycle in the bond graph, never from this code's own output. Where a test names a
 R.I.N.G.S. routine, the value was checked against the Fortran sources of that routine.
 """
 
+import warnings
 from collections import Counter
 
 import numpy as np
@@ -204,6 +205,34 @@ def test_no_bonds_returns_no_rings():
 
     isolated = Atoms("Ar4", positions=[(0, 0, 0), (10, 0, 0), (0, 10, 0), (0, 0, 10)], cell=[30.0] * 3, pbc=True)
     assert find_rings(isolated, bonds=None, limit=8) == []
+
+
+def test_an_unbounded_search_of_a_large_cell_warns():
+    """`limit=np.inf`, the default, lets every path search traverse the whole graph.
+
+    Primitive replicates the cell 3x3x3, so an unremarkable-looking call on a few hundred
+    atoms becomes an unbounded search over thousands -- minutes of work with no indication
+    why. The cost is worth a warning, but not a changed default, which would silently drop
+    rings for anyone relying on the current behaviour.
+
+    The atoms here are far enough apart to have no bonds, so the search itself is trivial;
+    the point is the warning, which is raised on the size of the cell being searched.
+    """
+    from ase.build import bulk
+
+    from vitrum.rings import _UNBOUNDED_SEARCH_ATOMS
+
+    sparse = bulk("Ar", "fcc", a=20.0, cubic=True).repeat(15)  # none within bonding range
+    assert len(sparse) > _UNBOUNDED_SEARCH_ATOMS
+
+    with pytest.warns(UserWarning, match="no `limit`"):
+        assert find_rings(sparse, bonds=None) == []
+
+    # A limit, or a smaller cell, is not worth interrupting anyone over.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert find_rings(sparse, bonds=None, limit=6) == []
+        find_rings(bulk("Si", "diamond", a=5.431, cubic=True).repeat(2), bonds=None)
 
 
 def test_ambiguous_periodic_bonds_warn():

@@ -76,11 +76,14 @@ jobs:
           cache: pip
 
       - name: Install package and test dependencies
-        # Core dependencies only. The optional extras are covered by the `extras` job below,
-        # which is kept separate because they are slow to install and platform-fragile.
+        # Core dependencies, plus `fast`: it is a single prebuilt wheel on every platform in
+        # this matrix, and without it the matscipy neighbour search is never exercised. The
+        # backend test patches it away again, so both code paths run here. The remaining
+        # extras are covered by the `extras` job below, which is kept separate because they
+        # are slow to install and platform-fragile.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[test]"
+          python -m pip install -e ".[test,fast]"
 
       - name: Run tests
         run: pytest -v

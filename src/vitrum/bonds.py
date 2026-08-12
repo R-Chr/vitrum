@@ -15,6 +15,15 @@ from numpy.typing import ArrayLike
 
 from vitrum.geometry import pdf, radial_bins
 
+try:  # pragma: no cover - depends on whether the optional extra is installed
+    from matscipy.neighbours import neighbour_list as _matscipy_neighbour_list
+except ImportError:
+    _matscipy_neighbour_list = None  # type: ignore[assignment]
+
+# Global indices `i` and `j`, the bond distance `d`, and the integer cell-boundary crossings
+# `S`, one row each per minimum-image bond. What `_min_image_edges` returns.
+_Edges = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+
 
 class Bonds:
     """
@@ -64,12 +73,22 @@ class Bonds:
         """Bonds at each neighbour atom. A bridging atom is one with two or more."""
         return np.bincount(self.col, minlength=len(self.neighs))
 
+    def vectors(self, atoms: Atoms) -> np.ndarray:
+        """
+        Minimum-image displacement from each bond's centre to its neighbour.
+
+        Args:
+            atoms (Atoms): The frame these bonds were measured in.
+
+        Returns:
+            np.ndarray: A `(len(self), 3)` displacement per bond, aligned with `row` and `col`.
+        """
+        pos = atoms.get_positions()
+        return pos[self.neighs[self.col]] - pos[self.centers[self.row]] + self.offsets @ np.asarray(atoms.get_cell())
+
     def lengths(self, atoms: Atoms) -> np.ndarray:
         """
         Minimum-image length of every bond, in the order the bonds are held.
-
-        `Bonds` keeps no reference to the frame it was measured in, so the frame it came
-        from has to be handed back.
 
         Args:
             atoms (Atoms): The frame these bonds were measured in.
@@ -77,9 +96,7 @@ class Bonds:
         Returns:
             np.ndarray: One distance per bond, aligned with `row` and `col`.
         """
-        pos = atoms.get_positions()
-        vectors = pos[self.neighs[self.col]] - pos[self.centers[self.row]] + self.offsets @ np.asarray(atoms.get_cell())
-        return np.linalg.norm(vectors, axis=1)
+        return np.linalg.norm(self.vectors(atoms), axis=1)
 
     def lists(self) -> list[np.ndarray]:
         """Sorted global indices bonded to each centre atom, in the order of `centers`."""
@@ -105,6 +122,7 @@ class _Frame:
         self.atoms = atoms
         self.types = np.array(atoms.get_chemical_symbols())
         self.species = np.unique(self.types)
+        self._edge_cache: dict[float, _Edges] = {}
 
     def require(self, *symbols: str) -> None:
         """Raise a ValueError naming any of `symbols` absent from the frame."""
@@ -117,6 +135,22 @@ class _Frame:
         """Sorted global indices of every atom of the given species, each listed once."""
         return np.flatnonzero(np.isin(self.types, symbols))
 
+    def edges(self, cutoff: float) -> _Edges:
+        """This frame's minimum-image edges within `cutoff`, built at most once per cutoff."""
+        cached = self._edge_cache.get(cutoff)
+        if cached is not None:
+            return cached
+
+        wider = [c for c in self._edge_cache if c >= cutoff]
+        if wider:
+            i, j, d, offsets = self._edge_cache[min(wider)]
+            keep = d < cutoff
+            edges = (i[keep], j[keep], d[keep], offsets[keep])
+        else:
+            edges = _min_image_edges(self.atoms, cutoff)
+        self._edge_cache[cutoff] = edges
+        return edges
+
     def bonds(
         self,
         center_types: str | Sequence[str],
@@ -126,7 +160,14 @@ class _Frame:
         """Every bond within `cutoff` between two species selections."""
         centers = self.index(*_as_list(center_types))
         neighs = self.index(*_as_list(neigh_types))
-        return _neighbor_list_bonds(self.atoms, centers, neighs, cutoff)
+        if len(centers) == 0 or len(neighs) == 0:
+            return Bonds(centers, neighs, [], [])
+
+        i, j, _, offsets = self.edges(cutoff)
+        row = _positions_in(centers, i)
+        col = _positions_in(neighs, j)
+        keep = (row >= 0) & (col >= 0)
+        return Bonds(centers, neighs, row[keep], col[keep], offsets[keep])
 
     def partial_pdf(self, pair: tuple[str, str], rrange: float, nbin: int) -> tuple[np.ndarray, np.ndarray]:
         """g_ab(r) as `geometry.partial_pdf` defines it, from a neighbor list."""
@@ -139,14 +180,14 @@ class _Frame:
         # once per ordering. Its zero diagonal has no counterpart here.
         like_pair = pair[0] == pair[1]
         n_pairs = len(first) * (len(first) - 1) if like_pair else len(first) * len(second)
-        i, j, d, _ = _min_image_edges(self.atoms, rrange)
+        i, j, d, _ = self.edges(rrange)
         row = _positions_in(first, i)
         col = _positions_in(second, j)
         keep = (row >= 0) & (col >= 0)
         return pdf(d[keep], volume, rrange, nbin, n_pairs=n_pairs, exclude_self=False)
 
 
-def _min_image_edges(atoms: Atoms, cutoff: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _min_image_edges(atoms: Atoms, cutoff: float) -> _Edges:
     """Every directed pair within `cutoff`, deduped to one row per minimum-image bond.
 
     Returns:
@@ -156,34 +197,23 @@ def _min_image_edges(atoms: Atoms, cutoff: float) -> tuple[np.ndarray, np.ndarra
     """
     empty = np.empty(0, dtype=int)
     empty_offsets = np.empty((0, 3), dtype=int)
-    i, j, d, S = neighbor_list("ijdS", atoms, cutoff)
+
+    if _matscipy_neighbour_list is not None and atoms.cell.rank == 3:
+        i, j, d, S = _matscipy_neighbour_list("ijdS", atoms, cutoff)
+    else:
+        i, j, d, S = neighbor_list("ijdS", atoms, cutoff)
     keep = i != j  # an atom is never bonded to itself, including its own periodic image
     i, j, d, S = i[keep], j[keep], d[keep], S[keep]
     if i.size == 0:
         return empty, empty, np.empty(0), empty_offsets
 
-    # Sort by centre, then neighbour, then distance, so the first row of each (i, j) run is
-    # its closest image.
-    order = np.lexsort((d, j, i))
+
+    order = np.lexsort((S[:, 2], S[:, 1], S[:, 0], d, j, i))
     i, j, d, S = i[order], j[order], d[order], S[order]
     first = np.empty(len(i), dtype=bool)
     first[0] = True
     first[1:] = (i[1:] != i[:-1]) | (j[1:] != j[:-1])
     return i[first], j[first], d[first], S[first]
-
-
-def _neighbor_list_bonds(atoms: Atoms, centers: np.ndarray, neighs: np.ndarray, cutoff: float) -> Bonds:
-    """Bonds from `ase.neighborlist.neighbor_list`, costing the bond count rather than N^2."""
-    empty = np.empty(0, dtype=int)
-    empty_offsets = np.empty((0, 3), dtype=int)
-    if len(centers) == 0 or len(neighs) == 0:
-        return Bonds(centers, neighs, empty, empty, empty_offsets)
-
-    i, j, _, S = _min_image_edges(atoms, cutoff)
-    row = _positions_in(centers, i)
-    col = _positions_in(neighs, j)
-    keep = (row >= 0) & (col >= 0)
-    return Bonds(centers, neighs, row[keep], col[keep], S[keep])
 
 
 def _positions_in(selection: np.ndarray, values: np.ndarray) -> np.ndarray:

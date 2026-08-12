@@ -23,6 +23,20 @@ pip install --force-reinstall --no-deps "vitrum @ git+https://github.com/R-Chr/v
 ```
 
 
+### (optional) A faster neighbour search
+```
+pip install "vitrum[fast]"
+```
+Coordination numbers, neighbour lists, bond angles, `Q^n` speciation and partial PDFs are
+all reductions of one neighbour search, and that search is where nearly all of their time
+goes. This extra installs [matscipy](https://github.com/libAtoms/matscipy), whose C++
+implementation is several times faster; `vitrum` picks it up automatically and falls back
+to the ASE one when it is absent. Results are unchanged either way.
+
+Note that matscipy is LGPL-2.1 licensed, while `vitrum` itself is MIT. Installing and
+importing it alongside `vitrum` is fine, but it is opt-in rather than a core dependency so
+that a plain `pip install vitrum` stays permissively licensed throughout.
+
 ### (optional) To install dependencies for batch_active (BALACE framework):
 ```
 pip install "vitrum[workflows]"

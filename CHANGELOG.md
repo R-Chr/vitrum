@@ -79,7 +79,10 @@ recomputed.**
   convention holds, and the bound `Scattering` and `cell_list_pair_counts` enforce `rrange`
   against. It is the narrower of the cell as given and its Minkowski reduction, since neither
   is reliably the tighter of the two.
-
+- **`vitrum[fast]` extra**, installing [matscipy](https://github.com/libAtoms/matscipy). The
+  neighbour search under `Coordination`, `Bonds` and the partial PDFs is where nearly all of
+  their runtime goes; matscipy's C++ implementation replaces the ASE one when it is present.
+  
 ### Changed
 
 Each of the following changes the numbers the package returns.

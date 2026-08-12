@@ -1,3 +1,4 @@
+import functools
 import itertools
 from collections.abc import Iterator, Sequence
 from numbers import Real
@@ -127,23 +128,35 @@ def _angles(
     """
 
     same_species = neigh_types[0] == neigh_types[1]
-    arm_a = frame.bonds(center_type, neigh_types[0], cutoffs[0]).lists()
-    arm_b = arm_a if same_species else frame.bonds(center_type, neigh_types[1], cutoffs[1]).lists()
+    bonds_a = frame.bonds(center_type, neigh_types[0], cutoffs[0])
+    bonds_b = bonds_a if same_species else frame.bonds(center_type, neigh_types[1], cutoffs[1])
+    n_centers = len(bonds_a.centers)
 
-    triples, sizes = [], []
-    for center, a, b in zip(frame.index(center_type), arm_a, arm_b):
+    vectors_a = bonds_a.vectors(frame.atoms)
+    vectors_b = vectors_a if same_species else bonds_b.vectors(frame.atoms)
+
+    starts_a = np.concatenate(([0], np.cumsum(bonds_a.counts())))
+    starts_b = starts_a if same_species else np.concatenate(([0], np.cumsum(bonds_b.counts())))
+
+    left: list[int] = []
+    right: list[int] = []
+    sizes = []
+    for center in range(n_centers):
+        arm_a = range(starts_a[center], starts_a[center + 1])
         if same_species:
-            pairs = np.asarray(list(itertools.combinations(a, 2)))
+            pairs = list(itertools.combinations(arm_a, 2))
         else:
-            # Distinct species share no global index, so no pair can be an atom with itself.
-            pairs = np.asarray(list(itertools.product(a, b)))
+            pairs = list(itertools.product(arm_a, range(starts_b[center], starts_b[center + 1])))
         sizes.append(len(pairs))
-        if len(pairs):
-            triples.append(np.column_stack((pairs[:, 0], np.full(len(pairs), center), pairs[:, 1])))
+        left.extend(p for p, _ in pairs)
+        right.extend(q for _, q in pairs)
 
-    if not triples:
+    if not left:
         return [np.zeros(0) for _ in sizes]
-    measured = frame.atoms.get_angles(np.vstack(triples), mic=True)
+
+    first = vectors_a[left] / np.linalg.norm(vectors_a[left], axis=1)[:, None]
+    second = vectors_b[right] / np.linalg.norm(vectors_b[right], axis=1)[:, None]
+    measured = np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", first, second), -1.0, 1.0)))
     return list(np.split(measured, np.cumsum(sizes)[:-1]))
 
 
@@ -241,9 +254,18 @@ class Coordination:
         self.species = np.unique(self.chemical_symbols)
         self.cutoff_frame = cutoff_frame
 
+    @functools.cached_property
+    def _reference_frame(self) -> _Frame:
+        """The frame cutoffs are resolved against, held so its neighbour lists are built once.
+
+        Every public method resolves cutoffs, and `"Auto"` costs a 6 A neighbour search per
+        bond; keeping this one frame's edge cache pays for that once per `Coordination`.
+        """
+        return _Frame(self.atoms_list[self.cutoff_frame])
+
     def _cutoffs(self, pairs: Sequence[tuple[str, str]], cutoff: Cutoff) -> list[float]:
         """Resolve `cutoff` to one float per bond in `pairs`, using `cutoff_frame`."""
-        return _resolve_cutoffs(_Frame(self.atoms_list[self.cutoff_frame]), pairs, cutoff)
+        return _resolve_cutoffs(self._reference_frame, pairs, cutoff)
 
     def _frames(self, *required: str) -> Iterator[_Frame]:
         """Yield one checked `_Frame` at a time, so peak memory stays at one frame's worth."""

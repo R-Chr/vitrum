@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
 
-def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarray]) -> bool:
+def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], tuple[int, int, int]]) -> bool:
     """
     Check whether a closed path is a true ring rather than one winding around the cell.
 
@@ -30,52 +30,46 @@ def ring_closes_in_cell(ring: list[int], offsets: dict[tuple[int, int], np.ndarr
 
     Args:
         ring (List[int]): Atom indices of the ring.
-        offsets (Dict[Tuple[int, int], np.ndarray]): Unit cell offsets for all atoms pairs.
+        offsets (Dict[Tuple[int, int], Tuple[int, int, int]]): Unit cell offsets for all
+            atom pairs.
 
     Returns:
         bool: True if the ring closes within the cell, False if it wraps around it.
     """
-    total_offset = np.zeros(3)
-    for i in range(len(ring) - 1):
-        total_offset += offsets[(ring[i], ring[i + 1])]
-    total_offset += offsets[(ring[-1], ring[0])]
-    return bool(np.all(total_offset == 0))
+    a = b = c = 0
+    for k in range(len(ring)):
+        x, y, z = offsets[(ring[k - 1], ring[k])]
+        a += x
+        b += y
+        c += z
+    return a == 0 and b == 0 and c == 0
 
 
 _MAX_DEGENERATE_PATHS = 4096
 _MAX_SEARCH_STEPS = 200_000
+# Search cell size past which an unbounded (`limit=np.inf`) search is worth warning about.
+# Below it the whole-graph traversal an infinite hop limit allows is still quick.
+_UNBOUNDED_SEARCH_ATOMS = 10_000
 
 
-def _adjacency_lists(d: csr_array) -> list[np.ndarray]:
+def _banned_neighbor(u: int, banned_edge: tuple[int, int] | None) -> int:
+    """The one neighbour of `u` that `banned_edge` removes, or -1 if it removes none.
+
+    Atom indices are non-negative, so -1 never matches a real neighbour. Callers hoist this
+    out of their inner loop, leaving a single integer comparison per edge traversal.
     """
-    Neighbour index array for each atom, extracted once from the bond graph.
-
-    Args:
-        d (csr_array): The sparse bond graph.
-
-    Returns:
-        List[np.ndarray]: One array of neighbour indices per atom.
-    """
-    return [d.indices[d.indptr[i] : d.indptr[i + 1]] for i in range(d.shape[0])]
-
-
-def _blocked(
-    u: int,
-    v: int,
-    banned_nodes: frozenset[int],
-    banned_edge: tuple[int, int] | None,
-) -> bool:
-    """Whether the step from atom `u` to atom `v` is removed from the search graph."""
-    if u in banned_nodes or v in banned_nodes:
-        return True
     if banned_edge is None:
-        return False
+        return -1
     a, b = banned_edge
-    return (u == a and v == b) or (u == b and v == a)
+    if u == a:
+        return b
+    if u == b:
+        return a
+    return -1
 
 
 def _bfs_levels(
-    adj: list[np.ndarray],
+    adj: list[list[int]],
     source: int,
     max_depth: float,
     banned_nodes: frozenset[int] = frozenset(),
@@ -85,7 +79,7 @@ def _bfs_levels(
     Hop distance from `source` to every atom within `max_depth` hops.
 
     Args:
-        adj (List[np.ndarray]): Adjacency lists, from `_adjacency_lists`.
+        adj (List[List[int]]): Adjacency lists, from `_adjacency_lists`.
         source (int): Atom to search from.
         max_depth (float): Maximum number of hops; `np.inf` for no limit.
         banned_nodes (FrozenSet[int]): Atoms removed from the graph.
@@ -101,9 +95,11 @@ def _bfs_levels(
         depth += 1
         nxt = []
         for u in frontier:
+            if u in banned_nodes:
+                continue
+            ban_v = _banned_neighbor(u, banned_edge)
             for v in adj[u]:
-                v = int(v)
-                if v in dist or _blocked(u, v, banned_nodes, banned_edge):
+                if v in dist or v == ban_v or v in banned_nodes:
                     continue
                 dist[v] = depth
                 nxt.append(v)
@@ -112,7 +108,7 @@ def _bfs_levels(
 
 
 def _backtrack_paths(
-    adj: list[np.ndarray],
+    adj: list[list[int]],
     dist: dict[int, int],
     source: int,
     target: int,
@@ -128,7 +124,7 @@ def _backtrack_paths(
     this walks back from `target` through every neighbour that sits one layer closer.
 
     Args:
-        adj (List[np.ndarray]): Adjacency lists, from `_adjacency_lists`.
+        adj (List[List[int]]): Adjacency lists, from `_adjacency_lists`.
         dist (Dict[int, int]): Hop distances from `source`, from `_bfs_levels`.
         source (int): Atom the distances were measured from.
         target (int): Atom to walk back from.
@@ -146,16 +142,19 @@ def _backtrack_paths(
         grown = []
         for path in paths:
             tip = path[-1]
+            if tip in banned_nodes:
+                continue
+            want = dist[tip] - 1
+            ban_u = _banned_neighbor(tip, banned_edge)
             for u in adj[tip]:
-                u = int(u)
-                if dist.get(u, -1) == dist[tip] - 1 and not _blocked(u, tip, banned_nodes, banned_edge):
+                if u != ban_u and u not in banned_nodes and dist.get(u, -1) == want:
                     grown.append(path + [u])
         paths = grown[:_MAX_DEGENERATE_PATHS]
     return [path[::-1] for path in paths]
 
 
 def _paths_of_length(
-    adj: list[np.ndarray],
+    adj: list[list[int]],
     source: int,
     target: int,
     length: int,
@@ -171,7 +170,7 @@ def _paths_of_length(
     distance this degenerates to enumerating the shortest paths and nothing more.
 
     Args:
-        adj (List[np.ndarray]): Adjacency lists, from `_adjacency_lists`.
+        adj (List[List[int]]): Adjacency lists, from `_adjacency_lists`.
         source (int): Atom to start from.
         target (int): Atom to end on.
         length (int): Exact number of bonds the path must have.
@@ -195,11 +194,13 @@ def _paths_of_length(
             if u == target:
                 results.append(path.copy())
             return
+        if u in banned_nodes:
+            return
+        ban_v = _banned_neighbor(u, banned_edge)
         for v in adj[u]:
             if capped:
                 return
-            v = int(v)
-            if v in seen or _blocked(u, v, banned_nodes, banned_edge):
+            if v in seen or v == ban_v or v in banned_nodes:
                 continue
             # Reaching the target early strands the walk: it can never come back.
             if v == target and remaining > 1:
@@ -221,8 +222,8 @@ def _paths_of_length(
 
 
 def _shortest_valid_rings(
-    adj: list[np.ndarray],
-    offsets: dict[tuple[int, int], np.ndarray],
+    adj: list[list[int]],
+    offsets: dict[tuple[int, int], tuple[int, int, int]],
     source: int,
     target: int,
     tail: list[int],
@@ -236,8 +237,9 @@ def _shortest_valid_rings(
     is not a ring (see `ring_closes_in_cell`).
 
     Args:
-        adj (List[np.ndarray]): Adjacency lists, from `_adjacency_lists`.
-        offsets (Dict[Tuple[int, int], np.ndarray]): Unit cell offsets for all atom pairs.
+        adj (List[List[int]]): Adjacency lists, from `_adjacency_lists`.
+        offsets (Dict[Tuple[int, int], Tuple[int, int, int]]): Unit cell offsets for all
+            atom pairs.
         source (int): Atom the path starts from.
         target (int): Atom the path ends on.
         tail (List[int]): Atoms appended to the path to close the ring; empty for Guttman,
@@ -280,8 +282,8 @@ def _shortest_valid_rings(
 
 def _find_guttman_rings(
     len_ats: int,
-    d: csr_array,
-    offsets: dict[tuple[int, int], np.ndarray],
+    adj: list[list[int]],
+    offsets: dict[tuple[int, int], tuple[int, int, int]],
     limit: float,
 ) -> tuple[list[list[int]], dict[str, int]]:
     """
@@ -291,14 +293,12 @@ def _find_guttman_rings(
     the remaining graph. Each path plus the removed edge forms a ring. Every shortest path
     is kept, not just one.
     """
-    adj = _adjacency_lists(d)
     hop_limit = limit - 1 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
     stats: Counter[str] = Counter()
     for i in range(len_ats):
         for j in adj[i]:
-            j = int(j)
-            if j == i:
+            if j <= i:
                 continue
             found, flags = _shortest_valid_rings(adj, offsets, i, j, [], hop_limit, banned_edge=(i, j))
             rings.extend(found)
@@ -308,8 +308,8 @@ def _find_guttman_rings(
 
 def _find_king_rings(
     len_ats: int,
-    d: csr_array,
-    offsets: dict[tuple[int, int], np.ndarray],
+    adj: list[list[int]],
+    offsets: dict[tuple[int, int], tuple[int, int, int]],
     limit: float,
 ) -> tuple[list[list[int]], dict[str, int]]:
     """
@@ -320,12 +320,11 @@ def _find_king_rings(
     two edges to c forms a ring. As for the Guttman criterion, every shortest path is kept
     rather than a single predecessor chain.
     """
-    adj = _adjacency_lists(d)
     hop_limit = limit - 2 if np.isfinite(limit) else np.inf
     rings: list[list[int]] = []
     stats: Counter[str] = Counter()
     for c in range(len_ats):
-        shell = {int(n) for n in adj[c]} - {c}
+        shell = set(adj[c]) - {c}
         neighbors = sorted(shell)
         if len(neighbors) < 2:
             continue
@@ -349,21 +348,17 @@ def _is_shortcut_free(ring: list[int], d: csr_array) -> bool:
     connected by a shorter path (a "shortcut") means the ring decomposes.
     """
     n = len(ring)
-    # A shortcut can only matter if it's shorter than the longest possible ring-arc
-    # distance (n // 2), so the search never needs to look further than that.
-    dist_matrix = dijkstra(d, indices=ring, directed=False, unweighted=True, limit=n // 2)
-    for p in range(n):
-        for q in range(p + 1, n):
-            ring_dist = min(q - p, n - (q - p))
-            if dist_matrix[p, ring[q]] < ring_dist:
-                return False
-    return True
+    dist_matrix = dijkstra(d, indices=ring, directed=False, unweighted=True, limit=n // 2)[:, ring]
+    separation = np.abs(np.arange(n)[:, None] - np.arange(n))
+    arc = np.minimum(separation, n - separation)
+    return not bool((dist_matrix < arc).any())
 
 
 def _find_primitive_rings(
     len_ats: int,
+    adj: list[list[int]],
     d: csr_array,
-    offsets: dict[tuple[int, int], np.ndarray],
+    offsets: dict[tuple[int, int], tuple[int, int, int]],
     limit: float,
 ) -> tuple[list[list[int]], dict[str, int]]:
     """
@@ -372,10 +367,12 @@ def _find_primitive_rings(
     paths that share no interior atom. If the two paths end on the same atom they close an
     even ring, and if they end on bonded atoms they close an odd one. Candidates are then
     kept only if they are shortcut-free.
+
+    Alone among the criteria this needs the bond graph `d` as well as `adj`, for the
+    shortcut test.
     """
-    adj = _adjacency_lists(d)
-    adj_sets = [{int(x) for x in a} for a in adj]
-    max_size = int(limit) if np.isfinite(limit) else d.shape[0]
+    adj_sets = [set(a) for a in adj]
+    max_size = int(limit) if np.isfinite(limit) else len(adj)
     kmax = max_size // 2
 
     stats: Counter[str] = Counter()
@@ -392,12 +389,11 @@ def _find_primitive_rings(
                 to_target = _backtrack_paths(adj, dist, root, target)
                 stats["truncated"] += len(to_target) >= _MAX_DEGENERATE_PATHS
                 paths.extend(to_target)
-            # Interior atoms only: the root is shared by construction, and the endpoints
-            # sit at a different depth from every interior atom so they cannot collide.
             interiors = [frozenset(path[1:k]) for path in paths]
             for ia, first in enumerate(paths):
+                disjoint_from = interiors[ia].isdisjoint
                 for ib in range(ia + 1, len(paths)):
-                    if interiors[ia] & interiors[ib]:
+                    if not disjoint_from(interiors[ib]):
                         continue
                     second = paths[ib]
                     end_a, end_b = first[-1], second[-1]
@@ -495,10 +491,17 @@ def find_rings(
 
     d_idx = []
     d_val = []
-    # unit cell offsets for all atoms
-    all_offsets = {}
+    all_offsets: dict[tuple[int, int], tuple[int, int, int]] = {}
 
     n_ambiguous = 0
+
+    if not np.isfinite(limit) and nat > _UNBOUNDED_SEARCH_ATOMS:
+        warnings.warn(
+            f"Searching {nat} atoms with no `limit`, so every path search may traverse the "
+            "whole graph and the run can take a very long time. Pass `limit` as the largest "
+            "ring size you care about.",
+            stacklevel=2,
+        )
 
     if cutoff is None:
         radii = covalent_radii[symbols2numbers(els)]
@@ -529,8 +532,9 @@ def find_rings(
                     d_val.append(r)
                     d_idx.append((j, i))
                     d_val.append(r)
-                    all_offsets[(i, j)] = o
-                    all_offsets[(j, i)] = -o
+                    ox, oy, oz = (int(x) for x in o)
+                    all_offsets[(i, j)] = (ox, oy, oz)
+                    all_offsets[(j, i)] = (-ox, -oy, -oz)
     else:
         frame = _Frame(ats)
         pairs = (
@@ -543,13 +547,13 @@ def find_rings(
         pair_cutoffs = {pair: float(c) for pair, c in zip(pairs, resolved)}
 
         i_arr, j_arr, d_arr, s_arr = neighbor_list("ijdS", s, pair_cutoffs)
-        for i, j, r, o in zip(i_arr.tolist(), j_arr.tolist(), d_arr.tolist(), s_arr):
+        for i, j, r, o in zip(i_arr.tolist(), j_arr.tolist(), d_arr.tolist(), s_arr.tolist()):
             if i == j or (i, j) in all_offsets:
                 n_ambiguous += 1
                 continue
             d_idx.append((i, j))
             d_val.append(r)
-            all_offsets[(i, j)] = o
+            all_offsets[(i, j)] = (o[0], o[1], o[2])
 
     if n_ambiguous:
         warnings.warn(
@@ -563,13 +567,14 @@ def find_rings(
 
     # sparse matrix of bonds, removes zero entries
     d = csr_array((d_val, np.array(d_idx, dtype=np.int32).T), shape=(nat, nat))
+    adj = [d.indices[d.indptr[i] : d.indptr[i + 1]].tolist() for i in range(nat)]
 
     if criterion == "guttman":
-        raw_rings, stats = _find_guttman_rings(len(ats), d, all_offsets, limit)
+        raw_rings, stats = _find_guttman_rings(len(ats), adj, all_offsets, limit)
     elif criterion == "king":
-        raw_rings, stats = _find_king_rings(len(ats), d, all_offsets, limit)
+        raw_rings, stats = _find_king_rings(len(ats), adj, all_offsets, limit)
     else:
-        raw_rings, stats = _find_primitive_rings(len(ats), d, all_offsets, limit)
+        raw_rings, stats = _find_primitive_rings(len(ats), adj, d, all_offsets, limit)
 
     rings = {}
     n_self_overlapping = 0
@@ -626,15 +631,11 @@ def _fit_ellipse_axes(x: np.ndarray, y: np.ndarray) -> tuple[float, float] | Non
     if len(x) < 5:
         return None
 
-    # The conic fit is badly conditioned on raw Angstrom coordinates; work on points scaled
-    # to unit RMS radius and scale the axes back at the end.
     scale = float(np.sqrt(np.mean(x**2 + y**2)))
     if not np.isfinite(scale) or scale == 0.0:
         return None
     x, y = x / scale, y / scale
 
-    # Split the design matrix into its quadratic and linear parts, so that the constrained
-    # eigenproblem is 3x3 on the quadratic coefficients alone.
     d1 = np.column_stack((x * x, x * y, y * y))
     d2 = np.column_stack((x, y, np.ones_like(x)))
     s1, s2, s3 = d1.T @ d1, d1.T @ d2, d2.T @ d2
@@ -643,21 +644,15 @@ def _fit_ellipse_axes(x: np.ndarray, y: np.ndarray) -> tuple[float, float] | Non
     except np.linalg.LinAlgError:
         return None
     m = s1 + s2 @ t
-    # Premultiply by the inverse of the ellipse constraint matrix [[0, 0, 2], [0, -1, 0], [2, 0, 0]].
     m = np.array((m[2] / 2.0, -m[1], m[0] / 2.0))
 
     eigenvectors = np.linalg.eig(m)[1]
-    # The ellipse solution is the eigenvector satisfying 4AC - B^2 > 0.
     valid = np.flatnonzero(4.0 * eigenvectors[0] * eigenvectors[2] - eigenvectors[1] ** 2 > 0)
     if valid.size == 0:
         return None
     quadratic = np.real(eigenvectors[:, valid[0]])
     a, b, c = quadratic
     dd, e, f = t @ quadratic
-
-    # Shift the conic to its own center, where it reduces to a x'^2 + b x'y' + c y'^2 = -f',
-    # then diagonalise the quadratic part: the semi-axes are sqrt(-f' / lambda) for the two
-    # eigenvalues of [[a, b/2], [b/2, c]].
     discriminant = 4.0 * a * c - b * b
     if discriminant <= 0.0:  # not an ellipse
         return None
@@ -693,7 +688,6 @@ class Ring:
         self._unwrapped_positions_cache: np.ndarray | None = None
         self.ellipsoid_lengths: np.ndarray | None = None
         self._principal_axes: np.ndarray | None = None
-        # Wrapped in a 1-tuple so that a None fit result is still cached rather than refitted.
         self._ellipse_axes_cache: tuple[tuple[float, float] | None] | None = None
 
     def _unwrapped_positions(self) -> np.ndarray:
