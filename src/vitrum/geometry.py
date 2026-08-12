@@ -7,13 +7,6 @@ from numba import get_num_threads, njit, prange
 from numpy.typing import ArrayLike
 from scipy.signal import argrelextrema
 
-# Cells per `rrange` along each axis in the cell list; see `cell_list_pair_counts`. Affects
-# speed only, never counts. Measured fastest at 2 over the rrange range `Scattering` uses.
-# ponytail: one constant for every cell and cutoff. With the cell sort it costs ~2 ms/frame
-# at 16000 atoms and rrange = 4 A, where cells are near-empty. Pick it from the occupancy if
-# a short cutoff ever becomes a real workload.
-_GRID_REFINE = 2
-
 
 def perpendicular_widths(cell: ArrayLike) -> np.ndarray:
     """
@@ -603,7 +596,10 @@ def cell_list_pair_counts(atoms: Atoms, codes: np.ndarray, rrange: float, nbin: 
             "`vitrum.geometry.minimum_image_limit`."
         )
 
-    nc = np.maximum(np.floor(_GRID_REFINE * widths / rrange), 1).astype(np.int64)
+    occupancy = len(atoms) / atoms.get_volume() * rrange**3
+    refine = 2 if occupancy > 32 else 1
+    nc = np.maximum(np.floor(refine * widths / rrange), 1).astype(np.int64)
+
     stencil = np.ceil(rrange * nc / widths).astype(np.int64)
 
     frac = np.asarray(atoms.get_positions(), dtype=float) @ inverse

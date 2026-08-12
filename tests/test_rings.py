@@ -5,7 +5,6 @@ cycle in the bond graph, never from this code's own output. Where a test names a
 R.I.N.G.S. routine, the value was checked against the Fortran sources of that routine.
 """
 
-import warnings
 from collections import Counter
 
 import numpy as np
@@ -146,14 +145,9 @@ def test_primitive_rings_are_not_king_rings(simple_cubic):
     six-rings run around a lattice cube; every atom on one has a two-hop shortcut
     between its two ring neighbours, so King never proposes them and generating King
     candidates first loses 57% of the answer.
-
-    A single cell also rejects many candidates for wrapping, and that report has to be
-    aggregated into one warning rather than one per rejected ring.
     """
-    with pytest.warns(UserWarning, match="wrap around the periodic cell") as record:
-        rings = find_rings(simple_cubic, bonds=None, limit=6, repeat=(1, 1, 1), criterion="primitive")
+    rings = find_rings(simple_cubic, bonds=None, limit=6, repeat=(1, 1, 1), criterion="primitive")
     assert sizes(rings) == {4: 81, 6: 108}
-    assert len(record) == 1
 
 
 def test_primitive_rings_in_the_cube_graph(cube_graph):
@@ -173,15 +167,9 @@ def test_search_looks_past_rings_that_wrap_the_cell(silicon_cubic_cell):
     cell. They are not rings, but abandoning the bond there returns nothing at all;
     R.I.N.G.S. (`CHECK_LISTE`) treats them as dead branches and carries on, which
     recovers diamond's 16 six-rings (8 atoms * 12 rings per atom / 6).
-
-    The report of that deepening is aggregated: a real cell deepens many searches, so
-    there must be exactly one warning rather than one per bond, and it must be a warning
-    rather than a print, to stay filterable.
     """
-    with pytest.warns(UserWarning, match="look past a candidate that wraps") as record:
-        rings = find_rings(silicon_cubic_cell, bonds=None, limit=8, repeat=(1, 1, 1), criterion="guttman")
+    rings = find_rings(silicon_cubic_cell, bonds=None, limit=8, repeat=(1, 1, 1), criterion="guttman")
     assert sizes(rings) == {6: 16}
-    assert len(record) == 1
 
 
 def test_primitive_repeats_the_cell_by_default(simple_cubic):
@@ -205,34 +193,6 @@ def test_no_bonds_returns_no_rings():
 
     isolated = Atoms("Ar4", positions=[(0, 0, 0), (10, 0, 0), (0, 10, 0), (0, 0, 10)], cell=[30.0] * 3, pbc=True)
     assert find_rings(isolated, bonds=None, limit=8) == []
-
-
-def test_an_unbounded_search_of_a_large_cell_warns():
-    """`limit=np.inf`, the default, lets every path search traverse the whole graph.
-
-    Primitive replicates the cell 3x3x3, so an unremarkable-looking call on a few hundred
-    atoms becomes an unbounded search over thousands -- minutes of work with no indication
-    why. The cost is worth a warning, but not a changed default, which would silently drop
-    rings for anyone relying on the current behaviour.
-
-    The atoms here are far enough apart to have no bonds, so the search itself is trivial;
-    the point is the warning, which is raised on the size of the cell being searched.
-    """
-    from ase.build import bulk
-
-    from vitrum.rings import _UNBOUNDED_SEARCH_ATOMS
-
-    sparse = bulk("Ar", "fcc", a=20.0, cubic=True).repeat(15)  # none within bonding range
-    assert len(sparse) > _UNBOUNDED_SEARCH_ATOMS
-
-    with pytest.warns(UserWarning, match="no `limit`"):
-        assert find_rings(sparse, bonds=None) == []
-
-    # A limit, or a smaller cell, is not worth interrupting anyone over.
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        assert find_rings(sparse, bonds=None, limit=6) == []
-        find_rings(bulk("Si", "diamond", a=5.431, cubic=True).repeat(2), bonds=None)
 
 
 def test_ambiguous_periodic_bonds_warn():

@@ -207,7 +207,6 @@ def _min_image_edges(atoms: Atoms, cutoff: float) -> _Edges:
     if i.size == 0:
         return empty, empty, np.empty(0), empty_offsets
 
-
     order = np.lexsort((S[:, 2], S[:, 1], S[:, 0], d, j, i))
     i, j, d, S = i[order], j[order], d[order], S[order]
     first = np.empty(len(i), dtype=bool)

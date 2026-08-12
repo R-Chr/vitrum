@@ -154,6 +154,6 @@ class Diffusion:
             distances = np.sqrt(np.sum(dif_pos**2, axis=1))
             hist, edges = np.histogram(distances, bins=10 ** np.linspace(np.log10(0.1), np.log10(100), nbin))
             hist_all.append(hist)
-        hist = np.mean(np.array(hist_all), axis=0)
+        mean_hist = np.mean(np.array(hist_all), axis=0)
         # Only atoms of the target species are histogrammed, so they are what normalises it.
-        return edges[:-1], hist / len(index)
+        return edges[:-1], mean_hist / len(index)
