@@ -79,12 +79,11 @@ class Scattering:
                 included.
             nbin (int, optional): The number of bins to use. Defaults to 500.
             neutron_scattering_coef (List[float], optional): A list of custom neutron scattering lengths. Defaults to
-                None.
-              If None, the default coefficients from Neutron News, Vol. 3, No. 3, 1992, pp. 29-37 are used.
+                None. If None, the default coefficients from Neutron News, Vol. 3, No. 3, 1992,
+                pp. 29-37 are used.
             x_ray_scattering_coef (np.ndarray, optional): A list of custom x-ray scattering coefficients. Defaults to
-                None.
-              If None, the default coefficients from International Tables for Crystallography (2006). Vol. C. ch. 6.1,
-              pp. 554-595 are used.
+                None. If None, the default coefficients from International Tables for
+                Crystallography (2006). Vol. C. ch. 6.1, pp. 554-595 are used.
             disable_progress (bool, optional): Whether to disable the progress bar. Defaults to False.
 
         Partial PDFs come from `calculate_partial_pdfs_cell_list`.
@@ -498,8 +497,7 @@ class Scattering:
         T(r) = 4 * pi * r * rho_0 * g(r)
         where rho_0 is the average number density.
 
-        Args:
-            As `get_total_rdf`, which this is a weighting of.
+        Takes the same arguments as `get_total_rdf`, which this is a weighting of.
 
         Returns:
             np.ndarray: The T(r) function values.
@@ -516,8 +514,7 @@ class Scattering:
         Its factor of r cancels the 1/r of Keen eq 60, so for type="xray" this is the better
         function to read at small r.
 
-        Args:
-            As `get_total_rdf`, which this is a weighting of.
+        Takes the same arguments as `get_total_rdf`, which this is a weighting of.
 
         Returns:
             np.ndarray: The D(r) function values.

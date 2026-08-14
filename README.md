@@ -15,7 +15,7 @@
 **vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a comprehensive suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
 
 ## 🚧 Active development
-vitrum is under active development. As of 1.0, the public API follows [semantic versioning](https://semver.org/) — breaking changes will be reflected in a major version bump and noted in the [changelog](CHANGELOG.md).
+vitrum is under active development. Before 2.0, a minor release may still remove or rename API that turned out to be wrong — every such change is listed in the [changelog](CHANGELOG.md), and anything scheduled for removal is deprecated with a warning naming its replacement first where practical. From 2.0 onwards the public API follows [semantic versioning](https://semver.org/).
 
 ## 📖 Documentation
 Please see the `docs` folder for detailed documentation or check the [online documentation](https://vitrum.readthedocs.io/en/latest/).

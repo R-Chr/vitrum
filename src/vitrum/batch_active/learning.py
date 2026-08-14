@@ -276,12 +276,6 @@ class balace:
         - Trains the ACE model using the current database of structures.
         - Runs LAMMPS simulations with the current ACE potential to generate new structures.
         - Evaluates the new structures with VASP static calculations.
-
-        Parameters:
-            None
-
-        Returns:
-            None
         """
         print(f"Current state: {self.state}, Iteration: {self.iteration}")
 

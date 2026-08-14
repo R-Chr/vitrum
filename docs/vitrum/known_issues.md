@@ -18,8 +18,8 @@ loop/void statistics of the bulk.
 ## Orthorhombic cells only
 
 Trajectory unwrapping (`unwrap_trajectory`), void grids (`build_void_grid`,
-`VoidAnalysis`), the homogeneity checker and ring centres still apply the minimum image
-convention using only the cell diagonal, so they are valid only for orthorhombic cells.
+`VoidAnalysis`) and the homogeneity checker still apply the minimum image convention using
+only the cell diagonal, so they are valid only for orthorhombic cells.
 This is checked rather than assumed: passing a triclinic cell raises `NotImplementedError`
 via `vitrum.geometry.require_orthorhombic` instead of silently returning
 plausible-looking but wrong numbers. Full triclinic support is not implemented for these
@@ -27,10 +27,13 @@ routines. Positions need not be wrapped into the cell.
 
 The following are **not** subject to this restriction:
 
-- **Distances** — `vitrum.geometry.distance_matrix` takes any cell as of 1.1.0. 
-- **`Scattering`** — both PDF backends work on a general cell. `rrange` is bounded by the
-  perpendicular cell widths rather than the cell lengths, which is the correct minimum-image
-  limit. `Scattering` does require a cell periodic along all three axes as of 1.1.0.
+- **Distances** — `vitrum.geometry.distance_matrix` takes any cell as of 1.1.0.
+- **`Scattering`** — its cell-list PDF backend works on a general cell. `rrange` is bounded by
+  the perpendicular cell widths rather than the cell lengths, which is the correct
+  minimum-image limit. `Scattering` does require a cell periodic along all three axes as of
+  1.1.0.
+- **Ring metrics** — `Ring` unwraps bond by bond with `ase.geometry.find_mic` and wraps its
+  centre through the cell's own fractional coordinates, both of which take a general cell.
 - **`Coordination`**, the underlying `vitrum.bonds.Bonds`/`_Frame`, and `find_rings`/
   `RingAnalysis.calculate` given an explicit `cutoff` — their bond graph is built entirely
   with `ase.neighborlist.neighbor_list`, which takes a general cell matrix, so

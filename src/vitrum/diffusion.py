@@ -27,7 +27,8 @@ class Diffusion:
             sample_times (List[float]): A list of sampled times.
             wrapped (bool, optional): Whether `trajectory` positions are PBC-wrapped and need
                 unwrapping before computing displacements. Set to False if you've already
-                unwrapped the trajectory yourself (e.g. via `vitrum.trajectory.unwrap_trajectory`).
+                unwrapped the trajectory yourself (e.g. via
+                `vitrum.trajectory_tools.unwrap_trajectory`).
                 Defaults to True.
         """
 

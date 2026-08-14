@@ -499,12 +499,12 @@ class Coordination:
             neigh_types (Union[str, List[str]]): The atomic symbols of the neighbor atoms.
             nbin (int, optional): The number of bins to use for the histogram. Defaults to 70.
             cutoff (Cutoff, optional): Range within which to calculate the angular
-              distribution. Defaults to "Auto".
+                distribution. Defaults to "Auto".
             range (Optional[Tuple[float, float]], optional): The range of the histogram.
-              Defaults to None, meaning the full (0, 180) degrees an angle can take.
+                Defaults to None, meaning the full (0, 180) degrees an angle can take.
             sin_normalised (bool, optional): Normalise the distribution by sin(theta),
-              removing the solid-angle weighting that favours angles near 90
-              degrees even in an uncorrelated structure. Defaults to False.
+                removing the solid-angle weighting that favours angles near 90
+                degrees even in an uncorrelated structure. Defaults to False.
 
         Returns:
             Tuple[np.ndarray, np.ndarray]:

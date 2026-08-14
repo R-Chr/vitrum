@@ -11,7 +11,7 @@ a full `Atoms` object.
 ```python
 from vitrum.geometry import distance_matrix, partial_pdf, pdf, find_min_after_peak, radial_bins
 
-# minimum-image distance matrix for a structure (orthorhombic cells only)
+# minimum-image distance matrix for a structure (any cell, including triclinic)
 distances = distance_matrix(atoms)
 
 # one partial g_ab(r) from that matrix, without building a Scattering object
