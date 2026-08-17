@@ -32,6 +32,10 @@ should be recomputed.**
   and turning them into packed structures via `get_structures`.
 - **`vitrum.visualization.StructureRenderer`**, rendering `ase.Atoms` to static images or
   Jupyter widgets through OVITO. Needs the `visualization` extra.
+- **`charge_ordering` on `get_random_packed`**, keeping like-charged ions apart so anions sit
+  between cations. Hard-sphere overlap resolution alone lets cations approach to the sum of
+  their (small) ionic radii, which crashes the first steps of an MD run. Off by default,
+  so packed structures are unchanged unless it is passed.
 - Density and formula utilities: `vitrum.io_helpers.get_density`,
   `mass_density_to_number_density`, `number_density_to_mass_density` and `formula_unit`, plus
   `vitrum.volume_estimation.get_packing_radii` and `guess_oxi_states`, the per-atom radii

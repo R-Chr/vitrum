@@ -1,5 +1,6 @@
 """Cell-volume estimation, and the per-atom radii the estimators are built on."""
 
+import math
 import warnings
 from collections.abc import Sequence
 from typing import Any
@@ -17,8 +18,17 @@ COVALENT_PACKING_FRACTION = 1 / 3
 _EXTRA_HINT = "requires the optional volume_estimation extra: pip install vitrum[volume_estimation]"
 
 
-def get_packing_radii(elements: Sequence[str], composition: Composition, source: str = "covalent") -> np.ndarray:
-    """Per-atom radii in Å. source: 'covalent' | 'atomic' | 'ionic'."""
+def get_packing_radii(
+    elements: Sequence[str],
+    composition: Composition,
+    source: str = "covalent",
+    oxi: dict[str, float] | None = None,
+) -> np.ndarray:
+    """Per-atom radii in Å. source: 'covalent' | 'atomic' | 'ionic'.
+
+    `oxi` is the oxidation states to use for source='ionic'; guessed from the composition
+    when not given.
+    """
     if source == "covalent":
         return covalent_radii[symbols2numbers(elements)].copy()
 
@@ -31,7 +41,7 @@ def get_packing_radii(elements: Sequence[str], composition: Composition, source:
         )
 
     if source == "ionic":
-        oxi = guess_oxi_states(composition)
+        oxi = oxi if oxi else guess_oxi_states(composition)
         if not oxi:
             return covalent_radii[symbols2numbers(elements)].copy()
         radii = []
@@ -47,14 +57,28 @@ def get_packing_radii(elements: Sequence[str], composition: Composition, source:
     raise ValueError(f"unknown radii source: {source}")
 
 
+def _guess_cost(comp: Composition) -> int:
+    scored, combined = 0, 1
+    for el, amount in comp.get_el_amt_dict().items():
+        states = Element(el).icsd_oxidation_states or Element(el).common_oxidation_states
+        if not states:
+            continue
+        n = int(amount)
+        multisets = math.comb(n + len(states) - 1, len(states) - 1)
+        scored += multisets * n
+        combined *= min(multisets, n * (max(states) - min(states)) + 1)
+    return scored + combined
+
+
 def guess_oxi_states(
-    composition: Composition, max_exact_atoms: int = 100, totals: tuple[int, ...] = (40, 60, 100)
+    composition: Composition, max_work: int = 200_000, totals: tuple[int, ...] = (40, 60, 100)
 ) -> dict[str, float] | None:
-    """Guess oxidation states, rounding the composition first only if it's large.
+    """Guess oxidation states, rounding the composition first only if guessing it exactly
+    would cost more than `max_work` (see `_guess_cost`; the default is about a second).
     Returns {element: state} or None."""
     comp = composition.reduced_composition
 
-    if comp.num_atoms <= max_exact_atoms:
+    if _guess_cost(comp) <= max_work:
         guesses = comp.oxi_state_guesses(max_sites=-1)
         if guesses:
             return {el: round(v) for el, v in guesses[0].items()}
@@ -65,6 +89,8 @@ def guess_oxi_states(
     n = sum(amts.values())
     for total in totals:
         approx = Composition({el: max(1, round(a / n * total)) for el, a in amts.items()})
+        if _guess_cost(approx) > max_work:
+            continue
         guesses = approx.oxi_state_guesses(max_sites=-1)
         if guesses:
             return {el: round(v) for el, v in guesses[0].items()}

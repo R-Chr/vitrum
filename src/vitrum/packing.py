@@ -11,7 +11,9 @@ from pymatgen.transformations.standard_transformations import (
 )
 from scipy.stats import qmc
 
-from vitrum.volume_estimation import get_packing_radii, get_volume
+from vitrum.volume_estimation import get_packing_radii, get_volume, guess_oxi_states
+
+MAX_STEP = 0.25  # Å; cap on one atom's displacement per iteration, see `charge_ordering`
 
 
 def get_random_packed(
@@ -28,6 +30,7 @@ def get_random_packed(
     seed: int | None = None,
     side_ratios: list | None = None,
     algorithm: str = "sobol",
+    charge_ordering: float = 0.0,
     **kwargs: Any,
 ) -> Atoms | Structure:
     """
@@ -57,6 +60,9 @@ def get_random_packed(
         side_ratios (list, optional): The side ratios for the lattice. Defaults to None, i.e. a cubic cell.
         algorithm (str, optional): How to place the initial points, "sobol" or "random".
                                    Defaults to "sobol".
+        charge_ordering (float, optional): How strongly like-charged ions are kept apart, in units of the mean
+            anion radius. Defaults to 0.0, which is purely geometric packing. No effect on compositions with no
+            guessable oxidation states, such as metals and alloys.
 
     Returns:
         data (ase.Atoms or pymatgen.core.Structure): The generated random packed structure.
@@ -81,11 +87,23 @@ def get_random_packed(
     cell = np.array([side_ratios[0] * k, side_ratios[1] * k, side_ratios[2] * k])
     cell = np.diag(cell)
 
-    radii = get_packing_radii(symbols, composition, source=radii_source) * radii_scaling
+    oxi = guess_oxi_states(composition) if charge_ordering > 0 or radii_source == "ionic" else None
+    radii = get_packing_radii(symbols, composition, source=radii_source, oxi=oxi) * radii_scaling
 
     if min_distance:
         radii = np.maximum(radii, min_distance / 2)
     nat = len(symbols)
+
+    sign = np.sign([(oxi or {}).get(el, 0.0) for el in symbols])
+    shell = np.zeros(nat)
+    if charge_ordering > 0 and (sign > 0).any() and (sign < 0).any():
+        d_feasible = 0.9 * (cell_vol / (sign > 0).sum()) ** (1 / 3)
+        shell = np.where(
+            sign > 0,
+            min(charge_ordering * radii[sign < 0].mean(), max(0.0, d_feasible / 2 - radii[sign > 0].mean())),
+            0.0,
+        )
+    ordered = bool(shell.any())
 
     if algorithm == "sobol":
         frac = qmc.Sobol(d=3, seed=seed).random(nat)
@@ -99,7 +117,8 @@ def get_random_packed(
     skin_init = 0.2  # Å of extra buffer at the start (~10% of a typical radius)
     decay_iters = 50  # skin reaches zero by this iteration
 
-    nl = NeighborList(radii + skin_init / 2, self_interaction=False, bothways=True, skin=0.3)
+    nl = NeighborList(radii + shell + skin_init / 2, self_interaction=False, bothways=True, skin=0.3)
+    max_step = MAX_STEP if ordered else np.inf
 
     for it in range(500):
         skin = skin_init * max(0.0, 1.0 - it / decay_iters)  # linear decay
@@ -118,11 +137,17 @@ def get_random_packed(
                 rs[coincident] = rng.normal(size=(int(coincident.sum()), 3))
                 d[coincident] = np.linalg.norm(rs[coincident], axis=1)
             ds_true = d - (radii[indices] + radii[i])
-            dsum += ds_true[ds_true < 0].sum()
+            dsum += ds_true[ds_true < 0].sum()  # convergence is measured on true overlap only
             ds_eff = np.minimum(ds_true - skin, 0.0)
-            dx[i] = np.sum(rs / d[:, None] * ds_eff[:, None], axis=0)
+            if ordered:
+                like = sign[indices] * sign[i] > 0
+                ds_ord = ds_true - np.where(like, shell[indices] + shell[i], 0.0)
+                ds_eff = np.minimum(ds_eff, ds_ord)
+            step = np.sum(rs / d[:, None] * ds_eff[:, None], axis=0)
+            length = np.linalg.norm(step)
+            dx[i] = step * (max_step / length) if length > max_step else step
         ats.set_positions(pos + dx)
-        if dsum >= -1.0e-5:
+        if dsum >= -1.0e-5 and (it >= decay_iters or not ordered):
             break
     else:
         warnings.warn(f"Cell packing not converged after 500 iterations, final overlap sum {dsum:.3e}")
