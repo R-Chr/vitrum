@@ -1,7 +1,14 @@
-from collections import deque
+import re
+from fractions import Fraction
+from functools import reduce
+from math import gcd
+
+from ase import Atoms
+from pymatgen.core import Composition
+from scipy.constants import Avogadro
 
 
-def get_LAMMPS_dump_timesteps(filename: str):
+def get_LAMMPS_dump_timesteps(filename: str) -> list[int]:
     """
     Retrieves the timesteps from a LAMMPS dump file.
 
@@ -11,22 +18,19 @@ def get_LAMMPS_dump_timesteps(filename: str):
     Returns:
         List[int]: A list of timesteps extracted from the file.
     """
+    timesteps = []
     with open(filename, encoding="utf-8") as f:
-        timesteps = []
-        lines = deque(f.readlines())
-        if len(lines) == 0:
-            return timesteps
-        line = lines.popleft()
-        while len(lines) > 0:
+        for line in f:
             if "ITEM: TIMESTEP" in line:
-                line = lines.popleft()
-                timesteps.append(int(line))
-            else:
-                line = lines.popleft()
+                # The timestep is the line after the header, consumed in the same pass.
+                # A file truncated on the header itself simply has no value to read.
+                value = next(f, None)
+                if value is not None:
+                    timesteps.append(int(value))
     return timesteps
 
 
-def correct_atom_types(atoms_list, atom_to_type_map):
+def correct_atom_types(atoms_list: Atoms | list[Atoms], atom_to_type_map: dict[int, str]) -> None:
     """
     Correct the atom types in a list of Atoms objects.
 
@@ -35,12 +39,127 @@ def correct_atom_types(atoms_list, atom_to_type_map):
         atom_to_type_map (dict): A dictionary mapping atomic numbers to atom types.
 
     Returns:
-        atoms_list (list of Atoms objects): The corrected list of Atoms objects.
+        None: The Atoms objects are modified in place.
     """
-    #Check if atoms_list is a list of Atoms objects
+    # Check if atoms_list is a list of Atoms objects
     if not isinstance(atoms_list, list):
         atoms_list = [atoms_list]
 
     for atoms in atoms_list:
         corr_symbols = [atom_to_type_map[i] for i in atoms.get_atomic_numbers()]
         atoms.set_chemical_symbols(corr_symbols)
+
+
+def get_density(atoms: Atoms) -> float:
+    """
+    Calculate the mass density of a structure.
+
+    Parameters:
+        atoms (Atoms): An ASE Atoms object with a defined cell.
+
+    Returns:
+        float: Density in g/cm^3.
+    """
+    # 1e-24 converts the cell volume from Angstrom^3 to cm^3.
+    return (sum(atoms.get_masses()) / Avogadro) / (atoms.get_volume() * 1e-24)
+
+
+def mass_density_to_number_density(composition: str | dict | Composition, density: float) -> float:
+    """Convert a mass density to an atomic number density for a given composition.
+
+    Args:
+        composition (str, dict or pymatgen.core.Composition): Same accepted formats as
+            vitrum.packing.get_random_packed.
+        density (float): Mass density in g/cm^3.
+
+    Returns:
+        float: Atomic number density in atoms/Angstrom^3.
+    """
+    composition = Composition(composition)
+    mass_per_atom = float(composition.weight) / composition.num_atoms  # g/mol per atom
+    return (density / mass_per_atom) * Avogadro * 1e-24
+
+
+def number_density_to_mass_density(composition: str | dict | Composition, number_density: float) -> float:
+    """Convert an atomic number density to a mass density for a given composition.
+
+    Args:
+        composition (str, dict or pymatgen.core.Composition): Same accepted formats as
+            vitrum.packing.get_random_packed.
+        number_density (float): Atomic number density in atoms/Angstrom^3.
+
+    Returns:
+        float: Mass density in g/cm^3.
+    """
+    composition = Composition(composition)
+    mass_per_atom = float(composition.weight) / composition.num_atoms  # g/mol per atom
+    return number_density * 1e24 * mass_per_atom / Avogadro
+
+
+def _parse_oxide(formula: str) -> dict[str, Fraction]:
+    """'Al2O3' -> {'Al': Fraction(2), 'O': Fraction(3)} (no parentheses support)."""
+    _TOKEN = re.compile(r"([A-Z][a-z]?)(\d*\.?\d*)")
+    counts: dict[str, Fraction] = {}
+    pos = 0
+    for m in _TOKEN.finditer(formula):
+        if m.start() != pos or not m.group(1):
+            raise ValueError(f"Cannot parse formula: {formula!r}")
+        el, n = m.group(1), m.group(2)
+        counts[el] = counts.get(el, Fraction(0)) + (Fraction(n) if n else Fraction(1))
+        pos = m.end()
+    if pos != len(formula) or not counts:
+        raise ValueError(f"Cannot parse formula: {formula!r}")
+    return counts
+
+
+def formula_unit(formula: str, integers: bool = False, anions_last: bool = True) -> str:
+    """Convert a mol% oxide formula string into a single formula-unit string.
+    Example:
+    "60.2SiO2-16.0B2O3-12.6Na2O-3.8Al2O3-5.7CaO-1.7ZrO2"
+    -> "Si0.602B0.32Na0.252Al0.076Ca0.057Zr0.017O2.015"   (per one formula unit)
+    -> "Si602B320Na252Al76Ca57Zr17O2015"                  (smallest integers)
+
+    Components may be separated by '-' or whitespace. Prefixes are treated as
+    molar proportions (they need not sum to 100; the result is normalized).
+
+    integers=False -> fractional coefficients per one formula unit
+                      (e.g. 'Si0.602B0.32...O2.015')
+    integers=True  -> smallest whole-number multiple of the formula unit
+                      (e.g. 'Si602B320...O2015')
+    """
+    parts = [p for p in re.split(r"[-\s]+", formula.strip()) if p]
+    if not parts:
+        # No components at all: every total below is empty and the result is a bare "".
+        raise ValueError(f"Cannot parse formula: {formula!r}")
+    totals: dict[str, Fraction] = {}
+    order: list[str] = []
+    mol_fractions = []
+    for part in parts:
+        m = re.match(r"^(\d*\.?\d*)\s*(.+)$", part)
+        assert m is not None, f"Cannot parse formula: {formula!r}"  # `.+` matches any non-empty part
+        frac = Fraction(m.group(1)) if m.group(1) else Fraction(1)
+        mol_fractions.append(frac)
+        for el, n in _parse_oxide(m.group(2)).items():
+            if el not in totals:
+                totals[el] = Fraction(0)
+                order.append(el)
+            totals[el] += frac * n
+
+    total_mol = sum(mol_fractions, Fraction(0))
+    coeffs = {el: v / total_mol for el, v in totals.items()}  # per one formula unit
+
+    if anions_last:
+        anions: list[str] = [el for el in ("O", "S", "Se", "F", "Cl", "Br", "I") if el in order]
+        order = [el for el in order if el not in anions] + anions
+
+    if integers:
+        lcm_den = reduce(lambda a, b: a * b // gcd(a, b), (coeffs[el].denominator for el in order))
+        ints = [coeffs[el].numerator * (lcm_den // coeffs[el].denominator) for el in order]
+        g = reduce(gcd, ints)
+        return "".join(f"{el}{n // g if n // g != 1 else ''}" for el, n in zip(order, ints))
+
+    def fmt(x: float | Fraction) -> str:
+        s = f"{float(x):.6g}"
+        return "" if s == "1" else s
+
+    return "".join(f"{el}{fmt(coeffs[el])}" for el in order)

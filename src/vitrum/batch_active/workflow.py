@@ -9,7 +9,9 @@ try:
     from jobflow import Flow
     from jobflow.managers.fireworks import flow_to_workflow
 except ImportError:
-    raise ImportError("jobflow and fireworks are required for batch_active workflows. Please install vitrum[batch_active].")
+    raise ImportError(
+        "jobflow and fireworks are required for batch_active workflows. Please install vitrum[batch_active]."
+    )
 import os
 
 import numpy as np
@@ -118,8 +120,7 @@ def train_pace(self, pace_kwargs=None):
     )
     print("Writing input.yaml")
     firetask = ScriptTask.from_str(
-        f"cd {directory} ; pacemaker input.yaml ;"
-        "pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
+        f"cd {directory} ; pacemaker input.yaml ;pace_activeset -d fitting_data_info.pckl.gzip output_potential.yaml"
     )
     wf = Workflow([Firework([firetask], name="training")], metadata={"uuid": run_id}, name="train_ace")
     self.lp.add_wf(wf)

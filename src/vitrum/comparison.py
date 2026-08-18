@@ -2,16 +2,30 @@ import numpy as np
 from scipy.interpolate import interp1d
 
 
-def r_chi(function_1, function_2, x_min=0, x_max=np.inf, steps=100):
+def r_chi(
+    function_1: dict[str, np.ndarray],
+    function_2: dict[str, np.ndarray],
+    x_min: float = 0,
+    x_max: float = np.inf,
+    steps: int = 100,
+) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate the Wright coefficient (https://doi.org/10.1016/0022-3093(93)90232-M) between two functions
 
     Parameters:
         function_1 (dict): Dictionary with keys 'x' and 'y' representing the first function, usually from simulations
-        function_2 (dict): Dictionary with keys 'x' and 'y' representing the second function, usually from experimental meassurements.
+        function_2 (dict): Dictionary with keys 'x' and 'y' representing the second function, usually from experimental
+            meassurements.
 
     Returns:
-        rchi (float): Wright coefficient, a measure of similarity between the two functions.
+        Tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+            - rchi (float): Wright coefficient, a measure of similarity between the two functions.
+            - common_x (np.ndarray): The common x-axis over the overlapping range.
+            - y1 (np.ndarray): function_1 interpolated onto common_x.
+            - y2 (np.ndarray): function_2 interpolated onto common_x.
+
+    Raises:
+        ValueError: If the two functions have no overlapping x-range.
     """
     # Determine the overlapping x-range
     min_x_val = np.max([np.min(function_1["x"]), np.min(function_2["x"]), x_min])

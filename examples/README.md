@@ -2,7 +2,7 @@
 
 ## `analysis/demo.ipynb`
 
-Demonstrates the structural-characterization workflow on an existing LAMMPS MD trajectory: loading a dump file, correcting chemical symbols, computing the neutron structure factor S(Q) and partial pair distribution function g(r) with `vitrum.scattering.Scattering`, Qn speciation via `GlassAtoms.get_bridging_analysis`, and generating a random packed structure with `vitrum.packing.get_random_packed`.
+Demonstrates the structural-characterization workflow on an existing LAMMPS MD trajectory: loading a dump file, correcting chemical symbols, computing the neutron and x-ray structure factors S(Q) and partial pair distribution functions g(r) with `vitrum.scattering.Scattering`, coordination numbers and bond angle distributions with `vitrum.coordination.Coordination`, ring statistics with `vitrum.rings.RingAnalysis`, cavity analysis with `vitrum.voids.VoidAnalysis`, persistent homology with `vitrum.persistent_homology.PersistenceDiagram`, and generating a random packed structure with `vitrum.packing.get_random_packed`.
 
 Requires `md.lammpstrj`, which is included alongside the notebook in this folder.
 

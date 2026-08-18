@@ -1,7 +1,15 @@
 import numpy as np
+from ase import Atoms
+
+from vitrum.geometry import require_orthorhombic
 
 
-def get_high_low_displacement_index(initial_state, current_state, target_atom, percentage=0.25):
+def get_high_low_displacement_index(
+    initial_state: Atoms,
+    current_state: Atoms,
+    target_atom: str | int,
+    percentage: float = 0.25,
+) -> list[np.ndarray]:
     """
     Calculates the indices of the atoms with the high and low displacements between an initial and current state.
 
@@ -9,7 +17,8 @@ def get_high_low_displacement_index(initial_state, current_state, target_atom, p
         initial_state (Atoms): The initial state of the system.
         current_state (Atoms): The current state of the system.
         target_atom (str or int): The chemical symbol or atomic number of the target atom.
-        percentage (float, optional): The percentage of the highest and lowest displacements to consider. Defaults to 0.25.
+        percentage (float, optional): The percentage of the highest and lowest displacements to consider. Defaults to
+            0.25.
 
     Returns:
         list: A list of two elements, where the first element is the index of the atoms with the highest displacements
@@ -26,30 +35,38 @@ def get_high_low_displacement_index(initial_state, current_state, target_atom, p
     return [low_ind, high_ind]
 
 
-def unwrap_trajectory(atoms_list):
+def unwrap_trajectory(atoms_list: list[Atoms]) -> list[Atoms]:
     """
     Unwraps a list of Atoms objects to remove periodic boundary crossings.
+
+    Steps between frames are taken in fractional coordinates and converted back with the
+    current frame's cell, so a trajectory whose cell changes over time (NPT) unwraps
+    correctly: an atom held at fixed fractional coordinates does not move.
 
     Parameters:
         atoms_list (list of Atoms objects): The list of Atoms objects to unwrap.
 
     Returns:
         unwrapped_atoms_list (list of Atoms objects): The unwrapped list of Atoms objects.
+
+    Raises:
+        ValueError: If atoms_list is empty.
+        NotImplementedError: If any frame has a non-orthorhombic cell.
     """
 
     if not atoms_list or len(atoms_list) == 0:
         raise ValueError("The input atoms_list must be a non-empty list of ASE Atom objects.")
-    cell = np.diagonal(atoms_list[0].get_cell())
-    n_atoms = len(atoms_list[0])
     unwrapped_atoms_list = [atoms.copy() for atoms in atoms_list]
 
-    crossings = np.zeros((n_atoms, 3))
-    previous_positions = unwrapped_atoms_list[0].get_positions()
+    position = unwrapped_atoms_list[0].get_positions()
+    previous_fractional = unwrapped_atoms_list[0].get_scaled_positions(wrap=False)
     for atoms in unwrapped_atoms_list:
-        current_positions = atoms.get_positions()
-        difference = current_positions - previous_positions
-        crossings = crossings + np.floor_divide(difference + 0.5 * cell, cell).astype(int)
-        previous_positions = current_positions
-        new_positions = current_positions - cell * crossings
-        atoms.set_positions(new_positions)
+        cell = require_orthorhombic(atoms.get_cell(), "unwrap_trajectory")
+        fractional = atoms.get_scaled_positions(wrap=False)
+        # The shortest fractional step is the real one; a longer one crossed a boundary.
+        step = fractional - previous_fractional
+        step -= np.round(step)
+        position = position + step * cell
+        previous_fractional = fractional
+        atoms.set_positions(position)
     return unwrapped_atoms_list

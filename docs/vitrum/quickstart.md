@@ -27,6 +27,14 @@ atoms = get_random_packed(composition='SiO2', density=2.2, target_atoms=1000)
 
 The `composition` parameter can be used to specify the chemical composition of the structure. The `get_random_packed` function includes several parameters to tailor random structure generation according to your given needs.
 
+Atoms are placed by resolving hard-sphere overlaps, passing `charge_ordering=1.0` keeps like-charged ions apart, so anions end up between cations:
+
+```
+atoms = get_random_packed(composition='SiO2', density=2.2, target_atoms=1000, charge_ordering=1.0)
+```
+
+It is off by default, and has no effect on compositions with no charge-balanced oxidation states, such as metals and alloys.
+
 
 ## Scattering functions
 The `Scattering` class contains functions for calculating scattering functions of materials, as averaged over a list of Extended ASE Atoms objects.
@@ -101,7 +109,7 @@ from vitrum.io_helpers import get_LAMMPS_dump_timesteps
 timesteps = get_LAMMPS_dump_timesteps('md.lammpstrj')
 ```
 
-By default, `Diffusion` assumes the trajectory is PBC-wrapped and unwraps it internally before computing displacements. If you've already unwrapped it yourself (e.g. via `vitrum.trajectory.unwrap_trajectory`), pass `wrapped=False` to avoid unwrapping twice:
+By default, `Diffusion` assumes the trajectory is PBC-wrapped and unwraps it internally before computing displacements. If you've already unwrapped it yourself (e.g. via `vitrum.trajectory_tools.unwrap_trajectory`), pass `wrapped=False` to avoid unwrapping twice:
 
 ```
 diffusion_funcs = Diffusion(atoms, sample_times=timesteps, wrapped=False)

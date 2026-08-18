@@ -2,6 +2,18 @@ site_name: vitrum
 
 theme:
   name: "material"
+  logo: vitrum_light.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
 
 plugins:
   - search
@@ -11,11 +23,15 @@ plugins:
           paths: [src]
 
 markdown_extensions:
+  - admonition
   - pymdownx.arithmatex:
       generic: true
 
+extra_css:
+  - stylesheets/extra.css
+
 extra_javascript:
-  - javascripts/config.js
+  - javascript/config.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
@@ -25,12 +41,13 @@ nav:
     - Coordination: vitrum/coordination.md
     - Diffusion analysis: vitrum/dynamics.md
     - Ring analysis: vitrum/rings.md
+    - Void analysis: vitrum/voids.md
     - Persistent homology: vitrum/persistent_homology.md
     - Structure generation: vitrum/structure_gen.md
     - MLIP evaluation: vitrum/mlip_functions.md
     - BALACE: vitrum/balace.md
     - Utilities: vitrum/utilities.md
-    - Extended ASE Atoms: vitrum/glass_atoms.md
+    - Migrating from GlassAtoms: vitrum/glass_atoms.md
     - Known issues: vitrum/known_issues.md
 
 #    - FAQs: pacemaker/faq.md

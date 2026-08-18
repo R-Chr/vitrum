@@ -1,18 +1,22 @@
+from collections.abc import Sequence
 from itertools import product
 
 import numpy as np
+from ase import Atoms
+
+from vitrum.geometry import require_orthorhombic
 
 
 def homogeneity_checker(
-    atoms,
-    grid_density,
-    slide_steps=2,
-    target_species="all",
-    upper_bound=1.5,
-    lower_bound=0.5,
-    box_threshold=0.1,
-    separated_species_threshold=0.5,
-):
+    atoms: Atoms,
+    grid_density: Sequence[int],
+    slide_steps: int = 2,
+    target_species: str | list[str] = "all",
+    upper_bound: float = 1.5,
+    lower_bound: float = 0.5,
+    box_threshold: float = 0.1,
+    separated_species_threshold: float = 0.5,
+) -> bool:
     """
     Check the homogeneity of the atomic structure by analyzing atom density in grid boxes.
 
@@ -23,8 +27,10 @@ def homogeneity_checker(
         target_species (str or list, optional): Species to check. "all" checks all present species. Defaults to "all".
         upper_bound (float, optional): Multiplier for average density to consider a box over-dense. Defaults to 1.5.
         lower_bound (float, optional): Multiplier for average density to consider a box under-dense. Defaults to 0.5.
-        box_threshold (float, optional): Fraction of boxes allowed to be out of bounds before flagging a species. Defaults to 0.1.
-        separated_species_threshold (float, optional): Fraction of species allowed to be phase separated before the structure is flagged. Defaults to 0.5.
+        box_threshold (float, optional): Fraction of boxes allowed to be out of bounds before flagging a species.
+            Defaults to 0.1.
+        separated_species_threshold (float, optional): Fraction of species allowed to be phase separated before the
+            structure is flagged. Defaults to 0.5.
 
     Returns:
         bool: True if the structure is considered homogeneous, False otherwise.
@@ -32,13 +38,20 @@ def homogeneity_checker(
     Raises:
         ValueError: If no species are found in the atoms object.
     """
+    atoms = atoms.copy()
     atoms.wrap()
-    species = np.unique(atoms.get_chemical_symbols()) if target_species == "all" else [target_species]
+
+    if isinstance(target_species, str) and target_species == "all":
+        species = list(np.unique(atoms.get_chemical_symbols()))
+    elif isinstance(target_species, str):
+        species = [target_species]
+    else:
+        species = list(target_species)
 
     if len(species) == 0:
         raise ValueError("No species found in the atoms object.")
 
-    cell_lengths = np.array(atoms.get_cell()).diagonal()
+    cell_lengths = require_orthorhombic(atoms.get_cell(), "homogeneity_checker")
     num_boxes = np.prod(grid_density)
 
     x_edges = np.linspace(0, cell_lengths[0], grid_density[0] + 1)
@@ -49,6 +62,8 @@ def homogeneity_checker(
 
     phase_seperated_species = 0
 
+    checked_species = 0
+
     for spec in species:
         spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
         num_atoms = len(spec_atoms)
@@ -56,6 +71,7 @@ def homogeneity_checker(
 
         if avg_atoms_per_box < 2:
             continue
+        checked_species += 1
 
         positions = spec_atoms.get_positions()
 
@@ -74,13 +90,13 @@ def homogeneity_checker(
             y_idx = np.digitize(positions[:, 1], y_slide) - 1
             z_idx = np.digitize(positions[:, 2], z_slide) - 1
 
-            x_idx[x_idx == -1] = 2
-            y_idx[y_idx == -1] = 2
-            z_idx[z_idx == -1] = 2
+            # Atoms below the slid lower edge wrap into the last box by periodicity
+            x_idx[x_idx == -1] = grid_density[0] - 1
+            y_idx[y_idx == -1] = grid_density[1] - 1
+            z_idx[z_idx == -1] = grid_density[2] - 1
 
             counts = np.zeros(grid_density, dtype=int)
-            for xi, yi, zi in zip(x_idx, y_idx, z_idx):
-                counts[xi, yi, zi] += 1
+            np.add.at(counts, (x_idx, y_idx, z_idx), 1)
 
             too_low = counts < avg_atoms_per_box * lower_bound
             too_high = counts > avg_atoms_per_box * upper_bound
@@ -89,13 +105,12 @@ def homogeneity_checker(
         if np.sum(out_of_bounds_boxes) > num_boxes * slide_steps**3 * box_threshold:
             phase_seperated_species += 1
 
-    if phase_seperated_species > separated_species_threshold * len(species):
-        return False
-    else:
+    if checked_species == 0:
         return True
+    return phase_seperated_species <= separated_species_threshold * checked_species
 
 
-def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
+def dimer_checker(atoms: Atoms, bond_length: float = 2.0, num_allowed: int = 2) -> bool:
     """
     Check for the presence of dimers (e.g., O2, N2, F2, Cl2, Br2, I2) in the structure.
 
@@ -107,18 +122,20 @@ def dimer_checker(atoms, bond_length=2.0, num_allowed=2):
     Returns:
         bool: True if the number of dimers exceeds `num_allowed`, False otherwise.
     """
+    atoms = atoms.copy()
     atoms.wrap()
-    species = ["O", "N", "F", "Cl", "Br", "I"]
-    for spec in species:
-        if spec not in atoms.get_chemical_symbols():
+    symbols = np.array(atoms.get_chemical_symbols())
+    for spec in ["O", "N", "F", "Cl", "Br", "I"]:
+        if spec not in symbols:
             continue
-        spec_atoms = atoms[np.array(atoms.get_chemical_symbols()) == spec]
+        spec_atoms = atoms[symbols == spec]
         if len(spec_atoms) < 2:
             continue
-        spec_positions = spec_atoms.get_positions()
-        distances = np.linalg.norm(spec_positions[:, np.newaxis] - spec_positions, axis=-1)
+
+        distances = spec_atoms.get_all_distances(mic=True)
         np.fill_diagonal(distances, np.inf)  # Ignore self-distances
-        num_dimers = np.sum(distances < bond_length)
+
+        num_dimers = int(np.sum(distances < bond_length) // 2)
         if num_dimers > num_allowed:  # Adjust threshold as needed
             return True
     return False

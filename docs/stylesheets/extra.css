@@ -1,0 +1,17 @@
+/* The vitrum wordmark is wide; keep its aspect ratio in the header. */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  width: auto;
+  height: 1.4rem;
+}
+
+/* Hero logo on the landing page. */
+.vitrum-hero {
+  margin: 1.5rem 0 2.5rem;
+  text-align: center;
+}
+
+.vitrum-hero img {
+  width: 100%;
+  max-width: 26rem;
+}

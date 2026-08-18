@@ -1,35 +1,36 @@
+import os
+import uuid
+
+from vitrum.batch_active.database import update_ace_database
+from vitrum.batch_active.get_structures import (
+    get_atoms_from_wfs,
+    get_structures_from_lammps,
+    get_wflow_id_from_run_uuid,
+)
 from vitrum.batch_active.input_writer import lammps_input_writer
 from vitrum.batch_active.structure_gen import gen_even_structures, gen_lammps_structures
 from vitrum.batch_active.workflow import (
     high_temp_run,
-    static_run,
-    train_pace,
-    train_grace,
-    run_lammps,
     rerun_crashed_jobs,
+    run_lammps,
+    static_run,
+    train_grace,
+    train_pace,
 )
-from vitrum.batch_active.database import update_ace_database
-from vitrum.batch_active.get_structures import (
-    get_atoms_from_wfs,
-    get_wflow_id_from_run_uuid,
-    get_structures_from_lammps,
-)
-
 from vitrum.structure_gen import gen_random_glasses
-import uuid
-import os
+
 try:
     from fireworks import LaunchPad
-    from fireworks.utilities.fw_serializers import load_object_from_file
-    from fireworks.queue.queue_launcher import rapidfire
     from fireworks.core.fworker import FWorker
+    from fireworks.queue.queue_launcher import rapidfire
+    from fireworks.utilities.fw_serializers import load_object_from_file
 except ImportError:
     raise ImportError("fireworks is required for the balace class. Please install vitrum[batch_active].")
-    
-from pymatgen.core import Composition
+
+import pickle
 
 import yaml
-import pickle
+from pymatgen.core import Composition
 
 
 class balace:
@@ -88,7 +89,7 @@ class balace:
         if not os.path.isfile(self.config_file):
             raise FileNotFoundError(f"Config file {self.config_file} not found.")
 
-        with open(self.config_file, "r") as file:
+        with open(self.config_file) as file:
             self.config = yaml.safe_load(file)
 
         # Apply config values as attributes
@@ -178,7 +179,7 @@ class balace:
     def generate_structures(self):
         if self.struc_gen_params["scheme"] == "even":
             structures = gen_even_structures(
-                units=self.self.struc_gen_params["units"],
+                units=self.struc_gen_params["units"],
                 target_atoms=self.struc_gen_params["target_atoms"],
                 **self.composition_params,
             )
@@ -275,12 +276,6 @@ class balace:
         - Trains the ACE model using the current database of structures.
         - Runs LAMMPS simulations with the current ACE potential to generate new structures.
         - Evaluates the new structures with VASP static calculations.
-
-        Parameters:
-            None
-
-        Returns:
-            None
         """
         print(f"Current state: {self.state}, Iteration: {self.iteration}")
 
