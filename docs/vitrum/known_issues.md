@@ -1,9 +1,9 @@
-# Known Issues
+# Known issues
 
 This page tracks confirmed correctness bugs and unimplemented code paths that
 have not yet been fixed.
 
-## `PersistenceDiagram` — the filtration is not periodic
+## The `PersistenceDiagram` filtration is not periodic
 
 `PersistenceDiagram.calculate` passes the atom positions to the weighted alpha-shape
 construction as a finite point cloud. It uses no periodic images and no cell
@@ -27,21 +27,21 @@ routines. Positions need not be wrapped into the cell.
 
 The following are **not** subject to this restriction:
 
-- **Distances** — `vitrum.geometry.distance_matrix` takes any cell as of 1.1.0.
-- **`Scattering`** — its cell-list PDF backend works on a general cell. `rrange` is bounded by
+- **Distances.** `vitrum.geometry.distance_matrix` takes any cell as of 1.1.0.
+- **`Scattering`.** Its cell-list PDF backend works on a general cell. `rrange` is bounded by
   the perpendicular cell widths rather than the cell lengths, which is the correct
   minimum-image limit. `Scattering` does require a cell periodic along all three axes as of
   1.1.0.
-- **Ring metrics** — `Ring` unwraps bond by bond with `ase.geometry.find_mic` and wraps its
+- **Ring metrics.** `Ring` unwraps bond by bond with `ase.geometry.find_mic` and wraps its
   centre through the cell's own fractional coordinates, both of which take a general cell.
-- **`Coordination`**, the underlying `vitrum.bonds.Bonds`/`_Frame`, and `find_rings`/
-  `RingAnalysis.calculate` given an explicit `cutoff` — their bond graph is built entirely
+- **Bond graphs.** `Coordination`, the underlying `vitrum.bonds.Bonds`/`_Frame`, and `find_rings`/
+  `RingAnalysis.calculate` given an explicit `cutoff` build their bond graph entirely
   with `ase.neighborlist.neighbor_list`, which takes a general cell matrix, so
   `cutoff="Auto"` and every other cutoff spelling work on a triclinic cell. `find_rings`'s
   covalent-radii default (`cutoff=None`) was never subject to this restriction in the first
-  place — it already built its graph from a general cell matrix.
+  place. It already built its graph from a general cell matrix.
 
-## `Diffusion` — limitations
+## `Diffusion` limitations
 
 Not bugs, but the estimator is less careful than the rest of the package and the
 module has no test coverage beyond its input guards.
@@ -54,11 +54,11 @@ module has no test coverage beyond its input guards.
   window, so time origins never overlap.
 
 
-## `batch_active` — stale and largely untested
+## `batch_active` is stale and largely untested
 
 The `vitrum.batch_active` module drives VASP/LAMMPS active-learning workflows
 through FireWorks. It requires external services that are not covered by the
-test suite, and it is known to be broken in several places: Treat this module as unsupported. 
+test suite, and it is broken in several places. Treat it as unsupported.
 
 - `balace.run_train_pace()` raises `TypeError`. It calls `train_pace(self)`,
   which then does `**pace_kwargs` with `pace_kwargs=None`.
@@ -67,11 +67,11 @@ test suite, and it is known to be broken in several places: Treat this module as
   (`learning.py`, `run_train_pace`).
 - `train_grace` returns `None`, but `run_train_grace` assigns the result to
   `directory` and appends it to `self.runs["potential"]`. Grace training is not
-  automated — the function only creates a directory and prints instructions to
+  automated. The function only creates a directory and prints instructions to
   place a trained model there by hand.
 - `train_pace` and `train_grace` are module-level functions that still take
   `self` as their first parameter; they were lifted out of a class and never
   adapted.
-- `load_config` applies arbitrary YAML keys to the instance with `setattr`, so
-  the attribute surface of `balace` cannot be determined statically.
+- `load_config` applies arbitrary YAML keys to the instance with `setattr`, so you
+  cannot tell which attributes a `balace` object has without running it.
 

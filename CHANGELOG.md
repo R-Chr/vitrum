@@ -25,10 +25,10 @@ should be recomputed.**
   loose functions around it. Diagrams for dimensions 1 and 2, the atoms making up a cycle,
   diagram composition, accumulated persistence, size-persistence histograms and persistence
   images, each with a plot method.
-- Ring topology metrics on `Ring` — `area()`, `eccentricity()`, `planeness()` and
+- Ring topology metrics on `Ring`: `area()`, `eccentricity()`, `planeness()` and
   `ellipse_eccentricity()`.
-- **`GlassGenerator` and `Compositions`**, for sampling glass compositions across a system —
-  on a grid, at random or stochastically, charge-balanced, with the subsystems enumerated —
+- **`GlassGenerator` and `Compositions`**, for sampling glass compositions across a system,
+  on a grid, at random or stochastically, charge-balanced, with the subsystems enumerated,
   and turning them into packed structures via `get_structures`.
 - **`vitrum.visualization.StructureRenderer`**, rendering `ase.Atoms` to static images or
   Jupyter widgets through OVITO. Needs the `visualization` extra.
@@ -55,13 +55,13 @@ should be recomputed.**
   entry per frame holding raw per-centre-atom values instead of the trajectory-wide summary.
 - **Per-bond cutoffs, `cutoff={("Si", "O"): 1.6, ("B", "O"): 1.4}`**, in every method that
   takes a cutoff. `{"O": 1.6}` remains as shorthand, key order is irrelevant, and `"Auto"`
-  resolves each bond separately — so `get_bridging_analysis` judges each network former at its
+  resolves each bond separately, so `get_bridging_analysis` judges each network former at its
   own cutoff rather than measuring B-O against the Si-O bond length.
 - `find_rings` and `RingAnalysis.calculate` accept `cutoff`, building the bond graph from a
   distance instead of covalent radii. `cutoff=None` (the default) keeps the previous behaviour.
 - `sin_normalised=True` on `get_angle_distribution`, for the P(theta)/sin(theta) convention.
 - `vitrum.geometry.peak_metrics`: position, FWHM and height of the first peak of a tabulated
-  function — bond length from a partial g(r), first sharp diffraction peak from S(Q). An
+  function: bond length from a partial g(r), first sharp diffraction peak from S(Q). An
   optional `window` restricts the search.
 - `vitrum.geometry.distance_matrix` and `vitrum.geometry.partial_pdf`.
 - A `pytest` suite under `tests/`, checked against independent references. Install with
@@ -70,7 +70,7 @@ should be recomputed.**
   visible to `mypy`, `pyright` and editors in downstream projects. They were silently ignored
   before, because an installed distribution without the marker is treated as untyped.
 - **The public API is now fully annotated**, and CI enforces it with `mypy` under
-  `disallow_untyped_defs` and `disallow_incomplete_defs` — the marker above would otherwise
+  `disallow_untyped_defs` and `disallow_incomplete_defs`. The marker above would otherwise
   promise type information the package did not have. Every function outside the unsupported
   `vitrum.batch_active` carries argument and return annotations.
 - Community documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and issue
@@ -129,9 +129,9 @@ Each of the following changes the numbers the package returns.
 - **`vitrum.trajectory` is now `vitrum.trajectory_tools`**, so that the module is not confused
   with a trajectory object. `unwrap_trajectory` and `get_high_low_displacement_index` are
   unchanged; only the import path moves.
-- The routines that still apply the minimum image convention with the cell lengths alone —
-  `trajectory_tools.unwrap_trajectory`, `voids.build_void_grid` and `VoidAnalysis`, and
-  `structure_validation.homogeneity_checker` — raise `NotImplementedError` on a triclinic cell
+- The routines that still apply the minimum image convention with the cell lengths alone,
+  namely `trajectory_tools.unwrap_trajectory`, `voids.build_void_grid` and `VoidAnalysis`, and
+  `structure_validation.homogeneity_checker`, raise `NotImplementedError` on a triclinic cell
   rather than returning wrong numbers, through the shared
   `vitrum.geometry.require_orthorhombic` guard. See [Known
   issues](docs/vitrum/known_issues.md).
@@ -157,8 +157,8 @@ Each of the following changes the numbers the package returns.
   otherwise. The minimum image convention is applied unconditionally, so a free surface was
   silently folded in rather than left alone.
 - **`vitrum.geometry.get_dist_numba`**, the orthorhombic-only distance kernel.
-  `get_dist_numba_triclinic` covers it at the same cost — a perpendicular cell needs no image
-  search — and `distance_matrix` now takes that one path.
+  `get_dist_numba_triclinic` covers it at the same cost, since a perpendicular cell needs no image
+  search, and `distance_matrix` now takes that one path.
 - **A cutoff can no longer be given as a bare list** such as `cutoff=[1.6, 2.4]`; pass a number
   or a dict keyed by bond or by neighbour species. It follows that the two arms of a
   same-species angle always share one cutoff.
@@ -199,7 +199,7 @@ Each of the following changes the numbers the package returns.
 
 ### Fixed
 
-**Ring analysis** — every ring count and size distribution produced before this release
+**Ring analysis.** Every ring count and size distribution produced before this release
 changes.
 
 - All three criteria are defined over every shortest path, but the implementations kept only
@@ -242,7 +242,7 @@ changes.
 - `homogeneity_checker` used an index hardcoded for a 3x3x3 grid, and `dimer_checker` ignored
   periodic boundaries. Both also wrapped the caller's atoms in place, and now copy first.
 
-**Packaging** — the package did not import on a clean install: `structure_gen` → `packing`
+**Packaging.** The package did not import on a clean install: `structure_gen` → `packing`
 imported the optional `atomate2` and `mp_api` at module scope. Both are now deferred and report
 the missing extra by name. `tqdm` and `numpy>=2.0` are declared as dependencies.
 

@@ -10,13 +10,13 @@
 
 Automated framework for parameterizing interatomic potential using ACE for disordered material systems.
 
-## Overview:
+## Overview
 ![flowdiagram](flowdiagram.png)
 
-## Requirements:
+## Requirements
 
 ### LAMMPS
-A Lammps installation with the ML-PACE package. See (https://docs.lammps.org/Build_extras.html#ml-pace) for futher instructions.
+A Lammps installation with the ML-PACE package. See the [LAMMPS build instructions](https://docs.lammps.org/Build_extras.html#ml-pace).
 
 ### VASP
 A VASP installation is needed to run AIMD and single-point calculations. In our development we used version 6.4.3, but other version should be compatible. The VASP installation should be setup to work with Fireworks.
@@ -25,7 +25,7 @@ A VASP installation is needed to run AIMD and single-point calculations. In our 
 A  FireWorks launchpad attached to a MongoDB is needed for the framework to manage various jobs that will run. Large scale storage in the MongoDB is not currently necessary as the framework uses local files on the system to extract structures from OUTCARS and dumpfiles for building the training data sets etc. A free MongoDB Atlas database can be used as described here (https://www.mongodb.com/products/platform/atlas-database)
 
 ### Pacemaker
-To use the framework pacemaker is needed to parameterize ACE potentials, which needs to be installed in the the following way:
+To use the framework pacemaker is needed to parameterize ACE potentials, which is installed as follows:
 
 #### Installation of tensorpotential
 tensorpotential allows for the GPU accelerated optimization of the ACE potential using TensorFlow. However, it is recommended to use it even if you don't have a GPU available.

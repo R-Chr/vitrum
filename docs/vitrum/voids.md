@@ -2,7 +2,7 @@
 
 The voids module contains functions for calculating free volume and discrete cavities ("voids") in an `Atoms` object, using a grid/probe-accessible-volume approach: a fine 3D grid is overlaid on the simulation cell, each grid point is classified as occupied or free based on its distance to the nearest atom's exclusion radius, and contiguous free grid points are clustered into discrete cavities with a periodic-boundary-aware merge step.
 
-`VoidAnalysis` currently requires an **orthorhombic** simulation cell — a tilted/triclinic cell will raise a `ValueError`.
+`VoidAnalysis` currently requires an **orthorhombic** simulation cell. A tilted or triclinic cell raises `ValueError`.
 
 Included functionality:
 - Free volume fraction of the cell
@@ -11,7 +11,7 @@ Included functionality:
 - Export of cavity centers as dummy pseudo-atoms for visualization alongside the structure
 - Interactive 3D visualization of the void space (as a marching-cubes isosurface) together with the atoms, via `plot_3d` (requires the optional `plotly`/`scikit-image` dependencies, see [Installation](install.md))
 
-## Example usage:
+## Example usage
 
 ```python
 from vitrum.voids import VoidAnalysis

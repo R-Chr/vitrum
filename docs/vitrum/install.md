@@ -1,7 +1,7 @@
-## ⚙️ Installation
+## Installation
 
-### (optional) Creating a conda environment
-It is common practice creating a separate conda environment to avoid dependencies mixing. You can create the new environment named vitrum with minimal amount of required packages with the following command:
+### (optional) A conda environment
+A separate environment keeps vitrum's dependencies out of the way of everything else:
 ```
 conda create -n vitrum python=3.11
 conda activate vitrum
@@ -37,28 +37,29 @@ Note that matscipy is LGPL-2.1 licensed, while `vitrum` itself is MIT. Installin
 importing it alongside `vitrum` is fine, but it is opt-in rather than a core dependency so
 that a plain `pip install vitrum` stays permissively licensed throughout.
 
-### (optional) To install dependencies for batch_active (BALACE framework):
+### (optional) batch_active (the BALACE framework)
 ```
 pip install "vitrum[workflows]"
 ```
-This pulls in `vitrum[workflows]` (FireWorks, jobflow, atomate2) plus the YAML and
-scikit-learn packages `batch_active` needs on top of them. Note that
-`batch_active` is unsupported — see [Known issues](known_issues.md).
+This pulls in FireWorks, jobflow and atomate2, plus the YAML and scikit-learn packages
+`batch_active` needs on top of them. Note that `batch_active` is unsupported, see
+[Known issues](known_issues.md).
 
-### (optional) To install dependencies for Materials Project volume/composition lookups:
+### (optional) Materials Project volume lookups
 ```
 pip install "vitrum[volume_estimation]"
 ```
-This is required for `vitrum.volume_estimation` (used internally by `get_random_packed`'s `"mp"`/`"icsd"`/`"convex_hull"` volume sources).
+`vitrum.volume_estimation` needs this for its `"mp"`, `"icsd"` and `"convex_hull"` volume
+sources, which `get_random_packed` calls into.
 
 ### (optional) Dionysus and Diode
-For persistent homology analsysis these packages are required.
+Persistent homology needs both of these.
 ```
 pip install "vitrum[persistent_homology]"
 pip install git+https://github.com/mrzv/diode.git
 ```
 
-DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. For DioDe to work [CGAL](http://www.cgal.org/) is required (Only important for persistent homology).
+DioDe uses [CGAL](http://www.cgal.org/) to generate alpha shapes filtrations in a format that Dionysus understands. DioDe therefore needs CGAL installed as well.
 
 ### (optional) Plotly and OVITO
 For the interactive 3D void visualization, `VoidAnalysis.plot_3d` and rendering structure images/widgets via `vitrum.visualization.StructureRenderer` (uses [OVITO](https://www.ovito.org/) for Tachyon rendering):

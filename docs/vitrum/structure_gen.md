@@ -12,12 +12,12 @@ its `get_structures()` method to pack the ones you want.
 ## Chemical system modes
 
 A generator works in one of two modes, chosen by how you describe the system.
-There are no built-in chemistry defaults — you must specify the system explicitly:
+There are no built-in chemistry defaults, so you have to name the system explicitly:
 
-- **Unit mode** — pass `units` (a list of oxide/component formulas). Samples are
+- **Unit mode.** Pass `units`, a list of oxide or component formulas. Samples are
   mole fractions per unit. Schemes: `"sobol"`, `"lhs"`, `"random"` (stochastic
   simplex sampling) and `"grid"` (regular composition grid).
-- **Elemental mode** — pass `elements`, a dict grouping element symbols by role
+- **Elemental mode.** Pass `elements`, a dict grouping element symbols by role
   (`"formers"` / `"modifiers"` / `"anions"`). Samples are charge-neutral atomic
   fractions. Scheme: `"random"`.
 
@@ -43,7 +43,7 @@ comps = gen.sample("lhs", n=200)   # Compositions wrapping a DataFrame (comps.df
 structures = comps.get_structures(target_atoms=100, density=2.5)
 ```
 
-Regular composition grid (`"grid"`, exhaustive — `n` is ignored):
+Regular composition grid (`"grid"`, exhaustive, so `n` is ignored):
 
 ```python
 gen = GlassGenerator(units=["SiO2", "Na2O"])

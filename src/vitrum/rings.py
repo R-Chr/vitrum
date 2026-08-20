@@ -451,8 +451,8 @@ def find_rings(
         repeat (Optional[Tuple[int, int, int]]): How often to repeat the unit cell in each
             direction. Increase for small cells. Defaults to (1, 1, 1), except for
             `criterion="primitive"` on a periodic cell, where it defaults to (3, 3, 3)
-            because a single cell cannot represent every primitive ring — the same
-            replication R.I.N.G.S. applies for this criterion.
+            because a single cell cannot represent every primitive ring. R.I.N.G.S. applies
+            the same replication for this criterion.
         bonds (Optional[List[Tuple[str, str]]]): List of allowed bonds, e.g., [('C', 'C'), ('C', 'O')], can be None to
             allow all bonds.
             This filters which bonds enter the graph; it is not R.I.N.G.S.'s ABAB option,

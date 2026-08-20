@@ -16,7 +16,7 @@ Included functions for ring objects:
 - Roughness
 - Radius of gyration
 
-## Example usage:
+## Example usage
 
 ```python
 from vitrum.rings import RingAnalysis
@@ -29,10 +29,10 @@ sizes = ring_funcs.get_ring_size_distribution()
 ## Deciding a bond: covalent radii, or an explicit cutoff
 
 By default the bond graph comes from covalent radii scaled by `radii_factor`, as above. Pass
-`cutoff` to build it from a distance instead, in the same grammar `Coordination` uses —
+`cutoff` to build it from a distance instead, in the same grammar `Coordination` uses:
 `"Auto"`, a number, or a dict keyed by species pair (`{("Si", "O"): 1.9}`) or by a single
-species as shorthand — resolved once against `bonding_dict`, or every species pair in the
-structure if `bonding_dict` is None:
+species as shorthand. It is resolved once against `bonding_dict`, or against every species
+pair in the structure if `bonding_dict` is None:
 
 ```python
 rings = ring_funcs.calculate(criterion="guttman", cutoff={("Si", "O"): 1.9})

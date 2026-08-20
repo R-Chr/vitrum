@@ -26,7 +26,7 @@ coord.get_bonds("Si", "O", cutoffs)
 
 An `"Auto"` cutoff is resolved **once, from one frame**, and then applied to every frame, so it cannot drift along a trajectory and every method agrees on the same value. That frame is the first by default.
 
-## Example usage:
+## Example usage
 
 ```python
 from vitrum.coordination import Coordination
@@ -52,7 +52,7 @@ neighbors = coord.get_neighbors("Si", cutoff={"O": 2.0, "Na": 3.0})
 
 ### Mixed-former Q^n analysis
 
-`get_bridging_analysis` measures two kinds of bond — centre-bridge, which sets `n`, and former-bridge, which decides whether a bridge atom bridges. In a mixed-former glass these have different lengths, so name them separately:
+`get_bridging_analysis` measures two kinds of bond. Centre-bridge sets `n`, and former-bridge decides whether a bridge atom counts as a bridge. In a mixed-former glass these have different lengths, so name them separately:
 
 ```python
 coord.get_bridging_analysis(
@@ -81,9 +81,9 @@ o_speciation.get(1, 0.0)                                    # the NBO fraction
 
 `network_connectivity` is the mean of any of these distributions, so it also turns a coordination-number distribution into an average coordination number.
 
-## The primitive underneath: `Bonds`
+## Every method is a reduction of `Bonds`
 
-Every method above is a reduction of one object — which atoms of a centre selection lie within a cutoff of which atoms of a neighbour selection. `get_bonds` exposes it, so quantities the package does not ship can be derived without reaching into internals.
+Every method above is a reduction of one object: which atoms of a centre selection lie within a cutoff of which atoms of a neighbour selection. `get_bonds` exposes it, so quantities the package does not ship can be derived without reaching into internals.
 
 ```python
 from vitrum import Bonds  # noqa: F401  - returned by get_bonds
@@ -97,9 +97,9 @@ bonds.lengths(frame)  # length of every bond, for polyhedral distortion metrics
 bonds.select_neighs(bonds.degrees() >= 2)           # keep only bridging oxygens
 ```
 
-`centers` and `neighs` hold global atom indices, so `atoms[bonds.neighs[0]]` is a real atom. Either selection may name several species: `coord.get_bonds(["Si", "B"], "O", cutoff=1.8)` is how `get_bridging_analysis` treats a mixed-former glass. One `Bonds` holds one cutoff, so a multi-species selection has to resolve to a single value — a dict that gives Si-O and B-O different cutoffs, or an `"Auto"` that would, is rejected rather than measured at whichever came first. Call `get_bonds` once per bond there.
+`centers` and `neighs` hold global atom indices, so `atoms[bonds.neighs[0]]` is a real atom. Either selection may name several species: `coord.get_bonds(["Si", "B"], "O", cutoff=1.8)` is how `get_bridging_analysis` treats a mixed-former glass. One `Bonds` holds one cutoff, so a multi-species selection has to resolve to a single value. A dict that gives Si-O and B-O different cutoffs, or an `"Auto"` that would, is rejected rather than measured at whichever came first. Call `get_bonds` once per bond there.
 
-Bonds are stored as an edge list rather than an N x N matrix, and found with `ase.neighborlist.neighbor_list`, so cost scales with the number of bonds rather than with the square of the system size, and any cell shape works — including triclinic ones, unlike most of the rest of the package (see [Known issues](known_issues.md)).
+Bonds are stored as an edge list rather than an N x N matrix, and found with `ase.neighborlist.neighbor_list`, so cost scales with the number of bonds rather than with the square of the system size, and any cell shape works, including triclinic ones, unlike most of the rest of the package (see [Known issues](known_issues.md)).
 
 ::: vitrum.bonds
 

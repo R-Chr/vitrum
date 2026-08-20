@@ -1,12 +1,12 @@
-# Utility functions:
+# Utility functions
 
 This is an overview of various miscellaneous utility functions, useful for different purposes when doing calculations with vitrum. These used to live together in a single `vitrum.utility` module, which has since been split into focused modules.
 
 ## Geometry
 
-Low-level distance/PDF helpers shared by the analysis classes — useful directly when you
-want one quantity without constructing a class, or when you have raw distances rather than
-a full `Atoms` object.
+Low-level distance and PDF helpers shared by the analysis classes. Call them directly when
+you want one quantity without constructing a class, or when you have raw distances rather
+than a full `Atoms` object.
 
 ```python
 from vitrum.geometry import distance_matrix, partial_pdf, pdf, find_min_after_peak, radial_bins

@@ -1,15 +1,15 @@
-Several examples on the usage of the vitrum package can be found the the `examples` folder on the vitrum github
+More worked examples live in the `examples` folder of the [vitrum repository](https://github.com/R-Chr/vitrum/tree/main/examples).
 
 ## Atomic structures
 ### Reading in atomic structures
-Using many of the vitrum classes requires having the atomic structure of a material. For this we use the ASE atoms object. The atomic structures outputed from a simulation, here conducted in LAMMPS can be read from a dump file using the following line:
+Most vitrum classes take an ASE `Atoms` object, or a list of them for a trajectory. A trajectory written by LAMMPS reads in from its dump file:
 
 ```
 from ase.io import read
 atoms = read("md.lammpstrj", index=":" , format="lammps-dump-text")
 ```
 
-Often the chemical symbols of the atoms in the atoms object are not the same as the chemical symbols used in the simulation. This can be corrected using the `correct_atom_types` function. For example, if the chemical symbols used in the simulation are ['Na', 'O', 'Si'], the following line can be used to correct the symbols:
+A dump file carries numeric atom types rather than chemical symbols, so the symbols ASE guesses are usually wrong. `correct_atom_types` maps them back. For types 1, 2 and 3 standing for Na, O and Si:
 
 ```
 from vitrum.io_helpers import correct_atom_types
@@ -18,14 +18,14 @@ correct_atom_types(atoms, corr_atoms_dic)
 ```
 
 ### Generating random structures
-The `get_random_packed` function can be used to generate random structures. For example, to generate a random structure with 1000 atoms, the following line can be used:
+`get_random_packed` builds a random structure of a given composition and density. For 1000 atoms of SiO2:
 
 ```
 from vitrum.packing import get_random_packed
 atoms = get_random_packed(composition='SiO2', density=2.2, target_atoms=1000)
 ```
 
-The `composition` parameter can be used to specify the chemical composition of the structure. The `get_random_packed` function includes several parameters to tailor random structure generation according to your given needs.
+It takes several more parameters to shape the packing, see [Utilities](utilities.md).
 
 Atoms are placed by resolving hard-sphere overlaps, passing `charge_ordering=1.0` keeps like-charged ions apart, so anions end up between cations:
 
@@ -44,7 +44,7 @@ from vitrum.scattering import Scattering
 scattering_funcs = Scattering(atoms)
 ```
 
-To calculate the total neutron radial distribution function of a material, the following line can be used:
+The total neutron radial distribution function:
 
 ```
 G_r = scattering_funcs.get_total_rdf(type="neutron")
@@ -59,13 +59,13 @@ from vitrum.coordination import Coordination
 coord_funcs = Coordination(atoms)
 ```
 
-To calculate the Si-O bond angle distribution, the following line can be used:
+The O-Si-O bond angle distribution, Si being the centre atom:
 
 ```
 angles, dist = coord_funcs.get_angle_distribution("Si", "O", cutoff=2)
 ```
 
-To calculate the coordination number distribution of O around Si, the following line can be used:
+The coordination number distribution of O around Si:
 
 ```
 coordination_numbers = coord_funcs.get_coordination_numbers("Si", "O")
@@ -81,7 +81,7 @@ ring_funcs = RingAnalysis(atoms[0], included_atoms=["Si", "O"], bonding_dict=[("
 rings = ring_funcs.calculate()
 ```
 
-To get the distribution of ring sizes, the following line can be used:
+The distribution of ring sizes:
 
 ```
 sizes = ring_funcs.get_ring_size_distribution()
@@ -96,13 +96,13 @@ from vitrum.diffusion import Diffusion
 diffusion_funcs = Diffusion(atoms, sample_times = timesteps)
 ```
 
-To calculate the mean squared displacement of a material, the following line can be used:
+The mean squared displacement:
 
 ```
 msd = diffusion_funcs.get_mean_square_displacements()
 ```
 
-To get the timesteps at which the mean squared displacement was calculated, one of the utility functions can be used:
+The timesteps those displacements belong to come from a utility function:
 
 ```
 from vitrum.io_helpers import get_LAMMPS_dump_timesteps

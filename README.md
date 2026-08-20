@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/vitrum_light.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/vitrum.png">
-    <img alt="vitrum — glass structure analysis" src="docs/vitrum.png" width="520">
+    <img alt="vitrum, glass structure analysis" src="docs/vitrum.png" width="520">
   </picture>
 </p>
 
@@ -12,13 +12,13 @@
   <a href="https://pypi.org/project/vitrum/"><img alt="PyPI" src="https://img.shields.io/pypi/v/vitrum.svg?style=flat"></a>
 </p>
 
-**vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a comprehensive suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
+**vitrum** reads a glass structure or an MD trajectory and returns the numbers usually quoted from one: RDFs and structure factors, coordination numbers and Q^n speciation, ring and void statistics, persistence diagrams, diffusion coefficients. It also builds the structures in the first place, by random packing or by sampling a composition space.
 
 ## 🚧 Active development
-vitrum is under active development. Before 2.0, a minor release may still remove or rename API that turned out to be wrong — every such change is listed in the [changelog](CHANGELOG.md), and anything scheduled for removal is deprecated with a warning naming its replacement first where practical. From 2.0 onwards the public API follows [semantic versioning](https://semver.org/).
+vitrum is under active development. Before 2.0, a minor release may still remove or rename API that turned out to be wrong. Every such change is listed in the [changelog](CHANGELOG.md), and anything scheduled for removal is deprecated with a warning naming its replacement first where practical. From 2.0 onwards the public API follows [semantic versioning](https://semver.org/).
 
 ## 📖 Documentation
-Please see the `docs` folder for detailed documentation or check the [online documentation](https://vitrum.readthedocs.io/en/latest/).
+The `docs` folder holds the sources. The built site is at [vitrum.readthedocs.io](https://vitrum.readthedocs.io/en/latest/).
 
 ## 📦 Installation
 
@@ -43,22 +43,19 @@ pip install -e .
 ```
 
 ## 🚀 Examples
-See the [`examples`](examples/) folder for runnable Jupyter notebooks demonstrating scattering/RDF analysis, Qn speciation, and random structure generation, among others.
+The [`examples`](examples/) folder holds runnable notebooks: scattering and RDF analysis, Q^n speciation, random structure generation, and more.
 
-## 🎯 Scope and Functionality
+## 🎯 What it computes
 
-`vitrum` offers:
+### Structure
+*   Partial and total radial distribution functions and structure factors $S(q)$, weighted for neutron or X-ray scattering (`vitrum.scattering`).
+*   Ring size distributions and per-ring topology metrics in network glasses (`vitrum.rings`).
+*   Free volume fraction and discrete cavity sizes, from a probe-accessible grid (`vitrum.voids`).
+*   Persistence diagrams, for medium-range order and topological features (`vitrum.persistent_homology`).
+*   Bond angle distributions, coordination numbers and Q^n speciation (`vitrum.coordination`).
 
-### 1. Structural Characterization
-*   **Scattering Functions**: Calculate partial and total Radial Distribution Functions (RDF) and Structure Factors ($S(q)$) for both Neutron and X-ray scattering (`vitrum.scattering`).
-*   **Ring Analysis**: Analyze ring size distributions and statistics in network glasses (`vitrum.rings`).
-*   **Void/Cavity Analysis**: Quantify free volume fraction and discrete cavity size distributions via a grid/probe-accessible-volume method (`vitrum.voids`).
-*   **Topological Analysis**: Compute persistent homology to identify medium-range order and topological features (`vitrum.persistent_homology`).
-*   **Coordination & Angles**: Analyze bond angle distributions and coordination environments (`vitrum.coordination`).
-
-### 2. Dynamics & Diffusion
-*   **Diffusion Analysis**: Calculate Mean Squared Displacement (MSD), diffusion coefficients, and Van Hove correlation functions (`vitrum.diffusion`).
-
+### Dynamics
+*   Mean squared displacement, diffusion coefficients and Van Hove correlation functions (`vitrum.diffusion`).
 
 
 ## 📑 Citation
@@ -77,7 +74,7 @@ go through [SECURITY.md](SECURITY.md) rather than the public issue tracker.
 Rasmus Christensen (rasmus.christensen.a1@tohoku.ac.jp)
 
 ## ⭐ Acknowledgements
-`vitrum` relies on several powerful open-source packages:
+`vitrum` builds on:
 *   [ASE](https://wiki.fysik.dtu.dk/ase/)
 *   [Pymatgen](https://pymatgen.org/)
 *   [NumPy](https://numpy.org/) / [SciPy](https://scipy.org/) / [pandas](https://pandas.pydata.org/)

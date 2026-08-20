@@ -528,7 +528,7 @@ class VoidAnalysis:
         adapted here for a binary occupancy grid instead of a continuous
         probability density.
 
-        Requires the optional `plotly` and `scikit-image` dependencies — see
+        Requires the optional `plotly` and `scikit-image` dependencies, see the
         Installation docs.
 
         Args:

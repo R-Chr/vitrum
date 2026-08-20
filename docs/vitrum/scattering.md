@@ -61,12 +61,12 @@ When `rrange` is not given it defaults to **half the shortest perpendicular cell
 
 ### `rrange` cannot exceed half the shortest perpendicular width
 
-Past that radius, every pair still to be counted is a periodic replica of a pair already counted, and there is no honest $g(r)$ to report — so `Scattering` raises `ValueError` rather than returning one. To tabulate further, run a larger cell.
+Past that radius, every pair still to be counted is a periodic replica of a pair already counted, and there is no honest $g(r)$ to report, so `Scattering` raises `ValueError` rather than returning one. To tabulate further, run a larger cell.
 
 
 ## Peak metrics
 
-The derived scalars usually quoted from these functions — the bond length and its static disorder from the first peak of a partial $g(r)$, and the position, width and intensity of the first sharp diffraction peak of $S(Q)$ — are the same measurement made on two different arrays, so one function in `vitrum.geometry` does both:
+Two scalars get quoted from these functions: the bond length and its static disorder, from the first peak of a partial $g(r)$, and the position, width and intensity of the first sharp diffraction peak of $S(Q)$. Both are the same measurement made on a different array, so one function in `vitrum.geometry` does both:
 
 ```python
 from vitrum.geometry import peak_metrics

@@ -1,52 +1,48 @@
 <div class="vitrum-hero">
-  <img alt="vitrum — glass structure analysis" src="vitrum.png#only-light">
-  <img alt="vitrum — glass structure analysis" src="vitrum_light.png#only-dark">
+  <img alt="vitrum, glass structure analysis" src="vitrum.png#only-light">
+  <img alt="vitrum, glass structure analysis" src="vitrum_light.png#only-dark">
 </div>
 
-**vitrum** is a Python package designed for the generation, analysis, and simulation of disordered and glassy atomic structures. It provides a suite of tools for structural characterization, diffusion analysis, and tools for machine learning-driven potential development.
+**vitrum** reads a glass structure or an MD trajectory and returns the numbers usually quoted from one: RDFs and structure factors, coordination numbers and Q^n speciation, ring and void statistics, persistence diagrams, diffusion coefficients. It also builds the structures in the first place, by random packing or by sampling a composition space.
 
-## 📖 Documentation
-See the navigation on the left for detailed documentation, or the [GitHub repository](https://github.com/R-Chr/vitrum) for source code.
+## Documentation
+The navigation on the left covers each module. Source code is in the [GitHub repository](https://github.com/R-Chr/vitrum).
 
-## 📦 Installation
+## Installation
 See [Installation](vitrum/install.md) for full instructions, including optional dependency groups.
 
-## 🚧 Active development
-vitrum is under active development. Before 2.0, a minor release may still remove or rename API that turned out to be wrong — every such change is listed in the [changelog](https://github.com/R-Chr/vitrum/blob/main/CHANGELOG.md), and anything scheduled for removal is deprecated with a warning naming its replacement first where practical. From 2.0 onwards the public API follows [semantic versioning](https://semver.org/).
+## Active development
+vitrum is under active development. Before 2.0, a minor release may still remove or rename API that turned out to be wrong. Every such change is listed in the [changelog](https://github.com/R-Chr/vitrum/blob/main/CHANGELOG.md), and anything scheduled for removal is deprecated with a warning naming its replacement first where practical. From 2.0 onwards the public API follows [semantic versioning](https://semver.org/).
 
-## 🚀 Examples
-See the [`examples`](https://github.com/R-Chr/vitrum/tree/main/examples) folder on GitHub for runnable Jupyter notebooks demonstrating scattering/RDF analysis, Qn speciation, and random structure generation, among others.
+## Examples
+The [`examples`](https://github.com/R-Chr/vitrum/tree/main/examples) folder on GitHub holds runnable notebooks: scattering and RDF analysis, Q^n speciation, random structure generation, and more.
 
-## 🎯 Scope and Functionality
+## What it computes
 
-`vitrum` offers:
+### Structure
+*   Partial and total radial distribution functions and structure factors $S(q)$, weighted for neutron or X-ray scattering (`vitrum.scattering`).
+*   Ring size distributions and per-ring topology metrics in network glasses (`vitrum.rings`).
+*   Free volume fraction and discrete cavity sizes, from a probe-accessible grid (`vitrum.voids`).
+*   Persistence diagrams, for medium-range order and topological features (`vitrum.persistent_homology`).
+*   Bond angle distributions, coordination numbers and Q^n speciation (`vitrum.coordination`).
 
-### 1. Structural Characterization
-*   **Scattering Functions**: Calculate partial and total Radial Distribution Functions (RDF) and Structure Factors ($S(q)$) for both Neutron and X-ray scattering (`vitrum.scattering`).
-*   **Ring Analysis**: Analyze ring size distributions and statistics in network glasses (`vitrum.rings`).
-*   **Topological Analysis**: Compute persistent homology to identify medium-range order and topological features (`vitrum.persistent_homology`).
-*   **Coordination & Angles**: Analyze bond angle distributions and coordination environments (`vitrum.coordination`).
+### Dynamics
+*   Mean squared displacement, diffusion coefficients and Van Hove correlation functions (`vitrum.diffusion`).
 
-### 2. Dynamics & Diffusion
-*   **Diffusion Analysis**: Calculate Mean Squared Displacement (MSD), diffusion coefficients, and Van Hove correlation functions (`vitrum.diffusion`).
-
-### 3. Machine Learning & Workflows
-*   **BALACE Framework**: A Batch Active Learning framework for Atomistic Simulations (`vitrum.batch_active`) (requires `workflows` dependencies).
-    *   Automated workflow for training Machine Learning Interatomic Potentials (MLIPs) based on ACE .
-    *   Integration with VASP and LAMMPS for data generation and active learning loops.
-    *   Job management via Fireworks and Jobflow.
+### Machine learning and workflows
+*   The BALACE framework (`vitrum.batch_active`, needs the `workflows` extra) trains ACE interatomic potentials by batch active learning, running VASP and LAMMPS through Fireworks and Jobflow. It is stale and unsupported, see [Known issues](vitrum/known_issues.md).
 
 
-## 📑 Citation
+## Citation
 If you use `vitrum` in your work, please cite it. Each GitHub release is archived on Zenodo with a version-specific DOI; see [`CITATION.cff`](https://github.com/R-Chr/vitrum/blob/main/CITATION.cff) in the repository for the citation metadata.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21366368.svg)](https://doi.org/10.5281/zenodo.21366368)
 
-## 👥 Author
+## Author
 Rasmus Christensen (rasmusc@bio.aau.dk)
 
-## ⭐ Acknowledgements
-`vitrum` relies on several powerful open-source packages:
+## Acknowledgements
+`vitrum` builds on:
 *   [ASE](https://wiki.fysik.dtu.dk/ase/)
 *   [Pymatgen](https://pymatgen.org/)
 *   [NumPy](https://numpy.org/) / [SciPy](https://scipy.org/) / [pandas](https://pandas.pydata.org/)

@@ -138,7 +138,7 @@ def get_volume(
               Needs no network access or optional dependencies, which is why it is the default.
               Calibrated on oxides (see `IONIC_PACKING_FRACTION` in this module); for metallic or
               covalent systems no charge-balanced oxidation states are found, covalent radii are
-              used instead and the calibration does not hold — prefer `density` or an explicit
+              used instead and the calibration does not hold. Prefer `density` or an explicit
               float there.
             - "mp": Use Materials Project (requires API key and the volume_estimation extra).
             - "icsd": Use ICSD database (requires the volume_estimation extra).

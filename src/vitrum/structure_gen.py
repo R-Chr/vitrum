@@ -168,7 +168,7 @@ class GlassGenerator:
             in elemental mode. Any element not given here falls back to pymatgen's
             tabulated oxidation states.
         network_formers (set[str], optional): Which ``units`` count as network formers.
-            This only labels the units — it applies no constraint on its own; the
+            This only labels the units, it applies no constraint on its own. The
             constraints are ``min_former_sum`` and the schemes' ``require_former``
             option. Defaults to none.
         x_min (float, optional): Minimum mole fraction of any active component in the
